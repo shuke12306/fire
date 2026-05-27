@@ -9,12 +9,14 @@ pub mod records;
 pub use records::{
     PollOptionState, PollState, PostActionTypeState, PostFlagRequestState, PostReactionUpdateState,
     PostUpdateRequestState, PrivateMessageCreateRequestState, ReactionUserState,
-    ReactionUsersGroupState, ResolvedUploadUrlState, TopicAiSummaryState, TopicCreateRequestState,
-    TopicDetailCreatedByState, TopicDetailMetaState, TopicDetailQueryState, TopicDetailState,
-    TopicListQueryState, TopicPostState, TopicPostStreamState, TopicReactionState,
-    TopicReplyRequestState, TopicReplyToUserState, TopicTimingEntryState, TopicTimingsRequestState,
-    TopicUpdateRequestState, UploadImageRequestState, UploadResultState, VoteResponseState,
-    VotedUserState,
+    ReactionUsersGroupState, ResolvedUploadUrlState, TopicAiSummaryState, TopicBodyState,
+    TopicCreateRequestState, TopicDetailCreatedByState, TopicDetailMetaState,
+    TopicDetailQueryState, TopicDetailState, TopicHeaderState, TopicListQueryState, TopicPostState,
+    TopicPostStreamState, TopicReactionState, TopicReplyRequestState, TopicReplyToUserState,
+    TopicResponseCursorState, TopicResponsePageQueryState, TopicResponsePageState,
+    TopicResponseRowState, TopicScreenQueryState, TopicScreenState, TopicTimingEntryState,
+    TopicTimingsRequestState, TopicUpdateRequestState, UploadImageRequestState, UploadResultState,
+    VoteResponseState, VotedUserState,
 };
 
 #[derive(uniffi::Object)]
@@ -64,6 +66,32 @@ impl FireTopicsHandle {
         let panic_state = self.shared.panic_state.clone();
         let response = run_on_ffi_runtime("fetch_topic_detail_initial", panic_state, async move {
             inner.fetch_topic_detail_initial(query.into()).await
+        })
+        .await?;
+        Ok(response.into())
+    }
+
+    pub async fn fetch_topic_screen(
+        &self,
+        query: TopicScreenQueryState,
+    ) -> Result<TopicScreenState, FireUniFfiError> {
+        let inner = self.shared.core.clone();
+        let panic_state = self.shared.panic_state.clone();
+        let response = run_on_ffi_runtime("fetch_topic_screen", panic_state, async move {
+            inner.fetch_topic_screen(query.into()).await
+        })
+        .await?;
+        Ok(response.into())
+    }
+
+    pub async fn fetch_topic_response_page(
+        &self,
+        query: TopicResponsePageQueryState,
+    ) -> Result<TopicResponsePageState, FireUniFfiError> {
+        let inner = self.shared.core.clone();
+        let panic_state = self.shared.panic_state.clone();
+        let response = run_on_ffi_runtime("fetch_topic_response_page", panic_state, async move {
+            inner.fetch_topic_response_page(query.into()).await
         })
         .await?;
         Ok(response.into())
