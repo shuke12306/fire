@@ -100,6 +100,7 @@
 ### `GET /tag/{tag}/l/{filter}.json`
 
 - 用途：标签筛选话题列表
+- 宿主备注：Android 首页 row tag 点击会把所选标签作为 `TopicListQuery.tag` 传入共享 Rust 层，并与当前 Latest / New / Unread / Unseen / Hot / Top 筛选组合成 `/tag/{tag}/l/{filter}.json`。
 - Query：
   - `tags[]?: string[]`，多标签时追加剩余标签
   - `match_all_tags?: "true"`
@@ -131,6 +132,7 @@
     - `body`：固定为 `post_number == 1` 的主贴；如果 `filter_top_level_replies=true` 的负载里缺失，Rust 会额外请求 `GET /posts/by_number/{topicId}/1`
     - `response`：仅包含 `post_number > 1` 的回复树
   - 当前回复区分页不再按整条 `post_stream.stream` 平铺补齐，而是由 Rust 先用 `filter_top_level_replies=true` 获取顶层回复根列表，再按根分支分页
+  - 带目标楼层进入详情时，`fetchTopicScreen` 仍从回复区开头返回，并把首批根分支扩展到目标楼层所在根分支；这样目标楼层之前的回复仍在同一个 response session 内可见，后续 `fetchTopicResponsePage` 继续从已返回根分支之后分页
   - 当前 Rust 会按根分支调用 `GET /posts/{postId}/reply-ids.json` 获取整棵回复子树的帖子 ID，再按批次调用 `GET /t/{topicId}/posts.json?post_ids[]=` 拉取该分支的完整帖子并构建树序行
   - 当前 iOS 和 Android 都会消费 `post_stream.posts[].polls` 和 `post_stream.posts[].polls_votes`，用于在 topic detail 渲染原生 poll 卡片并恢复当前用户的已选项
   - 当前共享 Rust 解析 `post_stream.posts[].reply_to_user`，并通过 UniFFI 暴露到 `TopicPostState.reply_to_user` / `replyToUser`；iOS / Android 用它把回复关系显示为 `回复 @username`，缺失时才回退到 `reply_to_post_number`

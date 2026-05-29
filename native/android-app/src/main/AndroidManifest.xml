@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".FireApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -10,36 +11,35 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Fire">
         <activity
-            android:name=".LoginActivity"
-            android:exported="false" />
-        <activity
-            android:name=".DiagnosticsActivity"
-            android:exported="false" />
-        <activity
-            android:name=".LogViewerActivity"
-            android:exported="false" />
-        <activity
-            android:name=".RequestTraceDetailActivity"
-            android:exported="false" />
-        <activity
-            android:name=".NotificationsActivity"
-            android:exported="false" />
-        <activity
-            android:name=".SearchActivity"
-            android:exported="false" />
-        <activity
-            android:name=".ProfileActivity"
-            android:exported="false" />
-        <activity
-            android:name=".TopicDetailActivity"
-            android:exported="false" />
-        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="fire"
+                    android:host="profile" />
+            </intent-filter>
         </activity>
+        <activity
+            android:name=".ui.topicdetail.TopicDetailActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="fire"
+                    android:host="topic" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.cloudflare.CloudflareChallengeActivity"
+            android:exported="false" />
     </application>
 </manifest>

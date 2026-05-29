@@ -2,6 +2,9 @@
 <resources>
     <string name="app_name">Fire</string>
     <string name="shell_subtitle">Native host shell for LinuxDo login, session restore, and inline topic browsing.</string>
+    <string name="tab_home">首页</string>
+    <string name="tab_notifications">通知</string>
+    <string name="tab_profile">我的</string>
     <string name="action_restore_session">Restore Session</string>
     <string name="action_open_login">Open Login</string>
     <string name="action_refresh_bootstrap">Refresh Bootstrap</string>
@@ -25,6 +28,10 @@
     <string name="action_reload">Reload</string>
     <string name="login_title">LinuxDo Login</string>
     <string name="login_url">https://linux.do</string>
+    <string name="login_blocked_external_navigation">This login browser only opens web links.</string>
+    <string name="login_safe_browsing_blocked">Unsafe page blocked.</string>
+    <string name="cloudflare_challenge_title">Cloudflare 验证</string>
+    <string name="cloudflare_blocked_external_navigation">This browser only opens web links.</string>
     <string name="browser_title">Topic Browser</string>
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_subtitle">Readable app logs plus captured network request traces.</string>
@@ -61,6 +68,7 @@
     <string name="create_topic_no_categories">No writable topic categories are available.</string>
     <string name="create_topic_title_min_length">Title must be at least %1$s characters.</string>
     <string name="create_topic_body_min_length">Body must be at least %1$s characters.</string>
+    <string name="create_topic_error">Unable to create topic.</string>
     <string name="create_topic_tags_required">This category requires at least %1$s tag(s).</string>
     <string name="create_topic_tags_not_allowed">These tags are not allowed in the selected category: %1$s</string>
     <string name="create_topic_category_required_tags">%1$s required tag(s)</string>
@@ -350,4 +358,16 @@
     <string name="search_topic_meta">%1$s posts · %2$s views</string>
     <string name="search_post_meta">@%1$s · #%2$s · %3$s likes</string>
     <string name="search_user_meta">@%1$s</string>
+    <string name="action_retry">重试</string>
+    <string name="action_reply">回复</string>
+    <string name="stat_label_replies">回复</string>
+    <string name="stat_label_views">浏览</string>
+    <string name="stat_label_likes">赞</string>
+    <string name="section_replies">回复</string>
+    <string name="loading_more_posts">正在加载更多帖子…</string>
+    <string name="content_desc_avatar">头像</string>
+    <string name="onboarding_subtitle">LinuxDo 原生客户端</string>
+    <string name="onboarding_login">登录 LinuxDo</string>
+    <string name="onboarding_restore_session">恢复已有会话</string>
+    <string name="onboarding_bootstrapping">正在读取本地登录态…</string>
 </resources>
