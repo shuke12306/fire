@@ -38,6 +38,7 @@ fire/
     crates/
       fire-models/
       fire-core/
+      fire-store/
       fire-uniffi/
   third_party/
     openwire/
@@ -77,6 +78,10 @@ fire/
 - `references/fluxdo` is a reference submodule, not a build dependency.
 - `third_party/` stores build dependencies as submodules so the superproject can be pushed cleanly to GitHub.
 - The root Cargo workspace owns only the local Fire crates.
+- iOS dependencies are owned by `native/ios-app/project.yml` and regenerated
+  through XcodeGen. Topic detail currently pins IGListKit 5.2.0 and Nuke 12.8.0
+  through SPM, and consumes Texture 3.2.0 through the local
+  `native/ios-app/LocalPackages/TextureCore` binary Swift package.
 
 ## Clean Worktree Workflow
 
@@ -101,10 +106,12 @@ fire/
 - `fire-models`
   - defines the shared login/session snapshot, notification models, and topic/private-message-facing models
 - `fire-core`
-  - owns session sync, bootstrap parsing, auth refresh/logout, persistence, diagnostics, one shared `openwire` client for API and MessageBus transport, topic list/detail reads (including category/tag scoped lists and private-message mailboxes), search reads, reply/reaction/topic/private-message write paths, draft APIs, upload APIs, the Rust MessageBus poll/subscription runtime, notification fetch/state/mark-read reconciliation, topic-reply presence, and `/topics/timings` request shaping
+  - owns session sync, bootstrap parsing, auth refresh/logout, persistence, diagnostics, one shared `openwire` client for API and MessageBus transport, topic list/detail reads (including category/tag scoped lists and private-message mailboxes), topic-detail feed repository orchestration over the Rust processed cache, search reads, reply/reaction/topic/private-message write paths, draft APIs, upload APIs, the Rust MessageBus poll/subscription runtime, notification fetch/state/mark-read reconciliation, topic-reply presence, and `/topics/timings` request shaping
   - finalizes network traces in Rust with terminal outcomes (`Succeeded`, `Failed`, or `Cancelled`); hosts should treat timeline events as intermediate diagnostics instead of completion signals
+- `fire-store`
+  - owns the shared SQLite storage foundation for processed topic-detail feed snapshots, feed items, posts, response rows, and render blocks, keyed by topic id plus auth-scope hash so different LinuxDo sessions do not share cached topic content
 - `fire-uniffi`
-  - exports the shared async API surface, search APIs, notification list/state APIs, MessageBus callback interface, and error model to Swift/Kotlin
+  - exports the shared async API surface, topic-detail feed snapshot/cache APIs, search APIs, notification list/state APIs, MessageBus callback interface, and error model to Swift/Kotlin
 - `native/ios-app` and `native/android-app`
   - host WebView login, cookie capture, native UI state, the current topic browser/detail shells, native composer/private-message UX, and native notification surfaces over the shared Rust notification APIs
   - Android topic detail now opens a native public profile screen from author names; that screen consumes the shared Rust user APIs for profile, summary, followers/following, and follow/unfollow
@@ -125,7 +132,7 @@ fire/
   - Android topic detail now exposes shared Rust topic voting-plugin vote/unvote actions and voter-list dialogs from the native topic header
   - Android topic detail now exposes shared Rust post delete, recover, and report actions from each post's Actions menu, including server-provided report types
   - iOS topic-detail state is retained by per-view owner tokens while a detail screen is active, so background homepage refreshes can no longer evict an on-screen topic detail cache
-  - iOS now keeps a host-only prepared topic-detail render cache and coalesces MessageBus ingress before MainActor delivery, while leaving session/runtime ownership with Rust
+  - iOS now keeps a host-only prepared topic-detail render cache with compact cooked-content signatures, coalesces MessageBus ingress before MainActor delivery, and lets the topic-detail UIKit runtime skip unchanged IGListKit snapshots while leaving session/runtime ownership with Rust
 
 The intended native integration order is:
 
@@ -137,10 +144,10 @@ The intended native integration order is:
    - Android currently uses `export_session_json` or `save_session_to_path` until Keystore-backed parity lands.
 5. On cold start, restore the snapshot through `restore_session_json` or `load_session_from_path`.
 6. Before any authenticated request, hosts that keep browser cookies outside `session.json` must re-inject that platform cookie batch into Rust.
-7. If homepage HTML is unavailable or stale, or the restored authenticated snapshot is missing username/preloaded bootstrap fields, call `refresh_bootstrap_if_needed`. When homepage bootstrap still lacks site metadata such as categories/top tags, the shared Rust layer now falls back to `/site.json`. Only treat `shared_session_key` as required when MessageBus uses a cross-origin long-polling host.
+7. If homepage HTML is unavailable or stale, or the restored authenticated snapshot is missing username/preloaded bootstrap fields, call `refresh_bootstrap_if_needed` only from an explicit bootstrap-refresh path, not automatically in the iOS cold-start hot path. When homepage bootstrap still lacks site metadata such as categories/top tags, the shared Rust layer now falls back to `/site.json`. Only treat `shared_session_key` as required when MessageBus uses a cross-origin long-polling host.
 8. If the restored session is otherwise ready but the local snapshot still lacks CSRF, call `refresh_csrf_token_if_needed` before surfacing a fully ready authenticated session. iOS no longer performs this repair on cold start or at login handoff: hosts rely on the shared authenticated-write preflight to fetch CSRF lazily, and the Rust write path itself sends `X-CSRF-Token: undefined` as a final fallback so the BAD CSRF retry can refresh and replay just like Discourse's official frontend. Write APIs can reuse `refresh_csrf_token_if_needed` whenever they need a newer token.
 9. Use `fetch_topic_list` (global, category-scoped, tag-scoped, or private-message mailbox variants via `TopicListQuery`), `fetch_topic_detail`, and `fetch_topic_ai_summary` for the authenticated topic read paths. The AI summary path treats normal 403/404 as no available summary while preserving Cloudflare challenge errors for host recovery.
-10. If Rust returns `CloudflareChallenge` for an authenticated operation, keep the current session snapshot and recover through a host-owned WebView loading a browser HTML URL, not the blocked JSON endpoint. iOS currently deletes stale `cf_clearance`, opens the site root for homepage/list recoveries, waits for the login-readiness gate, syncs the browser cookie batch into Rust, and retries the blocked operation. Android keeps the challenge WebView visible after `cf_clearance` appears: topic detail embeds `https://linux.do/t/{topicId}` below the toolbar, while other surfaces open `https://linux.do/`; both paths sync the browser cookie batch into Rust so subsequent native reads can continue without closing the WebView.
+10. If Rust returns `CloudflareChallenge` for an authenticated operation, keep the current session snapshot and recover through a host-owned WebView loading a browser HTML URL, not the blocked JSON endpoint. iOS currently deletes stale `cf_clearance`; topic-detail recoveries open `https://linux.do/t/{slug}/{topicId}` when a slug is known and `https://linux.do/t/{topicId}` otherwise, while homepage/list/notification recoveries open the site root. The same WebView waits for the login-readiness gate, syncs the browser cookie batch into Rust, and retries the blocked operation. Android keeps the challenge WebView visible after `cf_clearance` appears: topic detail embeds `https://linux.do/t/{topicId}` below the toolbar, while other surfaces open `https://linux.do/`; both paths sync the browser cookie batch into Rust so subsequent native reads can continue without closing the WebView.
 11. On explicit logout, prefer `logout_remote`, then fall back to `logout_local`, clear the persisted session, and remove host-side WebView auth cookies so the native shell and platform browser state agree.
 12. Use `notification_state`, `fetch_recent_notifications`, `fetch_notifications`, `mark_notification_read`, and `mark_all_notifications_read` for the shared in-app notification data path; keep OS-level/system notification presentation on the hosts.
 
@@ -157,6 +164,7 @@ File ownership convention:
   - `diagnostics/fire-readable.log` for a plaintext tracing mirror
   - `diagnostics/support-bundles/` for locally exported diagnostics bundles
   - `cache/xlog/` for Xlog cache and mmap spill files
+  - `cache/topic-feed.sqlite3` for Rust-owned processed topic-detail feed snapshots
   - `session.json` for the persisted session snapshot triggered by the host shell
 - iOS now also owns `ios-apm/` under the same workspace root for beta crash/APM files. That directory is explicitly host-owned and must not be treated as shared Rust diagnostics state.
 - Debug builds may also mirror shared logs into the platform console for local development, but release builds keep shared logging file-only through Xlog/readable-log artifacts.

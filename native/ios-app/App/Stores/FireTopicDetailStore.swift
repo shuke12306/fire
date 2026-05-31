@@ -10,6 +10,17 @@ private struct FireTopicResponseAppendUpdate {
     let appendedRows: [TopicResponseRowState]
 }
 
+private enum FireTopicDetailFeedBridgeError: LocalizedError {
+    case missingRenderableSnapshot(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRenderableSnapshot(let message):
+            return message
+        }
+    }
+}
+
 @MainActor
 final class FireTopicDetailStore: ObservableObject {
     nonisolated private static let topicPostPageSize = 30
@@ -275,16 +286,14 @@ final class FireTopicDetailStore: ObservableObject {
                         operation: "加载话题详情",
                         originURL: recoveryURL
                     ) {
-                        try await sessionStore.fetchTopicScreen(
-                            query: TopicScreenQueryState(
+                        let snapshot = try await sessionStore.loadTopicDetailFeed(
+                            query: TopicDetailFeedQueryState(
                                 topicId: topicId,
                                 targetPostNumber: targetPostNumber,
-                                rootPageSize: 10,
-                                rowPageSize: 40,
-                                trackVisit: true,
-                                forceLoad: true
+                                policy: force ? .forceRefresh : .networkFirst
                             )
                         )
+                        return try Self.topicScreen(from: snapshot)
                     }
                 }
             }
@@ -353,6 +362,38 @@ final class FireTopicDetailStore: ObservableObject {
         appViewModel.cloudflareRecoveryTopicURL(
             topicId: topicId,
             topicSlug: bestKnownTopicRecoverySlug(topicId: topicId)
+        )
+    }
+
+    nonisolated static func topicScreen(from snapshot: TopicDetailFeedSnapshotState) throws -> TopicScreenState {
+        guard let header = snapshot.items.first(where: { $0.kind == .header })?.header,
+              let originalPost = snapshot.items.first(where: { $0.kind == .originalPost })?.post else {
+            let message = snapshot.staleErrorMessage
+                ?? snapshot.items.first(where: { $0.kind == .error || $0.kind == .notice })?.message
+                ?? "Topic feed snapshot is missing renderable topic data."
+            throw FireTopicDetailFeedBridgeError.missingRenderableSnapshot(message)
+        }
+
+        let responseRows = FireTopicPresentation.uniqueResponseRowsPreservingOrder(
+            snapshot.items.compactMap { item in
+                item.kind == .reply ? item.responseRow : nil
+            }
+        ).filter { row in
+            row.post.id != originalPost.id
+        }
+        let totalResponseCount = max(header.replyCount, UInt32(responseRows.count))
+        let totalRootCount = max(UInt32(responseRows.count), totalResponseCount)
+        return TopicScreenState(
+            header: header,
+            body: TopicBodyState(post: originalPost),
+            response: TopicResponsePageState(
+                rows: responseRows,
+                nextCursor: snapshot.cursor.nextResponseCursor,
+                totalRootCount: totalRootCount,
+                loadedRootCount: UInt32(responseRows.count),
+                totalResponseCount: totalResponseCount,
+                focusedPostNumber: nil
+            )
         )
     }
 
@@ -855,7 +896,6 @@ final class FireTopicDetailStore: ObservableObject {
             throw FireTopicInteractionError.emptyReply
         }
 
-        let sessionStore = try await appViewModel.sessionStoreValue()
         guard appViewModel.canStartAuthenticatedMutation else {
             throw FireTopicInteractionError.requiresAuthenticatedWrite
         }
@@ -867,6 +907,7 @@ final class FireTopicDetailStore: ObservableObject {
         defer { submittingReplyTopicIDs.remove(topicId) }
 
         do {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             errorMessage = nil
             let createdReply = try await FireAPMManager.shared.withSpan(
                 .topicReplySubmit,
@@ -908,11 +949,11 @@ final class FireTopicDetailStore: ObservableObject {
             throw FireTopicInteractionError.emptyReply
         }
 
-        let sessionStore = try await appViewModel.sessionStoreValue()
         guard appViewModel.canStartAuthenticatedMutation else {
             throw FireTopicInteractionError.requiresAuthenticatedWrite
         }
-        guard !mutatingPostIDs.contains(postID) else {
+        if mutatingPostIDs.contains(postID) {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             return try await sessionStore.fetchPost(postID: postID)
         }
 
@@ -920,6 +961,7 @@ final class FireTopicDetailStore: ObservableObject {
         defer { setMutatingPost(false, topicId: topicID, postId: postID) }
 
         do {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             errorMessage = nil
             let updatedPost = try await appViewModel.performWriteWithCloudflareRetry(
                 originURL: topicCloudflareRecoveryURL(topicId: topicID)
@@ -980,12 +1022,12 @@ final class FireTopicDetailStore: ObservableObject {
             return
         }
 
+        isLoadingPostActionTypes = true
+        defer { isLoadingPostActionTypes = false }
+
         guard let sessionStore = try? await appViewModel.sessionStoreValue() else {
             return
         }
-
-        isLoadingPostActionTypes = true
-        defer { isLoadingPostActionTypes = false }
 
         do {
             let types = try await appViewModel.performWithCloudflareRecovery(
@@ -1019,13 +1061,13 @@ final class FireTopicDetailStore: ObservableObject {
         guard !loadingPostReplyContextIDs.contains(post.id) else {
             return
         }
-        guard let sessionStore = try? await appViewModel.sessionStoreValue() else {
-            return
-        }
-
         loadingPostReplyContextIDs.insert(post.id)
         postReplyContextErrorsByPostID[post.id] = nil
         defer { loadingPostReplyContextIDs.remove(post.id) }
+
+        guard let sessionStore = try? await appViewModel.sessionStoreValue() else {
+            return
+        }
 
         do {
             let recoveryURL = topicCloudflareRecoveryURL(topicId: topicID)
@@ -1113,7 +1155,6 @@ final class FireTopicDetailStore: ObservableObject {
         postId: UInt64,
         liked: Bool
     ) async throws {
-        let sessionStore = try await appViewModel.sessionStoreValue()
         guard appViewModel.canStartAuthenticatedMutation else {
             throw FireTopicInteractionError.requiresAuthenticatedWrite
         }
@@ -1125,6 +1166,7 @@ final class FireTopicDetailStore: ObservableObject {
         defer { setMutatingPost(false, topicId: topicId, postId: postId) }
 
         do {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             errorMessage = nil
             let update = try await appViewModel.performWriteWithCloudflareRetry(
                 originURL: topicCloudflareRecoveryURL(topicId: topicId)
@@ -1160,7 +1202,6 @@ final class FireTopicDetailStore: ObservableObject {
             return
         }
 
-        let sessionStore = try await appViewModel.sessionStoreValue()
         guard appViewModel.canStartAuthenticatedMutation else {
             throw FireTopicInteractionError.requiresAuthenticatedWrite
         }
@@ -1172,6 +1213,7 @@ final class FireTopicDetailStore: ObservableObject {
         defer { setMutatingPost(false, topicId: topicId, postId: postId) }
 
         do {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             errorMessage = nil
             let update = try await appViewModel.performWriteWithCloudflareRetry(
                 originURL: topicCloudflareRecoveryURL(topicId: topicId)
@@ -1196,7 +1238,6 @@ final class FireTopicDetailStore: ObservableObject {
         postID: UInt64,
         operation: @escaping (FireSessionStore) async throws -> Void
     ) async throws {
-        let sessionStore = try await appViewModel.sessionStoreValue()
         guard appViewModel.canStartAuthenticatedMutation else {
             throw FireTopicInteractionError.requiresAuthenticatedWrite
         }
@@ -1208,6 +1249,7 @@ final class FireTopicDetailStore: ObservableObject {
         defer { setMutatingPost(false, topicId: topicID, postId: postID) }
 
         do {
+            let sessionStore = try await appViewModel.sessionStoreValue()
             errorMessage = nil
             try await appViewModel.performWriteWithCloudflareRetry(
                 originURL: topicCloudflareRecoveryURL(topicId: topicID)

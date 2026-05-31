@@ -36,6 +36,15 @@
 - `badge(id, slug?)`
   - 进入原生 badge detail
 
+## Topic Detail 本地缓存约定
+
+当前 iOS topic detail 首屏读取走共享 Rust `loadTopicDetailFeed`。该接口内部仍复用 LinuxDo 的 `/t/{topicId}.json` / `/t/{slug}/{topicId}.json` 语义和 Fire 已有的 `fetchTopicScreen` 解析路径，但会先把处理后的 topic header、原帖、reply rows、feed items 和 cursor 写入 Rust-owned SQLite 缓存，再把 feed snapshot 交给宿主渲染。
+
+- 缓存文件位于宿主传入的 Rust workspace 下：`cache/topic-feed.sqlite3`。
+- 缓存按 `topic_id + auth_scope_hash` 隔离，`auth_scope_hash` 包含 base URL、当前用户名、`_t` 和 `_forum_session`，避免不同登录态共享处理后的帖子内容。
+- 首屏失败但已有处理后缓存时，Rust 可以返回 `staleIfError` feed snapshot；没有可渲染缓存时返回 empty-cache/error feed state。
+- iOS 当前把 feed snapshot 桥回 `TopicScreenState` 进入既有渲染路径；后续增量 reply 分页仍调用 `fetchTopicResponsePage`，直到共享层提供对应的 feed append command。
+
 ## 通知 Payload 约定
 
 当前 iOS 壳层有两类通知：
@@ -119,3 +128,11 @@
 - 这是轮询回退，不是实时 APNs push
 - 刷新窗口仍受 iOS 后台调度策略影响
 - 只有能映射到 route 的 payload 才会在点击后进入目标页面
+
+## iOS 前台启动节流
+
+当前 iOS 冷启动会先恢复 Rust session / Keychain Cookie，但不会为了补齐 bootstrap 立刻发起 native `GET /`。认证 Cookie 可读时，宿主优先加载首页话题列表；首次首页列表请求完成后才启动前台 MessageBus。缺失的完整 bootstrap 只在登录完成、手动刷新 bootstrap、或其它显式需要完整站点元数据的路径中补齐。
+
+通知和个人页保持懒加载：通知 recent 列表只在用户进入通知 Tab 时调用 `GET /notifications`，个人页资料/摘要/动态只在用户进入“我的”Tab 时调用对应用户接口。启动阶段不会再为了预热离屏 Tab 主动拉通知列表或个人资料；未读角标优先来自 bootstrap / Rust 通知运行态，后续由 MessageBus `/notification/{userId}` 增量更新。
+
+浏览器根路径可能会先触发 `GET /chat/api/me/channels` 和 `GET /u/{username}/private-message-topic-tracking-state`，但 Fire 当前不把 chat channels 接口作为通用登录态探测。登录态判定仍以本地认证 Cookie、首页 bootstrap、以及共享层 readiness 为准，避免把启动可用性绑定到 chat 插件状态接口。

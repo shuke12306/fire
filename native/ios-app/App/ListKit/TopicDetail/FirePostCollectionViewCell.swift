@@ -1,3 +1,4 @@
+import AsyncDisplayKit
 import UIKit
 
 final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognizerDelegate {
@@ -47,7 +48,7 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
     private var currentLayout: FirePostCellLayout?
     private var currentPayload: FirePostCellRenderPayload?
     private var currentCallbacks: FirePostCellCallbacks?
-    private var imageViews: [UIImageView] = []
+    private var imageNodes: [ASImageNode] = []
     private var imageTasks: [String: Task<Void, Never>] = [:]
     private var avatarTask: Task<Void, Never>?
     private var emojiLoadTasks: [String: Task<Void, Never>] = [:]
@@ -139,7 +140,7 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         menuButton.accessibilityLabel = "帖子操作"
 
         metaStack.axis = .horizontal
-        metaStack.alignment = .center
+        metaStack.alignment = .firstBaseline
         metaStack.spacing = 6
         metaStack.addArrangedSubview(usernameLabel)
         metaStack.addArrangedSubview(replyContextButton)
@@ -216,7 +217,7 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         timestampLabel.textColor = Self.tertiaryInkColor
         postNumberLabel.textColor = Self.tertiaryInkColor
         menuButton.tintColor = Self.tertiaryInkColor
-        replyIndicatorView.tintColor = replyTriggered ? .systemBlue : .tertiaryLabel
+        replyIndicatorView.tintColor = replyTriggered ? Self.accentTextColor : .tertiaryLabel
     }
 
     override func layoutSubviews() {
@@ -287,8 +288,9 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         timestampLabel.accessibilityLabel = timestampLabel.text
         acceptedAnswerLabel.isHidden = !post.acceptedAnswer
         acceptedAnswerLabel.text = nil
+        acceptedAnswerLabel.attributedText = nil
         if post.acceptedAnswer {
-            acceptedAnswerLabel.text = "✓ 已采纳"
+            acceptedAnswerLabel.attributedText = acceptedAnswerAttributedText()
             acceptedAnswerLabel.accessibilityLabel = "已采纳"
         } else {
             acceptedAnswerLabel.accessibilityLabel = nil
@@ -312,7 +314,7 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         if let textFrame = layout.textFrame, let attrText = payload.renderContent.attributedText, attrText.length > 0 {
             richTextContainer.isHidden = false
             richTextContainer.frame = textFrame
-            let contentID = "post:\(post.id)|hash:\(post.cooked.hashValue)|images:\(payload.renderContent.imageAttachments.count)"
+            let contentID = "post:\(post.id)|render:\(payload.renderContent.signature.token)"
             richTextContainer.configure(
                 attributedText: attrText,
                 contentID: contentID,
@@ -390,6 +392,7 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         timestampLabel.accessibilityLabel = nil
         acceptedAnswerLabel.isHidden = true
         acceptedAnswerLabel.text = nil
+        acceptedAnswerLabel.attributedText = nil
         acceptedAnswerLabel.accessibilityLabel = nil
         postNumberLabel.text = nil
         postNumberLabel.accessibilityLabel = nil
@@ -404,8 +407,8 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         cancelImageTasks()
         emojiLoadTasks.values.forEach { $0.cancel() }
         emojiLoadTasks.removeAll()
-        imageViews.forEach { $0.removeFromSuperview() }
-        imageViews = []
+        imageNodes.forEach { $0.view.removeFromSuperview() }
+        imageNodes = []
         imageContainerView.isHidden = true
         imageContainerView.frame = .zero
 
@@ -480,46 +483,48 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
         containerFrame: CGRect
     ) {
         cancelImageTasks()
-        imageViews.forEach { $0.removeFromSuperview() }
-        imageViews = []
+        imageNodes.forEach { $0.view.removeFromSuperview() }
+        imageNodes = []
 
         for (index, image) in images.enumerated() {
             guard index < frames.count else { break }
-            let imageView = UIImageView()
-            imageView.contentMode = .scaleAspectFit
-            imageView.clipsToBounds = true
-            imageView.layer.cornerRadius = 16
-            imageView.layer.borderColor = UIColor.separator.cgColor
-            imageView.layer.borderWidth = 0.5
-            imageView.frame = CGRect(
+            let imageNode = ASImageNode()
+            imageNode.contentMode = .scaleAspectFit
+            imageNode.clipsToBounds = true
+            imageNode.cornerRadius = 16
+            imageNode.borderColor = UIColor.separator.cgColor
+            imageNode.borderWidth = 0.5
+            imageNode.placeholderEnabled = true
+            imageNode.placeholderColor = .tertiarySystemFill
+            imageNode.frame = CGRect(
                 x: frames[index].minX - containerFrame.minX,
                 y: frames[index].minY - containerFrame.minY,
                 width: frames[index].width,
                 height: frames[index].height
             )
-            imageView.backgroundColor = .tertiarySystemFill
-            imageView.isUserInteractionEnabled = true
-            imageView.tag = index
-            imageView.isAccessibilityElement = true
-            imageView.accessibilityTraits = [.image, .button]
+            imageNode.backgroundColor = .tertiarySystemFill
+            imageNode.isUserInteractionEnabled = true
+            imageNode.view.tag = index
+            imageNode.view.isAccessibilityElement = true
+            imageNode.view.accessibilityTraits = [.image, .button]
             let altText = image.altText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            imageView.accessibilityLabel = altText.isEmpty ? "帖子图片" : altText
+            imageNode.view.accessibilityLabel = altText.isEmpty ? "帖子图片" : altText
 
             let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleImageTap(_:)))
-            imageView.addGestureRecognizer(tapGesture)
+            imageNode.view.addGestureRecognizer(tapGesture)
 
-            imageContainerView.addSubview(imageView)
-            imageViews.append(imageView)
+            imageContainerView.addSubview(imageNode.view)
+            imageNodes.append(imageNode)
 
-            loadImage(into: imageView, url: image.url, cacheKey: image.id)
+            loadImage(into: imageNode, url: image.url, cacheKey: image.id)
         }
     }
 
-    private func loadImage(into imageView: UIImageView, url: URL, cacheKey: String) {
+    private func loadImage(into imageNode: ASImageNode, url: URL, cacheKey: String) {
         let request = FireRemoteImageRequest(url: url)
         if let cached = FireRemoteImagePipeline.shared.cachedImage(for: request) {
-            imageView.image = cached
-            imageView.backgroundColor = .clear
+            imageNode.image = cached
+            imageNode.backgroundColor = .clear
             return
         }
 
@@ -528,8 +533,8 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
                 let image = try await FireRemoteImagePipeline.shared.loadImage(for: request)
                 guard !Task.isCancelled else { return }
                 _ = await MainActor.run {
-                    imageView.image = image
-                    imageView.backgroundColor = .clear
+                    imageNode.image = image
+                    imageNode.backgroundColor = .clear
                     self?.imageTasks.removeValue(forKey: cacheKey)
                 }
             } catch {
@@ -625,19 +630,20 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
             let button = UIButton(type: .system)
             let symbolString = option.symbol
             let countString = "\(reaction.count)"
-            let title = "\(symbolString) \(countString)"
-            button.setTitle(title, for: .normal)
-
-            let fontSize: CGFloat = 14
-            let font = UIFont.systemFont(ofSize: fontSize, weight: isMine ? .semibold : .regular)
-            button.titleLabel?.font = font
+            var configuration = UIButton.Configuration.plain()
+            configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
+            button.configuration = configuration
             button.titleLabel?.adjustsFontForContentSizeCategory = true
+            button.setAttributedTitle(
+                reactionAttributedTitle(symbol: symbolString, count: countString, isMine: isMine),
+                for: .normal
+            )
 
             if isMine {
-                button.setTitleColor(.systemBlue, for: .normal)
-                button.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.18)
+                button.setTitleColor(Self.accentTextColor, for: .normal)
+                button.backgroundColor = Self.accentTextColor.withAlphaComponent(0.18)
                 button.layer.borderWidth = 1
-                button.layer.borderColor = UIColor.systemBlue.withAlphaComponent(0.85).cgColor
+                button.layer.borderColor = Self.accentTextColor.withAlphaComponent(0.85).cgColor
             } else {
                 button.setTitleColor(.secondaryLabel, for: .normal)
                 button.backgroundColor = .tertiarySystemFill
@@ -646,9 +652,6 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
 
             button.layer.cornerRadius = 14
             button.layer.masksToBounds = true
-            var configuration = UIButton.Configuration.plain()
-            configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
-            button.configuration = configuration
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
             button.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -678,6 +681,58 @@ final class FirePostCollectionViewCell: UICollectionViewCell, UIGestureRecognize
             reactionStack.removeArrangedSubview(arrangedSubview)
             arrangedSubview.removeFromSuperview()
         }
+    }
+
+    private func acceptedAnswerAttributedText() -> NSAttributedString {
+        let font = acceptedAnswerLabel.font ?? UIFont.preferredFont(forTextStyle: .caption2)
+        let result = NSMutableAttributedString()
+
+        if let image = UIImage(
+            systemName: "checkmark.circle.fill",
+            withConfiguration: UIImage.SymbolConfiguration(font: font)
+        )?.withTintColor(.systemGreen, renderingMode: .alwaysOriginal) {
+            result.append(NSAttributedString(attachment: NSTextAttachment(image: image)))
+            result.append(NSAttributedString(string: " "))
+        }
+
+        result.append(NSAttributedString(
+            string: "已采纳",
+            attributes: [
+                .font: font,
+                .foregroundColor: UIColor.systemGreen,
+            ]
+        ))
+        return result
+    }
+
+    private func reactionAttributedTitle(
+        symbol: String,
+        count: String,
+        isMine: Bool
+    ) -> NSAttributedString {
+        let captionFont = UIFont.preferredFont(forTextStyle: .caption1)
+        let countFont = UIFontMetrics(forTextStyle: .caption1).scaledFont(
+            for: UIFont.monospacedDigitSystemFont(
+                ofSize: captionFont.pointSize,
+                weight: isMine ? .semibold : .regular
+            )
+        )
+        let color = isMine ? Self.accentTextColor : UIColor.secondaryLabel
+        let result = NSMutableAttributedString(
+            string: "\(symbol) ",
+            attributes: [
+                .font: captionFont,
+                .foregroundColor: color,
+            ]
+        )
+        result.append(NSAttributedString(
+            string: count,
+            attributes: [
+                .font: countFont,
+                .foregroundColor: color,
+            ]
+        ))
+        return result
     }
 
     // MARK: - Swipe to Reply
