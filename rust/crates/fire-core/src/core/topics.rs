@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Instant;
 
 use fire_models::{
     LoadMoreTopicPostsQuery, TopicAiSummary, TopicBody, TopicDetail, TopicDetailPage,
@@ -354,9 +355,26 @@ impl FireCore {
         &self,
         query: TopicDetailSourceQuery,
     ) -> Result<TopicDetailPage, FireCoreError> {
+        let topic_id = query.topic_id;
+        let source_started_at = Instant::now();
         let source_snapshot = self.fetch_topic_detail_source_snapshot(query).await?;
+        let source_fetch_ms = source_started_at.elapsed().as_millis();
+        let tree_started_at = Instant::now();
         let tree_presentation =
             build_topic_tree_presentation_from_source_snapshot(&source_snapshot);
+        let tree_presentation_ms = tree_started_at.elapsed().as_millis();
+        info!(
+            topic_id,
+            source_fetch_ms,
+            tree_presentation_ms,
+            source_loaded_posts = source_snapshot.loaded_posts.len(),
+            body_post_included = true,
+            cooked_byte_count = topic_detail_source_cooked_byte_count(&source_snapshot),
+            reply_rows = tree_presentation.reply_rows.len(),
+            visible_root_count = tree_presentation.visible_root_post_numbers.len(),
+            total_loaded_post_count = tree_presentation.total_loaded_post_count,
+            "topic detail page built"
+        );
         Ok(TopicDetailPage {
             source_snapshot,
             tree_presentation,
@@ -1268,6 +1286,17 @@ fn build_topic_tree_presentation_from_source_snapshot(
         loaded_posts: snapshot.loaded_posts.clone(),
         focused_post_number: snapshot.focused_post_number,
     })
+}
+
+fn topic_detail_source_cooked_byte_count(snapshot: &TopicDetailSourceSnapshot) -> usize {
+    let mut seen_post_ids = HashSet::new();
+    let mut total = 0usize;
+    for post in std::iter::once(&snapshot.body.post).chain(snapshot.loaded_posts.iter()) {
+        if seen_post_ids.insert(post.id) {
+            total += post.cooked.len();
+        }
+    }
+    total
 }
 
 #[allow(clippy::too_many_arguments)]

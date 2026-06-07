@@ -223,7 +223,7 @@ final class FireTopicDetailRuntimeInteractions {
     }
 }
 
-struct FireTopicDetailRuntimeConfiguration {
+struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     let viewModel: FireAppViewModel?
     let displayedCategory: FireTopicCategoryPresentation?
     let currentUsername: String?
@@ -244,13 +244,14 @@ struct FireTopicDetailRuntimeConfiguration {
     let topicCollectionRevision: UInt64
     let canWriteInteractions: Bool
     let postLookup: [UInt64: TopicPostState]
+    let interactionState: FireTopicDetailInteractionState
     let snapshotInvalidationToken: AnyHashable
     let interactions: FireTopicDetailRuntimeInteractions
 
-    var isMutatingPost: (UInt64) -> Bool { interactions.isMutatingPost }
-    var isPostTextExpanded: (UInt64) -> Bool { interactions.isPostTextExpanded }
-    var isReplyThreadExpanded: (UInt64) -> Bool { interactions.isReplyThreadExpanded }
-    var isLoadingPostReplyContext: (UInt64) -> Bool { interactions.isLoadingPostReplyContext }
+    var isMutatingPost: (UInt64) -> Bool { interactionState.isMutatingPost }
+    var isPostTextExpanded: (UInt64) -> Bool { interactionState.isPostTextExpanded }
+    var isReplyThreadExpanded: (UInt64) -> Bool { interactionState.isReplyThreadExpanded }
+    var isLoadingPostReplyContext: (UInt64) -> Bool { interactionState.isLoadingPostReplyContext }
     var onVisiblePostNumbersChanged: (Set<UInt32>) -> Void { interactions.onVisiblePostNumbersChanged }
     var onRefresh: () async -> Void { interactions.onRefresh }
     var onLoadTopicDetail: () async -> Void { interactions.onLoadTopicDetail }
