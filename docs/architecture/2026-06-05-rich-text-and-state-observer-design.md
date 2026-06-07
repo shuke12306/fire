@@ -123,6 +123,12 @@ pub struct RenderBlock {
 
 平台端不再各自维护一套附件提取和去重规则。
 
+2026-06-07 起，双端 topic detail 不再把 `image_attachments` 当成“文末附件区”单独追加。平台仍从
+`RenderBlockKind::Image` 保留图片在正文中的顺序，但图片展示 URL 以 Rust 生成的
+`RenderDocument.image_attachments` 为准：lightbox / generic linked image 场景优先使用 original URL，
+正文缩略展示和点击预览因此共享同一个缓存键。平台端只负责按节点顺序切分 text/image segment、选择显示尺寸、
+展示加载/失败/重试状态，以及打开原生图片预览。
+
 ### 2.4 RenderDocument 辅助能力也回到 Rust
 
 除了主渲染入口，这次还把两类派生能力统一到了共享层：
@@ -199,15 +205,15 @@ TopicPostState.render_document / render_cooked_html()
   -> FireRichTextParser
   -> FireRenderBlockNodeBuilder
   -> [FireRichTextNode]
-  -> FireRichTextAttributedStringBuilder
-  -> ASTextNode / 原生图片节点
+  -> FireTopicPostRenderSegment
+  -> ASTextNode / Nuke-backed 原生图片节点
 ```
 
 保留下来的平台职责：
 
 - 原生字体、颜色、交互样式
 - `NSAttributedString` 生成
-- Texture 节点布局
+- Texture 节点布局、图片显示尺寸、失败重试和 UIKit 图片预览手势
 
 已移出平台的职责：
 
@@ -227,15 +233,15 @@ TopicPostState.render_document / render_cooked_html()
   -> FireRichTextParser
   -> FireRenderBlockBuilder
   -> [FireRichTextNode]
-  -> FireSpannableBuilder
-  -> FireRichTextView / ImageView
+  -> FireRichTextBlockBuilder
+  -> FireRichTextView / Coil-backed ImageView / ZoomImage preview
 ```
 
 保留下来的平台职责：
 
 - `Spannable` span 组合
 - 文本/链接/代码块样式
-- `TextView` / `ImageView` 展示
+- `TextView` / `ImageView` 展示、图片失败重试和 ZoomImage 预览手势
 
 已移出平台的职责与 iOS 相同，语义解析不再双写。
 

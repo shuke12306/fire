@@ -71,7 +71,10 @@ Current topic-detail interactions:
   notification bookmark APIs
 - topic edit and post edit through shared Rust mutation APIs
 - author/profile navigation through the app `fire://profile/{username}` route
-- cooked image attachment rendering with a full-screen native viewer
+- cooked image blocks rendered inline in the Rust `RenderDocument` order, with
+  compact loading/error placeholders, manual retry, and a full-screen ZoomImage
+  + Coil preview that supports pinch/pan gestures and reuses the shared image
+  cache for the same URL
 - AI summary loading in the topic header when Rust reports summary availability,
   including retry and metadata display
 - topic vote / remove-vote plus topic voter lookup when the backend exposes
