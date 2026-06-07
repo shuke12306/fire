@@ -366,23 +366,12 @@ private struct FireTopicUserInfoSheet: View {
 
     private func header(_ profile: UserProfileState) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            AsyncImage(url: fireAvatarURL(
+            FireAvatarView(
                 avatarTemplate: profile.avatarTemplate,
+                username: profile.username,
                 size: 64,
-                scale: UIScreen.main.scale,
                 baseURLString: viewModel.session.bootstrap.baseUrl.ifEmpty("https://linux.do")
-            )) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(FireTheme.accent.opacity(0.14))
-                        .overlay(Text(String(profile.username.prefix(1)).uppercased()))
-                }
-            }
-            .frame(width: 64, height: 64)
-            .clipShape(Circle())
+            )
 
             VStack(alignment: .leading, spacing: 5) {
                 Text((profile.name ?? "").ifEmpty(profile.username))
