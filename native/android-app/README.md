@@ -18,9 +18,11 @@ the shared Rust core at build time.
   the same screen with a retry action. `OnboardingFragment` is only the explicit
   login entry, and `LoginWebViewFragment` owns interactive login.
 - `HomeFragment` renders the Rust-backed topic feed with feed-kind, category,
-  tag filtering, pull refresh, MessageBus refresh, and visible Search/New Topic
-  actions. New Topic opens `TopicComposerSheet`; successful creation opens the
-  native topic detail screen. Topic compose supports Rust-backed tag
+  tag filtering, pull refresh, and debounced MessageBus-triggered Paging
+  refresh. Topic-scoped latest events are coalesced for rate limiting, but the
+  Android host still refreshes the active Paging source rather than merging
+  `topic_ids` rows in place. New Topic opens `TopicComposerSheet`; successful
+  creation opens the native topic detail screen. Topic compose supports Rust-backed tag
   suggestions, `@mention` suggestions, image upload insertion, and shared Rust
   draft restore/autosave/delete, and local Markdown preview with upload-image
   preview. Empty initial Paging loads render topic-row skeletons in the list area

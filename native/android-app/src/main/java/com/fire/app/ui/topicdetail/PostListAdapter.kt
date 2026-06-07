@@ -142,6 +142,8 @@ class HeaderAdapter(
             tags == other.tags &&
             categoryId == other.categoryId &&
             postsCount == other.postsCount &&
+            replyCount == other.replyCount &&
+            highestPostNumber == other.highestPostNumber &&
             views == other.views &&
             likeCount == other.likeCount &&
             bookmarked == other.bookmarked &&
@@ -240,7 +242,7 @@ class HeaderAdapter(
             bindTopicEdit(detail)
             bindTopicBookmark(detail)
             bindAiSummary(aiSummary, isAiSummaryLoading, aiSummaryError)
-            statReplies.text = "${maxOf(detail.postsCount, 1u) - 1u}"
+            statReplies.text = "${detail.replyCount}"
             statViews.text = "${detail.views}"
             statLikes.text = "${detail.likeCount}"
             bindTopicVote(detail)

@@ -168,6 +168,24 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
         XCTAssertEqual(merged.first?.activityTimestampUnixMs, 300)
     }
 
+    @MainActor
+    func testHomeTopicCountPatchOnlyUpdatesMatchingExistingRow() {
+        let row = makeTopicRow(id: 42, activityTimestampUnixMs: 100)
+        let detail = makeTopicDetail(id: 42, postsCount: 9, replyCount: 8)
+
+        let patched = FireHomeFeedStore.patchedTopicRow(row, from: detail)
+
+        XCTAssertEqual(patched?.topic.id, 42)
+        XCTAssertEqual(patched?.topic.postsCount, 9)
+        XCTAssertEqual(patched?.topic.replyCount, 8)
+        XCTAssertEqual(patched?.topic.highestPostNumber, 9)
+        XCTAssertEqual(patched?.topic.lastReadPostNumber, 8)
+        XCTAssertNil(FireHomeFeedStore.patchedTopicRow(
+            makeTopicRow(id: 7, activityTimestampUnixMs: 200),
+            from: detail
+        ))
+    }
+
     private func makeLatestEvent(
         topicID: UInt64?,
         messageType: String? = "latest"
@@ -241,6 +259,49 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
             createdTimestampUnixMs: nil,
             activityTimestampUnixMs: activityTimestampUnixMs,
             lastPosterUsername: nil
+        )
+    }
+
+    private func makeTopicDetail(
+        id: UInt64,
+        postsCount: UInt32,
+        replyCount: UInt32
+    ) -> TopicDetailState {
+        TopicDetailState(
+            id: id,
+            messageBusLastId: nil,
+            title: "Topic \(id)",
+            slug: "topic-\(id)",
+            postsCount: postsCount,
+            replyCount: replyCount,
+            categoryId: nil,
+            tags: [],
+            views: 0,
+            likeCount: 0,
+            createdAt: nil,
+            highestPostNumber: postsCount,
+            lastReadPostNumber: replyCount,
+            bookmarks: [],
+            bookmarked: false,
+            bookmarkId: nil,
+            bookmarkName: nil,
+            bookmarkReminderAt: nil,
+            acceptedAnswer: false,
+            hasAcceptedAnswer: false,
+            canVote: false,
+            voteCount: 0,
+            userVoted: false,
+            summarizable: false,
+            hasCachedSummary: false,
+            hasSummary: false,
+            archetype: "regular",
+            postStream: TopicPostStreamState(posts: [], stream: []),
+            details: TopicDetailMetaState(
+                notificationLevel: nil,
+                canEdit: false,
+                createdBy: nil,
+                participants: []
+            )
         )
     }
 }

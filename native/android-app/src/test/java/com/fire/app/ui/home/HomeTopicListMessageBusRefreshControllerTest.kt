@@ -23,7 +23,7 @@ class HomeTopicListMessageBusRefreshControllerTest {
             event = topicListEvent(kind = TopicListKindState.NEW),
             scope = scope,
             nowMs = 1_000,
-            allowIncremental = true,
+            allowTopicScopedRefresh = true,
         )
 
         assertNull(delay)
@@ -31,7 +31,7 @@ class HomeTopicListMessageBusRefreshControllerTest {
     }
 
     @Test
-    fun register_debouncesLatestIncrementalEvents() {
+    fun register_debouncesLatestTopicScopedEvents() {
         val controller = HomeTopicListMessageBusRefreshController(
             debounceDelayMs = 1_500,
             minimumIntervalMs = 30_000,
@@ -46,7 +46,7 @@ class HomeTopicListMessageBusRefreshControllerTest {
             event = topicListEvent(kind = TopicListKindState.LATEST, topicId = 123uL),
             scope = scope,
             nowMs = 1_000,
-            allowIncremental = true,
+            allowTopicScopedRefresh = true,
         )
 
         assertEquals(1_500L, delay)
@@ -70,7 +70,7 @@ class HomeTopicListMessageBusRefreshControllerTest {
             event = topicListEvent(kind = TopicListKindState.LATEST, topicId = 123uL),
             scope = scope,
             nowMs = 11_000,
-            allowIncremental = true,
+            allowTopicScopedRefresh = true,
         )
 
         assertEquals(29_000L, delay)
@@ -89,7 +89,7 @@ class HomeTopicListMessageBusRefreshControllerTest {
             event = topicListEvent(kind = TopicListKindState.LATEST, topicId = 123uL),
             scope = scope,
             nowMs = 1_000,
-            allowIncremental = false,
+            allowTopicScopedRefresh = false,
         )
 
         assertEquals(1_500L, delay)

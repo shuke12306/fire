@@ -94,6 +94,28 @@ final class FireHomeFeedStore: ObservableObject {
         candidateVisibleTopicIDs.intersection(currentTopicIDs)
     }
 
+    static func patchedTopicRow(
+        _ row: FireTopicRowPresentation,
+        from detail: TopicDetailState
+    ) -> FireTopicRowPresentation? {
+        guard row.topic.id == detail.id else {
+            return nil
+        }
+        guard row.topic.postsCount != detail.postsCount
+            || row.topic.replyCount != detail.replyCount
+            || row.topic.lastReadPostNumber != detail.lastReadPostNumber
+            || row.topic.highestPostNumber != detail.highestPostNumber else {
+            return nil
+        }
+
+        var patched = row
+        patched.topic.postsCount = detail.postsCount
+        patched.topic.replyCount = detail.replyCount
+        patched.topic.lastReadPostNumber = detail.lastReadPostNumber
+        patched.topic.highestPostNumber = detail.highestPostNumber
+        return patched
+    }
+
     func updateVisibleTopicIDs(_ topicIDs: Set<UInt64>) {
         visibleTopicIDs = Self.sanitizedVisibleTopicIDs(
             currentTopicIDs: topicRows.map(\.topic.id),
@@ -148,6 +170,28 @@ final class FireHomeFeedStore: ObservableObject {
 
     func topicRowContentToken(for topicID: UInt64) -> String? {
         topicRowContentTokensByID[topicID]
+    }
+
+    @discardableResult
+    func patchTopicCounts(from detail: TopicDetailState) -> Bool {
+        guard let row = topicEntities.entity(for: detail.id),
+              let patched = Self.patchedTopicRow(row, from: detail) else {
+            return false
+        }
+
+        topicEntities.upsert([patched], id: \.topic.id)
+        let rows = topicEntities.orderedValues(for: topicOrder)
+        topicRows = rows
+        updateTopicRowContentTokens(
+            rows: rows,
+            dirtyTopicIDs: [detail.id],
+            rebuildAll: false
+        )
+        visibleTopicIDs = Self.sanitizedVisibleTopicIDs(
+            currentTopicIDs: rows.map(\.topic.id),
+            candidateVisibleTopicIDs: visibleTopicIDs
+        )
+        return true
     }
 
     func selectTopicKind(_ kind: TopicListKindState) {

@@ -778,11 +778,13 @@ final class FireTopicDetailStore: ObservableObject {
             title: sourceSnapshot.header.title,
             slug: sourceSnapshot.header.slug,
             postsCount: sourceSnapshot.header.postsCount,
+            replyCount: sourceSnapshot.header.replyCount,
             categoryId: sourceSnapshot.header.categoryId,
             tags: sourceSnapshot.header.tags,
             views: sourceSnapshot.header.views,
             likeCount: sourceSnapshot.header.likeCount,
             createdAt: sourceSnapshot.header.createdAt,
+            highestPostNumber: sourceSnapshot.header.highestPostNumber,
             lastReadPostNumber: sourceSnapshot.header.lastReadPostNumber,
             bookmarks: sourceSnapshot.header.bookmarks,
             bookmarked: sourceSnapshot.header.bookmarked,
@@ -842,6 +844,7 @@ final class FireTopicDetailStore: ObservableObject {
             "topic detail page main apply topic_id=\(topicId) main_apply_ms=\(Self.elapsedMilliseconds(since: applyStartedAt)) source_loaded_posts=\(payload.sourceSnapshot.loadedPosts.count) body_post_included=true tree_total_loaded_post_count=\(treePresentation.totalLoadedPostCount) reply_rows=\(treePresentation.replyRows.count) cooked_byte_count=\(Self.cookedByteCount(sourceSnapshot: payload.sourceSnapshot))"
         )
         _ = await buildTopicDetailRenderUpdate(detail: detail, topicId: topicId)
+        appViewModel.patchHomeTopicCounts(from: detail)
         loadTopicAiSummaryIfNeeded(topicId: topicId, detail: detail)
     }
 
@@ -2517,7 +2520,13 @@ final class FireTopicDetailStore: ObservableObject {
                 detail.postsCount + 1,
                 UInt32(detail.postStream.stream.count)
             )
+            detail.replyCount = max(
+                detail.replyCount + 1,
+                detail.postsCount > 0 ? detail.postsCount - 1 : 0
+            )
         }
+        detail.highestPostNumber = max(detail.highestPostNumber, reply.postNumber)
+        detail.lastReadPostNumber = max(detail.lastReadPostNumber ?? 0, reply.postNumber)
 
         let previousStreamCount = detail.postStream.stream.count
         detail = cacheTopicDetail(detail, topicId: topicId)
@@ -2535,6 +2544,7 @@ final class FireTopicDetailStore: ObservableObject {
             requestedRange: requestedRange,
             pendingScrollTarget: topicWindowStates[topicId]?.pendingScrollTarget
         )
+        appViewModel.patchHomeTopicCounts(from: detail)
     }
 
     private func expandRequestedRangeIfNeeded(

@@ -293,7 +293,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
 
     var displayedReplyCount: UInt32 {
         if let detail {
-            return max(detail.postsCount, 1) - 1
+            return detail.replyCount
         }
         return topic.replyCount
     }
@@ -362,7 +362,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     }
 
     var totalReplyCount: Int {
-        detail.map { max(Int($0.postsCount) - 1, 0) } ?? Int(topic.replyCount)
+        detail.map { Int($0.replyCount) } ?? Int(topic.replyCount)
     }
 
     var showsTopicVote: Bool {

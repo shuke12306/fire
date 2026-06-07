@@ -1047,11 +1047,13 @@ pub struct TopicDetailState {
     pub title: String,
     pub slug: String,
     pub posts_count: u32,
+    pub reply_count: u32,
     pub category_id: Option<u64>,
     pub tags: Vec<TopicTagState>,
     pub views: u32,
     pub like_count: u32,
     pub created_at: Option<String>,
+    pub highest_post_number: u32,
     pub last_read_post_number: Option<u32>,
     pub bookmarks: Vec<u64>,
     pub bookmarked: bool,
@@ -1072,17 +1074,20 @@ pub struct TopicDetailState {
 }
 
 pub fn topic_detail_state_from_model(value: TopicDetail, base_url: &str) -> TopicDetailState {
+    let reply_count = value.reply_count();
     TopicDetailState {
         id: value.id,
         message_bus_last_id: value.message_bus_last_id,
         title: value.title,
         slug: value.slug,
         posts_count: value.posts_count,
+        reply_count,
         category_id: value.category_id,
         tags: value.tags.into_iter().map(Into::into).collect(),
         views: value.views,
         like_count: value.like_count,
         created_at: value.created_at,
+        highest_post_number: value.highest_post_number,
         last_read_post_number: value.last_read_post_number,
         bookmarks: value.bookmarks,
         bookmarked: value.bookmarked,

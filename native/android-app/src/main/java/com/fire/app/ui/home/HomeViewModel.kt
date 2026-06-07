@@ -50,7 +50,7 @@ internal data class HomeTopicListRefreshScope(
     val categoryId: ULong?,
     val tags: List<String>,
 ) {
-    val supportsIncrementalMessageBusRefresh: Boolean
+    val supportsTopicScopedMessageBusRefresh: Boolean
         get() = kind == TopicListKindState.LATEST && categoryId == null && tags.isEmpty()
 }
 
@@ -67,15 +67,15 @@ internal class HomeTopicListMessageBusRefreshController(
         event: MessageBusEventState,
         scope: HomeTopicListRefreshScope,
         nowMs: Long,
-        allowIncremental: Boolean,
+        allowTopicScopedRefresh: Boolean,
     ): Long? {
         prepare(scope)
         if (event.kind != MessageBusEventKindState.TOPIC_LIST || event.topicListKind != scope.kind) {
             return null
         }
 
-        if (allowIncremental &&
-            scope.supportsIncrementalMessageBusRefresh &&
+        if (allowTopicScopedRefresh &&
+            scope.supportsTopicScopedMessageBusRefresh &&
             event.topicId != null &&
             event.messageType?.equals("latest", ignoreCase = true) == true
         ) {
@@ -367,12 +367,12 @@ class HomeViewModel(
 
     private fun handleTopicListMessageBusEvent(event: MessageBusEventState) {
         val scope = currentRefreshScope()
-        val allowIncremental = scope.supportsIncrementalMessageBusRefresh
+        val allowTopicScopedRefresh = scope.supportsTopicScopedMessageBusRefresh
         val delayMs = topicListMessageBusRefreshController.register(
             event = event,
             scope = scope,
             nowMs = System.currentTimeMillis(),
-            allowIncremental = allowIncremental,
+            allowTopicScopedRefresh = allowTopicScopedRefresh,
         ) ?: return
 
         pendingMessageBusRefreshJob?.cancel()
