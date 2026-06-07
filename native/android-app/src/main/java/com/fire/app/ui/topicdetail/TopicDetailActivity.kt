@@ -91,71 +91,73 @@ class TopicDetailActivity : AppCompatActivity() {
         binding.topicDetailToolbar.title = parsedRoute.title
             ?: getString(R.string.topic_detail_title_fallback, parsedRoute.topicId.toString())
 
-        sessionStore = FireSessionStoreRepository.get(this)
-        viewModel = TopicDetailViewModel.create(sessionStore)
+        lifecycleScope.launch {
+            sessionStore = FireSessionStoreRepository.get(this@TopicDetailActivity)
+            viewModel = TopicDetailViewModel.create(sessionStore)
 
-        val postCallbacks = PostRowCallbacks(
-            reactionIds = { enabledReactionIds },
-            onReplyClick = ::showReplyComposerForPost,
-            onHeartClick = { post -> viewModel?.toggleHeart(post) },
-            onReactClick = ::showReactionPicker,
-            onBookmarkClick = ::showPostBookmarkEditor,
-            onVotePoll = { post, poll, options -> viewModel?.votePoll(post, poll, options) },
-            onUnvotePoll = { post, poll -> viewModel?.unvotePoll(post, poll) },
-            onReactionsClick = ::showReactionUsers,
-            onReplyContextClick = ::showReplyContext,
-            onDeletePostClick = ::confirmDeletePost,
-            onRecoverPostClick = ::confirmRecoverPost,
-            onFlagPostClick = ::showFlagPostOptions,
-            onEditPostClick = ::showPostEditor,
-            onImageClick = ::showImageViewer,
-            onAuthorClick = ::openProfile,
-        )
-        headerAdapter = HeaderAdapter(
-            callbacks = postCallbacks,
-            onReloadAiSummary = { viewModel?.reloadTopicAiSummary() },
-            onToggleTopicVote = { viewModel?.toggleTopicVote() },
-            onShowTopicVoters = ::showTopicVoters,
-            onEditTopicClick = ::showTopicEditor,
-            onTopicBookmarkClick = ::showTopicBookmarkEditor,
-            onTopicNotificationClick = ::showTopicNotificationOptions,
-        )
-        postListAdapter = PostListAdapter(postCallbacks)
+            val postCallbacks = PostRowCallbacks(
+                reactionIds = { enabledReactionIds },
+                onReplyClick = ::showReplyComposerForPost,
+                onHeartClick = { post -> viewModel?.toggleHeart(post) },
+                onReactClick = ::showReactionPicker,
+                onBookmarkClick = ::showPostBookmarkEditor,
+                onVotePoll = { post, poll, options -> viewModel?.votePoll(post, poll, options) },
+                onUnvotePoll = { post, poll -> viewModel?.unvotePoll(post, poll) },
+                onReactionsClick = ::showReactionUsers,
+                onReplyContextClick = ::showReplyContext,
+                onDeletePostClick = ::confirmDeletePost,
+                onRecoverPostClick = ::confirmRecoverPost,
+                onFlagPostClick = ::showFlagPostOptions,
+                onEditPostClick = ::showPostEditor,
+                onImageClick = ::showImageViewer,
+                onAuthorClick = ::openProfile,
+            )
+            headerAdapter = HeaderAdapter(
+                callbacks = postCallbacks,
+                onReloadAiSummary = { viewModel?.reloadTopicAiSummary() },
+                onToggleTopicVote = { viewModel?.toggleTopicVote() },
+                onShowTopicVoters = ::showTopicVoters,
+                onEditTopicClick = ::showTopicEditor,
+                onTopicBookmarkClick = ::showTopicBookmarkEditor,
+                onTopicNotificationClick = ::showTopicNotificationOptions,
+            )
+            postListAdapter = PostListAdapter(postCallbacks)
 
-        val concatAdapter = ConcatAdapter(headerAdapter, postListAdapter, loadingFooterAdapter)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = concatAdapter
-        loadEnabledReactionIds()
+            val concatAdapter = ConcatAdapter(headerAdapter, postListAdapter, loadingFooterAdapter)
+            recyclerView.layoutManager = LinearLayoutManager(this@TopicDetailActivity)
+            recyclerView.adapter = concatAdapter
+            loadEnabledReactionIds()
 
-        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
-                val layoutManager = rv.layoutManager as? LinearLayoutManager ?: return
-                val totalItemCount = layoutManager.itemCount
-                val lastVisible = layoutManager.findLastVisibleItemPosition()
-                if (lastVisible >= totalItemCount - 5) {
-                    scheduleLoadMorePosts(rv)
+            recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                    val layoutManager = rv.layoutManager as? LinearLayoutManager ?: return
+                    val totalItemCount = layoutManager.itemCount
+                    val lastVisible = layoutManager.findLastVisibleItemPosition()
+                    if (lastVisible >= totalItemCount - 5) {
+                        scheduleLoadMorePosts(rv)
+                    }
                 }
+
+                override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+                    super.onScrollStateChanged(rv, newState)
+                    viewModel?.setTopicDetailScrollInteractionActive(
+                        newState != RecyclerView.SCROLL_STATE_IDLE
+                    )
+                }
+            })
+
+            observeViewModel()
+
+            retryButton.setOnClickListener {
+                loadRoute(parsedRoute)
             }
 
-            override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
-                super.onScrollStateChanged(rv, newState)
-                viewModel?.setTopicDetailScrollInteractionActive(
-                    newState != RecyclerView.SCROLL_STATE_IDLE
-                )
+            replyFab.setOnClickListener {
+                showReplyComposer(replyToPostNumber = null)
             }
-        })
 
-        observeViewModel()
-
-        retryButton.setOnClickListener {
             loadRoute(parsedRoute)
         }
-
-        replyFab.setOnClickListener {
-            showReplyComposer(replyToPostNumber = null)
-        }
-
-        loadRoute(parsedRoute)
     }
 
     private fun observeViewModel() {

@@ -43,9 +43,9 @@ class PreheatGateFragment : Fragment() {
         statusButton.text = getString(R.string.onboarding_checking_login_state)
         errorText.visibility = View.GONE
 
-        val store = FireSessionStoreRepository.get(requireContext())
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val store = FireSessionStoreRepository.get(requireContext())
                 store.prepareStartupSession()
                 store.awaitPreloadedData()
                 onPreloadedDataReady(store)
