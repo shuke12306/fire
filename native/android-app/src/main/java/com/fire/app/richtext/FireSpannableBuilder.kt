@@ -387,6 +387,7 @@ object FireSpannableBuilder {
         builder.setSpan(StyleSpan(Typeface.BOLD), captionStart, captionEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         val title = node.title?.trim()?.ifBlank { null }
+        val description = node.description?.trim()?.ifBlank { null }
         val url = node.url
         if (title != null) {
             builder.append('\n')
@@ -398,7 +399,15 @@ object FireSpannableBuilder {
             if (url != null) {
                 builder.setSpan(FireLinkSpan(url, onLinkClicked), titleStart, titleEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-        } else if (url != null) {
+        }
+        if (description != null) {
+            builder.append('\n')
+            val descriptionStart = builder.length
+            builder.append(description)
+            val descriptionEnd = builder.length
+            builder.setSpan(ForegroundColorSpan(0xFF6B7280.toInt()), descriptionStart, descriptionEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            builder.setSpan(RelativeSizeSpan(0.9f), descriptionStart, descriptionEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        } else if (url != null && title == null) {
             builder.append('\n')
             val linkStart = builder.length
             builder.append(url)

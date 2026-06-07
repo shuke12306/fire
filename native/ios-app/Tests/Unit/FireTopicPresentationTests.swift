@@ -637,6 +637,7 @@ final class FireTopicPresentationTests: XCTestCase {
         XCTAssertTrue(attributedText.string.contains("链接预览"))
         XCTAssertTrue(attributedText.string.contains("Example title"))
         XCTAssertTrue(attributedText.string.contains("Example description"))
+        XCTAssertFalse(attributedText.string.contains("example.com Example title Example description"))
     }
 
     func testMergeTopicPostsRespectsStreamOrderAndPrefersIncomingValues() {

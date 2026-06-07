@@ -411,15 +411,17 @@ fn map_node(node: &CookedHtmlNode, tree: &CookedTree<'_>, base_url: &str) -> Vec
             children: Vec::new(),
         }],
         CookedHtmlNodeKind::TableRow | CookedHtmlNodeKind::TableCell => children,
-        CookedHtmlNodeKind::Onebox => vec![TreeRenderBlock {
-            kind: RenderBlockKind::Onebox {
-                url: resolved_url_string(node.url.as_deref(), base_url),
-                title: normalized_text(node.title.as_deref())
-                    .or_else(|| normalized_text(Some(&subtree_text(node, tree)))),
-                description: None,
-            },
-            children: Vec::new(),
-        }],
+        CookedHtmlNodeKind::Onebox => {
+            let (title, description) = onebox_title_and_description(node, tree);
+            vec![TreeRenderBlock {
+                kind: RenderBlockKind::Onebox {
+                    url: resolved_url_string(node.url.as_deref(), base_url),
+                    title,
+                    description,
+                },
+                children: Vec::new(),
+            }]
+        }
         CookedHtmlNodeKind::Iframe => {
             let Some(url) = resolved_url_string(node.url.as_deref(), base_url) else {
                 return children;
@@ -557,6 +559,45 @@ fn subtree_text(node: &CookedHtmlNode, tree: &CookedTree<'_>) -> String {
     let mut builder = PlainTextBuilder::default();
     append_subtree_text(node, tree, &mut builder);
     builder.finish()
+}
+
+fn onebox_title_and_description(
+    node: &CookedHtmlNode,
+    tree: &CookedTree<'_>,
+) -> (Option<String>, Option<String>) {
+    let title = first_descendant_text(node, tree, CookedHtmlNodeKind::Heading)
+        .or_else(|| normalized_text(node.title.as_deref()))
+        .or_else(|| first_descendant_text(node, tree, CookedHtmlNodeKind::Link))
+        .or_else(|| normalized_text(Some(&subtree_text(node, tree))));
+    let description =
+        first_descendant_text(node, tree, CookedHtmlNodeKind::Paragraph).filter(|description| {
+            let title = title.as_deref().unwrap_or_default();
+            !description.eq_ignore_ascii_case(title)
+                && !node
+                    .url
+                    .as_deref()
+                    .is_some_and(|url| description.eq_ignore_ascii_case(url))
+        });
+    (title, description)
+}
+
+fn first_descendant_text(
+    node: &CookedHtmlNode,
+    tree: &CookedTree<'_>,
+    kind: CookedHtmlNodeKind,
+) -> Option<String> {
+    for child in tree.children_of(node) {
+        if child.kind == kind {
+            let text = subtree_text(child, tree);
+            if let Some(text) = normalized_text(Some(&text)) {
+                return Some(text);
+            }
+        }
+        if let Some(text) = first_descendant_text(child, tree, kind) {
+            return Some(text);
+        }
+    }
+    None
 }
 
 fn append_subtree_text(
@@ -1759,6 +1800,42 @@ mod tests {
             .any(|block| matches!(block.kind, RenderBlockKind::Image { .. })));
         assert_eq!(rendered.image_attachments.len(), 0);
         assert_eq!(rendered_text, "Hello Fire");
+    }
+
+    #[test]
+    fn render_document_extracts_onebox_title_and_description() {
+        let mut onebox = node(1, Some(0), 1, CookedHtmlNodeKind::Onebox);
+        onebox.url = Some("https://example.com/post".to_string());
+        onebox.title = Some("example.com Example title Example description".to_string());
+        let mut heading = node(2, Some(1), 2, CookedHtmlNodeKind::Heading);
+        heading.level = Some(3);
+
+        let document = CookedHtmlDocument {
+            nodes: vec![
+                node(0, None, 0, CookedHtmlNodeKind::Document),
+                onebox,
+                heading,
+                link_node(3, 2, 3, "https://example.com/post", ""),
+                text_node(4, 3, 4, "Example title"),
+                node(5, Some(1), 2, CookedHtmlNodeKind::Paragraph),
+                text_node(6, 5, 3, "Example description"),
+            ],
+            plain_text: "example.com Example title Example description".to_string(),
+            image_urls: Vec::new(),
+            link_urls: vec!["https://example.com/post".to_string()],
+        };
+
+        let rendered = render_document(&document, "https://linux.do");
+        assert!(rendered.blocks.iter().any(|block| matches!(
+            &block.kind,
+            RenderBlockKind::Onebox {
+                url: Some(url),
+                title: Some(title),
+                description: Some(description),
+            } if url == "https://example.com/post"
+                && title == "Example title"
+                && description == "Example description"
+        )));
     }
 
     fn node(
