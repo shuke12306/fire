@@ -34,6 +34,7 @@ import com.fire.app.session.FireSessionStoreRepository
 import com.fire.app.ui.composer.ComposerTagAssist
 import com.fire.app.ui.composer.PrivateMessageComposerSheet
 import com.fire.app.ui.composer.ReplyComposerSheet
+import com.fire.app.ui.home.HomeTopicDetailPatchRepository
 import com.fire.app.ui.webview.FireInAppWebViewActivity
 import com.fire.app.core.ext.dp
 import com.fire.app.core.image.FireImageLoader
@@ -190,6 +191,7 @@ class TopicDetailActivity : AppCompatActivity() {
             vm.detail.collectLatest { detail ->
                 headerAdapter.detail = detail
                 if (detail != null) {
+                    HomeTopicDetailPatchRepository.publish(detail)
                     binding.topicDetailToolbar.title = detail.title.trim()
                 }
             }

@@ -153,6 +153,11 @@ Android now keeps request-failure handling single-path:
 - Rust marks the user-opened notification history request as foreground-capable
   so notification-tab refreshes align with home, topic detail, search, and other
   visible reads; recent notification cache refreshes remain background.
+- Topic detail publishes loaded header counters back to the visible home list
+  through `HomeTopicDetailPatchRepository`, letting already-loaded rows update
+  `postsCount`, `replyCount`, `views`, `lastReadPostNumber`, and
+  `highestPostNumber` immediately while the next Paging load remains the
+  authoritative Rust-backed refresh.
 - Home, topic detail, notifications, search, bookmarks, private messages, and
   composer flows all surface those failures through the same error-display path
   used for any other request failure.

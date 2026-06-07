@@ -131,7 +131,13 @@ class HomeFragment : Fragment() {
                 viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     launch {
                         vm.topicPagingFlow.collectLatest { pagingData ->
+                            adapter.clearDetailPatches()
                             adapter.submitData(pagingData)
+                        }
+                    }
+                    launch {
+                        HomeTopicDetailPatchRepository.patches.collect { patch ->
+                            adapter.applyDetailPatch(patch)
                         }
                     }
                     launch {
