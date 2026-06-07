@@ -1383,7 +1383,7 @@ private final class FirePostImageNode: ASControlNode {
             width: max(renderSize.width * scale, 1),
             height: max(renderSize.height * scale, 1)
         )
-        return image.byPreparingThumbnail(ofSize: targetSize)
+        return image.preparingThumbnail(of: targetSize)
             ?? image.preparingForDisplay()
             ?? image
     }

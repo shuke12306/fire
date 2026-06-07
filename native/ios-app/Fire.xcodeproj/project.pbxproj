@@ -64,6 +64,7 @@
 		5C94B9ACD52AEF20ED7AC39F /* FireBackgroundNotificationAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5FF075F001E43924A7D188 /* FireBackgroundNotificationAlert.swift */; };
 		5CACD8BFBDA8FDF7D7CBF4E7 /* FireMotionReduceMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA23C0E50E7A412A73AF80E6 /* FireMotionReduceMotion.swift */; };
 		5CC59FE0F0C9914237A8DE8E /* FireTopicTimingTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE93F98F58126B7BEDDB4F7 /* FireTopicTimingTrackerTests.swift */; };
+		5D343E985D5E1E682196187C /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 1E653954FC02A5A5CA653296 /* JXPhotoBrowser */; };
 		5DDBCDFC25C6461A076FE358 /* FireRichTextHeightConsistencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65C6A52FE7362DF04A8445B /* FireRichTextHeightConsistencyTests.swift */; };
 		5E556FC12993F27449D2B973 /* FireAPMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 129694A5F35FF78B3F810049 /* FireAPMManager.swift */; };
 		5E90D968B32A1D692D9351AC /* FireDeveloperToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1481ACDF04D249FF61B1D0DF /* FireDeveloperToolsView.swift */; };
@@ -357,6 +358,7 @@
 				A7657EA99808CEBE3F038176 /* CrashReporter in Frameworks */,
 				3E86B05D0E10C74BB865A0F9 /* ConfettiSwiftUI in Frameworks */,
 				2697DC8A389656A42CCEE78F /* Nuke in Frameworks */,
+				5D343E985D5E1E682196187C /* JXPhotoBrowser in Frameworks */,
 				0C251ED7E4C214F8E2F7E7C2 /* AsyncDisplayKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -874,6 +876,7 @@
 				601B450FB4E87A5243FAE5F9 /* CrashReporter */,
 				2DFDD7AEF71DAD503CDB00B8 /* ConfettiSwiftUI */,
 				3F5DB59F34DC2099A84C0F6F /* Nuke */,
+				1E653954FC02A5A5CA653296 /* JXPhotoBrowser */,
 			);
 			productName = Fire;
 			productReference = 48CAB0E38556929FC140E25D /* Fire.app */;
@@ -906,6 +909,7 @@
 			packageReferences = (
 				2C7045D74786E79E8664E95B /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */,
 				9F8D6D7CFB3643BCA8C9F545 /* XCRemoteSwiftPackageReference "plcrashreporter" */,
+				FBB4C7D67ABA6C50F2EEA949 /* XCRemoteSwiftPackageReference "PhotoBrowser" */,
 				0B33AAACF1C3CFC774277ECB /* XCRemoteSwiftPackageReference "Nuke" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1441,9 +1445,22 @@
 				version = 1.12.2;
 			};
 		};
+		FBB4C7D67ABA6C50F2EEA949 /* XCRemoteSwiftPackageReference "PhotoBrowser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/JiongXing/PhotoBrowser.git";
+			requirement = {
+				kind = exactVersion;
+				version = 4.0.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1E653954FC02A5A5CA653296 /* JXPhotoBrowser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FBB4C7D67ABA6C50F2EEA949 /* XCRemoteSwiftPackageReference "PhotoBrowser" */;
+			productName = JXPhotoBrowser;
+		};
 		2DFDD7AEF71DAD503CDB00B8 /* ConfettiSwiftUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2C7045D74786E79E8664E95B /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */;

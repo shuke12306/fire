@@ -206,14 +206,14 @@ TopicPostState.render_document / render_cooked_html()
   -> FireRenderBlockNodeBuilder
   -> [FireRichTextNode]
   -> FireTopicPostRenderSegment
-  -> ASTextNode / Nuke-backed 原生图片节点
+  -> ASTextNode / Nuke-backed 原生图片节点 / JXPhotoBrowser preview
 ```
 
 保留下来的平台职责：
 
 - 原生字体、颜色、交互样式
 - `NSAttributedString` 生成
-- Texture 节点布局、图片显示尺寸、失败重试和 UIKit 图片预览手势
+- Texture 节点布局、图片显示尺寸、失败重试和 JXPhotoBrowser 图片预览手势
 
 已移出平台的职责：
 

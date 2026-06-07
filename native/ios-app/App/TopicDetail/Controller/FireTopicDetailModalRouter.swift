@@ -204,8 +204,9 @@ final class FireTopicDetailModalRouter {
     }
 
     func presentImageViewer(image: FireCookedImage) {
-        let controller = FireTopicImageViewerController(image: image)
-        viewController?.present(controller, animated: true)
+        guard let viewController else { return }
+        let controller = FireTopicPhotoBrowserController(image: image)
+        controller.present(from: viewController)
     }
 
     func presentDeleteConfirmation(
