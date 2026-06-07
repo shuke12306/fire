@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -35,7 +34,7 @@ class HomeFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: TopicListAdapter
     private lateinit var emptyView: TextView
-    private lateinit var loadingView: ProgressBar
+    private lateinit var loadingSkeletonView: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var categoryBar: RecyclerView
     private lateinit var categoryAdapter: HomeCategoryAdapter
@@ -62,7 +61,7 @@ class HomeFragment : Fragment() {
 
         recyclerView = view.findViewById(R.id.topic_list)
         emptyView = view.findViewById(R.id.empty_view)
-        loadingView = view.findViewById(R.id.loading_view)
+        loadingSkeletonView = view.findViewById(R.id.loading_skeleton_view)
         swipeRefresh = view.findViewById(R.id.swipe_refresh)
         categoryBar = view.findViewById(R.id.category_bar)
         feedKindBar = view.findViewById(R.id.feed_kind_bar)
@@ -99,7 +98,11 @@ class HomeFragment : Fragment() {
         adapter.addLoadStateListener { loadStates ->
             val refresh = loadStates.refresh
             val isInitialLoading = refresh is LoadState.Loading && adapter.itemCount == 0
-            loadingView.visibility = if (isInitialLoading) View.VISIBLE else View.GONE
+            loadingSkeletonView.visibility = if (isInitialLoading) View.VISIBLE else View.GONE
+            swipeRefresh.isEnabled = !isInitialLoading
+            if (refresh is LoadState.Loading && adapter.itemCount > 0) {
+                swipeRefresh.isRefreshing = true
+            }
             emptyView.visibility = when {
                 refresh is LoadState.Error -> {
                     emptyView.text = refresh.error.localizedMessage

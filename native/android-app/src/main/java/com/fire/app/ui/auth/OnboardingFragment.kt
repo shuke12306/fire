@@ -22,8 +22,11 @@ class OnboardingFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        view.findViewById<View>(R.id.onboarding_error).visibility = View.GONE
         val loginButton: MaterialButton = view.findViewById(R.id.login_button)
         loginButton.visibility = View.VISIBLE
+        loginButton.isEnabled = true
+        loginButton.text = getString(R.string.onboarding_login)
 
         loginButton.setOnClickListener {
             findNavController().navigate(R.id.action_onboarding_to_loginWebView)

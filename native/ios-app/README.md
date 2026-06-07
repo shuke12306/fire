@@ -89,7 +89,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - presents the login browser immediately, then runs a lightweight best-effort network warm-up in the background
   - still tries to move the first system-level network prompt, when one appears on-device, out of the in-page login interaction itself, without blocking WebView presentation
   - restores the persisted session cache, replays Keychain cookies through Rust on cold start, repairs incomplete authenticated session identity through bootstrap refresh when needed, and leaves CSRF repair to the shared authenticated-write preflight
-  - holds the onboarding screen in a bootstrap state while cold-start auto-login runs, hiding login actions during restore and only revealing a loading indicator if that bootstrap takes longer than 500ms
+  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, the login action is hidden, and the button slot shows the current verification state until PreheatGate finishes or exposes a retryable failure
   - now builds `FireSessionStore` lazily on a detached task so Rust/logging initialization does not block the first SwiftUI render on the main actor
   - syncs authenticated LinuxDo cookies into native `HTTPCookieStorage` so inline media/image requests can reuse the restored session, while leaving the persistent WebKit cookie store as the authoritative browser session owned by login and Cloudflare WebViews
   - now also owns native private-message inbox/sent loading plus private-message creation on top of the shared Rust mailbox and `/posts.json` PM surfaces
@@ -242,7 +242,8 @@ Workspace note:
 Current UX note:
 
 - The app now opens login as a full-screen browser instead of a partial sheet.
-- The app now keeps the same onboarding page visible during cold-start auto-login, hiding login actions until restore fails and only showing loading if bootstrap takes longer than 500ms.
+- The app now keeps the same onboarding visual shell visible during cold-start login-state verification. The login button is hidden during PreheatGate, the button slot shows the verification state, and startup failures stay on that screen with a retry action.
+- Once startup or login reaches the authenticated shell, the Home list owns its data-loading presentation and renders topic-row skeletons for the initial empty load instead of showing another full-screen gate.
 - The login browser can navigate back from Google or other intermediate pages without forcing the user to close and reopen login.
 - The login browser now auto-probes whether sync would actually succeed, re-checking on navigation, scene resume, debounced WebKit auth-cookie changes, and loading-state transitions. `完成登录` stays disabled until username, auth cookies, reusable bootstrap HTML, and an idle WebView are all present.
 - The login shell and reading workspace now adapt to both light and dark system appearance while preserving the same hierarchy and contrast model.

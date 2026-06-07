@@ -39,7 +39,6 @@ import uniffi.fire_uniffi_types.TopicRowState
 
 private data class HomeTopicFilter(
     val kind: TopicListKindState,
-    val baseUrl: String?,
     val categoryId: ULong?,
     val categorySlug: String?,
     val parentCategorySlug: String?,
@@ -171,7 +170,6 @@ class HomeViewModel(
             }
             HomeTopicFilter(
                 kind = kind,
-                baseUrl = session?.bootstrap?.baseUrl,
                 categoryId = category?.id,
                 categorySlug = category?.slug?.takeIf { it.isNotBlank() },
                 parentCategorySlug = parentCategory?.slug?.takeIf { it.isNotBlank() },
@@ -276,7 +274,6 @@ class HomeViewModel(
                 TopicListPagingSource(
                     repository = topicRepository,
                     kind = filter.kind,
-                    baseUrl = filter.baseUrl,
                     categorySlug = filter.categorySlug,
                     categoryId = filter.categoryId,
                     parentCategorySlug = filter.parentCategorySlug,

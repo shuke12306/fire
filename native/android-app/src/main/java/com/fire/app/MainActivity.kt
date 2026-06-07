@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
 
         navController.addOnDestinationChangedListener { _, destination, _ ->
             binding.bottomNav.visibility = when (destination.id) {
+                R.id.preheatGateFragment,
                 R.id.onboardingFragment,
                 R.id.loginWebViewFragment -> View.GONE
                 else -> View.VISIBLE

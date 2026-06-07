@@ -11,15 +11,20 @@ the shared Rust core at build time.
   Home, Notifications, and Profile. Tab selection uses Navigation saved-state
   restoration so loaded tab fragments keep their back stack and ViewModel state
   when switching between the three primary tabs.
-- `OnboardingFragment` restores the persisted Rust session and routes logged-in
-  users into Home. `LoginWebViewFragment` owns interactive login.
+- `PreheatGateFragment` is the startup authority boundary: it restores the
+  persisted Rust session, waits for preloaded data, runs Rust's login-state
+  probe, and routes to Home or Onboarding. During that check it reuses the
+  onboarding visual shell, keeps the login action hidden, and leaves failures on
+  the same screen with a retry action. `OnboardingFragment` is only the explicit
+  login entry, and `LoginWebViewFragment` owns interactive login.
 - `HomeFragment` renders the Rust-backed topic feed with feed-kind, category,
   tag filtering, pull refresh, MessageBus refresh, and visible Search/New Topic
   actions. New Topic opens `TopicComposerSheet`; successful creation opens the
   native topic detail screen. Topic compose supports Rust-backed tag
   suggestions, `@mention` suggestions, image upload insertion, and shared Rust
   draft restore/autosave/delete, and local Markdown preview with upload-image
-  preview.
+  preview. Empty initial Paging loads render topic-row skeletons in the list area
+  instead of a separate blocking spinner.
 - `SearchFragment` is a Navigation destination reachable from Home. It calls
   Rust search APIs for all/topic/post/user scopes, renders labeled result
   sections, loads additional full-page results while scrolling, and routes
