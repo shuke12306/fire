@@ -240,7 +240,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         super.viewDidAppear(animated)
         navigationController?.interactivePopGestureRecognizer?.isEnabled =
             (navigationController?.viewControllers.count ?? 0) > 1
-        pageBackEdgePanGestureRecognizer.isEnabled = needsPresentedRootEdgeDismissGesture
+        pageBackEdgePanGestureRecognizer.isEnabled = canNavigateBackFromTopicDetail
         Task {
             await timingTracker.setSceneActive(true)
         }
@@ -476,9 +476,17 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             && (navigationController?.presentingViewController != nil || presentingViewController != nil)
     }
 
+    private var canNavigateBackFromTopicDetail: Bool {
+        if let navigationController {
+            return navigationController.viewControllers.count > 1
+                || navigationController.presentingViewController != nil
+        }
+        return presentingViewController != nil
+    }
+
     @objc private func handlePageBackEdgePan(_ gestureRecognizer: UIScreenEdgePanGestureRecognizer) {
         guard gestureRecognizer.state == .ended,
-              needsPresentedRootEdgeDismissGesture,
+              canNavigateBackFromTopicDetail,
               navigationController?.transitionCoordinator == nil else {
             return
         }
@@ -508,7 +516,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
               let panGesture = gestureRecognizer as? UIScreenEdgePanGestureRecognizer else {
             return true
         }
-        guard needsPresentedRootEdgeDismissGesture,
+        guard canNavigateBackFromTopicDetail,
               navigationController?.transitionCoordinator == nil else {
             return false
         }
@@ -953,6 +961,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         buildAndApplyChromeState()
         if shouldKeepFocus {
             quickReplyBarNode.focusInput()
+            DispatchQueue.main.async { [weak self] in
+                self?.quickReplyBarNode.focusInput()
+            }
         }
     }
 

@@ -274,7 +274,13 @@ private final class FireTopicQuickReplyBarView: UIView, UITextFieldDelegate {
 
     @objc
     private func handleClearTarget() {
+        let shouldRestoreFocus = textField.isFirstResponder
         callbacks?.onClearTarget()
+        if shouldRestoreFocus {
+            DispatchQueue.main.async { [weak self] in
+                self?.textField.becomeFirstResponder()
+            }
+        }
     }
 
     private func setupView() {
