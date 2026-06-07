@@ -92,10 +92,6 @@ struct FireTabRoot: View {
                 preheatComplete = true
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .firePreheatGateRequestsLogout)) { _ in
-            preheatComplete = true
-            viewModel.logout()
-        }
         .fullScreenCover(item: $viewModel.authPresentationState) { presentationState in
             FireAuthScreen(
                 viewModel: viewModel,
@@ -232,7 +228,7 @@ struct FirePreheatGateRepresentable: UIViewControllerRepresentable {
 final class FirePreheatGateWaitingViewController: UIViewController {
     private(set) var sessionStore: FireSessionStore?
     private var gateViewController: FirePreheatGateViewController?
-    private let loadingIndicator = UIActivityIndicatorView(style: .large)
+    private let statusView = FireStartupOnboardingStatusView()
 
     init(sessionStore: FireSessionStore?) {
         self.sessionStore = sessionStore
@@ -243,14 +239,16 @@ final class FirePreheatGateWaitingViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = FireStartupOnboardingPalette.background
 
-        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
-        loadingIndicator.startAnimating()
-        view.addSubview(loadingIndicator)
+        statusView.translatesAutoresizingMaskIntoConstraints = false
+        statusView.showLoading("正在准备登录态…")
+        view.addSubview(statusView)
         NSLayoutConstraint.activate([
-            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            statusView.topAnchor.constraint(equalTo: view.topAnchor),
+            statusView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            statusView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            statusView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
         if let store = sessionStore {
@@ -267,8 +265,7 @@ final class FirePreheatGateWaitingViewController: UIViewController {
 
     private func installGate(with store: FireSessionStore) {
         guard gateViewController == nil else { return }
-        loadingIndicator.stopAnimating()
-        loadingIndicator.removeFromSuperview()
+        statusView.removeFromSuperview()
         let gate = FirePreheatGateViewController(sessionStore: store)
         gateViewController = gate
         addChild(gate)

@@ -9,7 +9,6 @@ import uniffi.fire_uniffi_types.TopicRowState
 class TopicListPagingSource(
     private val repository: TopicRepository,
     private val kind: TopicListKindState,
-    private val baseUrl: String? = null,
     private val categorySlug: String? = null,
     private val categoryId: ULong? = null,
     private val parentCategorySlug: String? = null,
@@ -19,10 +18,9 @@ class TopicListPagingSource(
 ) : PagingSource<UInt, TopicRowState>() {
 
     override fun getRefreshKey(state: PagingState<UInt, TopicRowState>): UInt? {
-        return state.anchorPosition?.let { position ->
-            state.closestPageToPosition(position)?.prevKey?.plus(1u)
-                ?: state.closestPageToPosition(position)?.nextKey?.minus(1u)
-        }
+        // Home only supports forward pagination. Refreshing from an anchor page
+        // strands the list on that single page after an automatic invalidation.
+        return null
     }
 
     override suspend fun load(params: LoadParams<UInt>): LoadResult<UInt, TopicRowState> {

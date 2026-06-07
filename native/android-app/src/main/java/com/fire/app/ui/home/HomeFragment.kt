@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -35,7 +34,7 @@ class HomeFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: TopicListAdapter
     private lateinit var emptyView: TextView
-    private lateinit var loadingView: ProgressBar
+    private lateinit var loadingSkeletonView: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var categoryBar: RecyclerView
     private lateinit var categoryAdapter: HomeCategoryAdapter
@@ -47,6 +46,7 @@ class HomeFragment : Fragment() {
     private lateinit var createTopicButton: View
 
     private var viewModel: HomeViewModel? = null
+    private var pendingAutoRefresh = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -61,7 +61,7 @@ class HomeFragment : Fragment() {
 
         recyclerView = view.findViewById(R.id.topic_list)
         emptyView = view.findViewById(R.id.empty_view)
-        loadingView = view.findViewById(R.id.loading_view)
+        loadingSkeletonView = view.findViewById(R.id.loading_skeleton_view)
         swipeRefresh = view.findViewById(R.id.swipe_refresh)
         categoryBar = view.findViewById(R.id.category_bar)
         feedKindBar = view.findViewById(R.id.feed_kind_bar)
@@ -90,10 +90,19 @@ class HomeFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
         recyclerView.optimizeForPaging()
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                flushPendingAutoRefreshIfAtTop()
+            }
+        })
         adapter.addLoadStateListener { loadStates ->
             val refresh = loadStates.refresh
             val isInitialLoading = refresh is LoadState.Loading && adapter.itemCount == 0
-            loadingView.visibility = if (isInitialLoading) View.VISIBLE else View.GONE
+            loadingSkeletonView.visibility = if (isInitialLoading) View.VISIBLE else View.GONE
+            swipeRefresh.isEnabled = !isInitialLoading
+            if (refresh is LoadState.Loading && adapter.itemCount > 0) {
+                swipeRefresh.isRefreshing = true
+            }
             emptyView.visibility = when {
                 refresh is LoadState.Error -> {
                     emptyView.text = refresh.error.localizedMessage
@@ -108,6 +117,7 @@ class HomeFragment : Fragment() {
             }
             if (refresh !is LoadState.Loading) {
                 swipeRefresh.isRefreshing = false
+                flushPendingAutoRefreshIfAtTop()
             }
         }
 
@@ -146,7 +156,12 @@ class HomeFragment : Fragment() {
                     }
                     launch {
                         vm.topicListRefreshEvents.collect {
-                            adapter.refresh()
+                            if (isTopicListAtTop()) {
+                                pendingAutoRefresh = false
+                                adapter.refresh()
+                            } else {
+                                pendingAutoRefresh = true
+                            }
                         }
                     }
                     launch {
@@ -183,6 +198,7 @@ class HomeFragment : Fragment() {
 
     private fun setupSwipeRefresh() {
         swipeRefresh.setOnRefreshListener {
+            pendingAutoRefresh = false
             adapter.refresh()
         }
     }
@@ -222,6 +238,27 @@ class HomeFragment : Fragment() {
             }
             selectedTagsGroup.addView(chip)
         }
+    }
+
+    private fun isTopicListAtTop(): Boolean {
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return true
+        val firstVisiblePosition = layoutManager.findFirstVisibleItemPosition()
+        if (firstVisiblePosition > 0) {
+            return false
+        }
+        val firstVisibleView = layoutManager.findViewByPosition(firstVisiblePosition)
+        return firstVisibleView == null || firstVisibleView.top >= recyclerView.paddingTop
+    }
+
+    private fun flushPendingAutoRefreshIfAtTop() {
+        if (!pendingAutoRefresh || swipeRefresh.isRefreshing) {
+            return
+        }
+        if (!isTopicListAtTop()) {
+            return
+        }
+        pendingAutoRefresh = false
+        adapter.refresh()
     }
 
     private class HomeViewModelFactory(

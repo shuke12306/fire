@@ -10,6 +10,8 @@
     <color name="fire_background_canvas">#FF141516</color>
     <color name="fire_background_surface">#FF1E1F21</color>
     <color name="fire_background_elevated">#FF252629</color>
+    <color name="fire_skeleton_primary">#FF34363A</color>
+    <color name="fire_skeleton_secondary">#FF2B2D31</color>
 
     <color name="fire_code_background">#FF1E2430</color>
     <color name="fire_quote_stripe">#4D9CA3AF</color>

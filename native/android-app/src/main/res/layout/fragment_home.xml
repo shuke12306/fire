@@ -77,35 +77,53 @@
 
     </HorizontalScrollView>
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipe_refresh"
+    <FrameLayout
+        android:id="@+id/topic_list_container"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/topic_list"
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/topic_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="12dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <LinearLayout
+            android:id="@+id/loading_skeleton_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingHorizontal="12dp" />
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:visibility="gone">
 
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_row_skeleton" />
 
-    <ProgressBar
-        android:id="@+id/loading_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone" />
+        </LinearLayout>
 
-    <TextView
-        android:id="@+id/empty_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="@string/browser_empty"
-        android:textAppearance="@style/TextAppearance.AppCompat.Body1"
-        android:visibility="gone" />
+        <TextView
+            android:id="@+id/empty_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/browser_empty"
+            android:textAppearance="@style/TextAppearance.AppCompat.Body1"
+            android:textColor="@color/fire_text_secondary"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
 </LinearLayout>

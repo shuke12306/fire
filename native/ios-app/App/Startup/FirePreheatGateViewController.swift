@@ -1,12 +1,7 @@
 import UIKit
 
 final class FirePreheatGateViewController: UIViewController {
-    private let loadingIndicator = UIActivityIndicatorView(style: .large)
-    private let statusLabel = UILabel()
-    private let errorContainer = UIView()
-    private let errorLabel = UILabel()
-    private let retryButton = UIButton(type: .system)
-    private let logoutButton = UIButton(type: .system)
+    private let statusView = FireStartupOnboardingStatusView()
 
     private let sessionStore: FireSessionStore
     private var isLoaded = false
@@ -25,70 +20,22 @@ final class FirePreheatGateViewController: UIViewController {
     }
 
     private func setupUI() {
-        view.backgroundColor = .systemBackground
-
-        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
-        loadingIndicator.startAnimating()
-        view.addSubview(loadingIndicator)
-
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "正在加载..."
-        statusLabel.textColor = .secondaryLabel
-        statusLabel.font = .systemFont(ofSize: 14)
-        statusLabel.textAlignment = .center
-        view.addSubview(statusLabel)
-
-        errorContainer.translatesAutoresizingMaskIntoConstraints = false
-        errorContainer.isHidden = true
-        view.addSubview(errorContainer)
-
-        errorLabel.translatesAutoresizingMaskIntoConstraints = false
-        errorLabel.textColor = .label
-        errorLabel.font = .systemFont(ofSize: 16)
-        errorLabel.textAlignment = .center
-        errorLabel.numberOfLines = 0
-        errorContainer.addSubview(errorLabel)
-
-        retryButton.translatesAutoresizingMaskIntoConstraints = false
-        retryButton.setTitle("重试", for: .normal)
-        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
-        errorContainer.addSubview(retryButton)
-
-        logoutButton.translatesAutoresizingMaskIntoConstraints = false
-        logoutButton.setTitle("退出登录", for: .normal)
-        logoutButton.addTarget(self, action: #selector(logoutTapped), for: .touchUpInside)
-        errorContainer.addSubview(logoutButton)
+        view.backgroundColor = FireStartupOnboardingPalette.background
+        statusView.translatesAutoresizingMaskIntoConstraints = false
+        statusView.showLoading("正在校验登录态…")
+        view.addSubview(statusView)
 
         NSLayoutConstraint.activate([
-            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            statusLabel.topAnchor.constraint(equalTo: loadingIndicator.bottomAnchor, constant: 12),
-            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-
-            errorContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            errorContainer.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            errorContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 40),
-            errorContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -40),
-
-            errorLabel.topAnchor.constraint(equalTo: errorContainer.topAnchor),
-            errorLabel.leadingAnchor.constraint(equalTo: errorContainer.leadingAnchor),
-            errorLabel.trailingAnchor.constraint(equalTo: errorContainer.trailingAnchor),
-
-            retryButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 20),
-            retryButton.centerXAnchor.constraint(equalTo: errorContainer.centerXAnchor),
-
-            logoutButton.topAnchor.constraint(equalTo: retryButton.bottomAnchor, constant: 12),
-            logoutButton.centerXAnchor.constraint(equalTo: errorContainer.centerXAnchor),
-            logoutButton.bottomAnchor.constraint(equalTo: errorContainer.bottomAnchor),
+            statusView.topAnchor.constraint(equalTo: view.topAnchor),
+            statusView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            statusView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            statusView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
     }
 
     private func awaitPreloadedData() {
         Task { @MainActor in
-            loadingIndicator.startAnimating()
-            loadingIndicator.isHidden = false
-            statusLabel.isHidden = false
-            errorContainer.isHidden = true
+            statusView.showLoading("正在校验登录态…")
 
             do {
                 _ = try await sessionStore.prepareStartupSession()
@@ -102,28 +49,167 @@ final class FirePreheatGateViewController: UIViewController {
 
     private func onPreloadedDataReady() {
         isLoaded = true
-        loadingIndicator.stopAnimating()
         NotificationCenter.default.post(name: .firePreheatGateDidComplete, object: nil)
     }
 
     private func showErrorPage(_ message: String) {
-        loadingIndicator.stopAnimating()
-        loadingIndicator.isHidden = true
-        statusLabel.isHidden = true
-        errorContainer.isHidden = false
-        errorLabel.text = message
-    }
-
-    @objc private func retryTapped() {
-        awaitPreloadedData()
-    }
-
-    @objc private func logoutTapped() {
-        NotificationCenter.default.post(name: .firePreheatGateRequestsLogout, object: nil)
+        statusView.showError(message, onRetry: { [weak self] in
+            self?.awaitPreloadedData()
+        })
     }
 }
 
 extension Notification.Name {
     static let firePreheatGateDidComplete = Notification.Name("firePreheatGateDidComplete")
-    static let firePreheatGateRequestsLogout = Notification.Name("firePreheatGateRequestsLogout")
+}
+
+enum FireStartupOnboardingPalette {
+    static let accent = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.961, green: 0.451, blue: 0.212, alpha: 1)
+            : UIColor(red: 0.91, green: 0.388, blue: 0.18, alpha: 1)
+    }
+
+    static let background = UIColor.systemBackground
+}
+
+final class FireStartupOnboardingStatusView: UIView {
+    private let heroStack = UIStackView()
+    private let logoView = UIImageView()
+    private let titleLabel = UILabel()
+    private let subtitleLabel = UILabel()
+    private let actionStack = UIStackView()
+    private let errorBanner = UIView()
+    private let errorLabel = UILabel()
+    private let actionButton = UIButton(type: .system)
+    private var onRetry: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupUI()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func showLoading(_ message: String) {
+        onRetry = nil
+        errorBanner.isHidden = true
+        actionButton.isEnabled = false
+        actionButton.removeTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = message
+        configuration.showsActivityIndicator = true
+        configuration.baseBackgroundColor = FireStartupOnboardingPalette.accent
+        configuration.baseForegroundColor = .white
+        configuration.cornerStyle = .fixed
+        configuration.background.cornerRadius = 12
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 14,
+            leading: 16,
+            bottom: 14,
+            trailing: 16
+        )
+        actionButton.configuration = configuration
+    }
+
+    func showError(_ message: String, onRetry: @escaping () -> Void) {
+        self.onRetry = onRetry
+        errorLabel.text = message
+        errorBanner.isHidden = false
+        actionButton.isEnabled = true
+        actionButton.removeTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        actionButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = "重试登录态校验"
+        configuration.image = UIImage(systemName: "arrow.clockwise")
+        configuration.imagePadding = 8
+        configuration.baseBackgroundColor = FireStartupOnboardingPalette.accent
+        configuration.baseForegroundColor = .white
+        configuration.cornerStyle = .fixed
+        configuration.background.cornerRadius = 12
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 14,
+            leading: 16,
+            bottom: 14,
+            trailing: 16
+        )
+        actionButton.configuration = configuration
+    }
+
+    private func setupUI() {
+        backgroundColor = FireStartupOnboardingPalette.background
+
+        heroStack.translatesAutoresizingMaskIntoConstraints = false
+        heroStack.axis = .vertical
+        heroStack.alignment = .center
+        heroStack.spacing = 20
+        addSubview(heroStack)
+
+        let logoConfiguration = UIImage.SymbolConfiguration(pointSize: 56, weight: .regular)
+        logoView.image = UIImage(systemName: "flame.fill", withConfiguration: logoConfiguration)
+        logoView.tintColor = FireStartupOnboardingPalette.accent
+        logoView.contentMode = .scaleAspectFit
+        logoView.setContentHuggingPriority(.required, for: .vertical)
+        heroStack.addArrangedSubview(logoView)
+
+        let titleStack = UIStackView()
+        titleStack.axis = .vertical
+        titleStack.alignment = .center
+        titleStack.spacing = 8
+        heroStack.addArrangedSubview(titleStack)
+
+        titleLabel.text = "Fire"
+        titleLabel.font = .systemFont(ofSize: 34, weight: .bold)
+        titleLabel.textColor = .label
+        titleStack.addArrangedSubview(titleLabel)
+
+        subtitleLabel.text = "LinuxDo 原生客户端"
+        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
+        subtitleLabel.textColor = .secondaryLabel
+        titleStack.addArrangedSubview(subtitleLabel)
+
+        actionStack.translatesAutoresizingMaskIntoConstraints = false
+        actionStack.axis = .vertical
+        actionStack.spacing = 12
+        addSubview(actionStack)
+
+        errorBanner.isHidden = true
+        errorBanner.backgroundColor = .tertiarySystemFill
+        errorBanner.layer.cornerRadius = 10
+        errorBanner.layer.cornerCurve = .continuous
+        actionStack.addArrangedSubview(errorBanner)
+
+        errorLabel.translatesAutoresizingMaskIntoConstraints = false
+        errorLabel.font = .preferredFont(forTextStyle: .caption1)
+        errorLabel.textColor = .secondaryLabel
+        errorLabel.numberOfLines = 3
+        errorBanner.addSubview(errorLabel)
+
+        actionButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+        actionStack.addArrangedSubview(actionButton)
+
+        NSLayoutConstraint.activate([
+            heroStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            heroStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -52),
+            heroStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            heroStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+
+            actionStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
+            actionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
+            actionStack.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -40),
+
+            errorLabel.topAnchor.constraint(equalTo: errorBanner.topAnchor, constant: 12),
+            errorLabel.bottomAnchor.constraint(equalTo: errorBanner.bottomAnchor, constant: -12),
+            errorLabel.leadingAnchor.constraint(equalTo: errorBanner.leadingAnchor, constant: 12),
+            errorLabel.trailingAnchor.constraint(equalTo: errorBanner.trailingAnchor, constant: -12),
+
+            actionButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 46),
+        ])
+    }
+
+    @objc private func retryTapped() {
+        onRetry?()
+    }
 }
