@@ -1,16 +1,12 @@
 package com.fire.app.ui.topicdetail
 
-import android.app.Dialog
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
-import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
 import android.widget.ProgressBar
@@ -27,7 +23,6 @@ import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.fire.app.R
-import com.fire.app.core.image.FireImageLoader
 import com.fire.app.displayName
 import com.fire.app.databinding.ActivityTopicDetailBinding
 import com.fire.app.richtext.FireCookedImage
@@ -582,43 +577,9 @@ class TopicDetailActivity : AppCompatActivity() {
     }
 
     private fun showImageViewer(image: FireCookedImage) {
-        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-        val imageView = ImageView(this).apply {
-            contentDescription = image.altText ?: getString(R.string.topic_detail_image_attachment)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            adjustViewBounds = true
-            setBackgroundColor(Color.BLACK)
-        }
-        val closeButton = TextView(this).apply {
-            text = getString(R.string.action_close)
-            setTextColor(Color.WHITE)
-            setPadding(24, 24, 24, 24)
-            textSize = 16f
-            setOnClickListener { dialog.dismiss() }
-        }
-        val frame = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
-            addView(
-                imageView,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            addView(
-                closeButton,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    android.view.Gravity.TOP or android.view.Gravity.END,
-                ),
-            )
-            setOnClickListener { dialog.dismiss() }
-        }
-        imageView.setOnClickListener { }
-        dialog.setContentView(frame)
-        dialog.show()
-        FireImageLoader.load(image.url, imageView)
+        TopicImagePreviewDialogFragment
+            .newInstance(image)
+            .show(supportFragmentManager, "topic_image_preview")
     }
 
     private fun showReactionUsers(post: TopicPostState) {

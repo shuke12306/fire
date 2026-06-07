@@ -242,7 +242,7 @@ object FireSpannableBuilder {
                     appendNodes(node.children, builder, context, ctx)
                 }
 
-                is FireRichTextNode.Image -> { /* Handled separately via imageAttachments */ }
+                is FireRichTextNode.Image -> { /* Handled by the topic-detail block renderer. */ }
             }
         }
     }
