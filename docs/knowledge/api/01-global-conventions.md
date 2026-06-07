@@ -54,17 +54,19 @@ Sec-CH-UA-Platform-Version: "<version>"
   - `_t` — 会话 token
   - `_forum_session` — 论坛会话
   - `cf_clearance` — Cloudflare 验证通过凭证
-- 请求时由 `AppCookieManager`（基于 CookieJar）自动注入 `Cookie` Header
-- 重定向时清除旧 `Cookie` Header，由 CookieManager 重新注入
+- 请求时由 Rust `FireSessionCookieJar` 通过 openwire 的 CookieJar 路径注入 Cookie
+- 重定向由 openwire follow-up policy 处理。Fire 常规请求不手写显式 `Cookie`
+  Header，因此每一跳都会按目标 URL 重新走 CookieJar；跨 origin follow-up
+  会移除 `Cookie` / `Authorization`
 
 ---
 
 ## 4. 超时配置
 
-| Dio 实例 | 连接超时 | 接收超时 |
-|-----------|---------|---------|
-| DiscourseService | 30s | 30s |
-| PreloadedDataService | 30s | 30s |
+| 请求族 | 连接超时 | 接收超时 |
+|--------|---------|---------|
+| Discourse API | 30s | 30s |
+| PreloadedData / bootstrap | 30s | 30s |
 | MessageBus 长轮询 | 30s | **60s** |
 | 表情包市场 | 15s | 15s |
 
@@ -74,7 +76,7 @@ Sec-CH-UA-Platform-Version: "<version>"
 
 | 状态码 | 处理方式 |
 |--------|---------|
-| 200-399 | 正常处理（重定向 301/302/307/308 由 RedirectInterceptor 手动处理） |
+| 200-399 | 正常处理；重定向由 openwire follow-up policy 处理 |
 | 403 + `["BAD CSRF"]` | Rust 清空 CSRF token → 重新获取 `/session/csrf` → 重试原请求（仅一次） |
 | 403/429 + Cloudflare HTML | Rust 记录 CF 信号；前台请求可调用平台 challenge handler，回灌新 `cf_clearance` 后自动重试一次；否则返回 `CloudflareChallenge` |
 | 429 | 解析 `Retry-After` Header 或响应体中的等待时间 → 抛出 `RateLimitException` |
@@ -128,35 +130,29 @@ Sec-CH-UA-Platform-Version: "<version>"
  7. Trace / diagnostics          — 请求日志、网络追踪、host breadcrumbs
 ```
 
-### 各拦截器职责详解
+### 各层职责详解
 
-| # | 拦截器 | 职责 |
-|---|--------|------|
-| 1 | SessionGuardInterceptor | 检查会话是否已过期（通过 session generation），若已过期则直接取消请求 |
-| 2 | DiscourseService 业务拦截器 | 检查认证状态、同步 token、处理 CSRF 403 错误并自动重试 |
-| 3 | RequestSchedulerInterceptor | 实现并发控制和滑动窗口限速，按优先级排队请求 |
-| 4 | AppCookieManager | 基于 CookieJar 自动注入和管理请求的 Cookie Header |
-| 5 | CronetFallbackInterceptor | 当 Cronet 引擎出错时，自动降级到默认 HTTP 客户端 |
-| 6 | RetryInterceptor | 对 429（限流）和 502/503/504（服务端错误）自动重试，含指数退避 |
-| 7 | RequestHeaderInterceptor | 注入 User-Agent、CSRF Token、Sec-Fetch-* 等必要请求头 |
-| 8 | RedirectInterceptor | 手动处理 301/302/307/308 重定向（清除旧 Cookie Header 后重新注入） |
-| 9 | ErrorInterceptor | 将 429/502/503/504 转换为自定义异常，并显示 Toast 提示 |
-| 10 | CfChallengeInterceptor | 检测 Cloudflare 挑战页面，触发 Turnstile 验证流程 |
-| 11 | NetworkLogInterceptor | 记录请求和响应日志，用于调试 |
+| # | 层 | 职责 |
+|---|----|------|
+| 1 | Request epoch guard | 在 Rust 请求构造时记录 session epoch，丢弃过期响应 |
+| 2 | Common header builder | 注入 User-Agent、CSRF、`Sec-Fetch-*`、登录标记等 Discourse 请求头 |
+| 3 | `FireSessionCookieJar` | 统一 Cookie ingress/egress、同站点约束、host-only 优先级和 session cookie 删除拦截 |
+| 4 | CSRF retry wrapper | 缺失 CSRF 预刷新；`BAD CSRF` 清空 token 后重试原请求一次 |
+| 5 | Auth signal / probe policy | 区分 `not_logged_in`、`discourse-logged-out`、`invalid_access`、普通 403；只有 probe 能决定被动登出 |
+| 6 | Cloudflare challenge handler | Rust 分类 CF 响应；前台请求可调用平台 WebView challenge handler，回灌新 `cf_clearance` 后重试一次 |
+| 7 | openwire follow-up policy | 处理 301/302/303/307/308、重定向上限、HTTPS 降级保护、跨 origin header 清理和 CookieJar 重新计算 |
+| 8 | Trace / diagnostics | 记录请求 trace、HTTP 状态、host breadcrumbs、可导出的诊断日志 |
 
 ---
 
-## 10. 请求配置工厂
+## 10. 请求配置边界
 
-```
-DiscourseDio.create({
-  baseUrl,            // 默认 "https://linux.do"
-  connectTimeout,     // 默认 30s
-  receiveTimeout,     // 默认 30s
-  defaultHeaders,     // 自定义默认请求头
-  maxConcurrent,      // 并发限制，null 表示不限制
-  enableRetry,        // 是否启用自动重试（默认 true）
-  enableCfChallenge,  // 是否启用 CF 验证拦截器（默认 true）
-  enableCookies,      // 是否启用 Cookie 管理（默认 true）
-})
-```
+Fire 的 Discourse 请求配置由 Rust core 的 request builders 和 openwire client
+共同拥有，平台不得构造并维护第二套 Discourse HTTP client。可配置边界包括：
+
+- `base_url`：默认 `https://linux.do`
+- 请求族 timeout：普通 Discourse API、bootstrap / preloaded data、MessageBus
+  长轮询等
+- CookieJar：统一通过 `FireSessionCookieJar`
+- CSRF / auth / Cloudflare：统一通过 Rust 请求包装和运行时分类
+- diagnostics：统一记录到 Rust-owned request trace / host log

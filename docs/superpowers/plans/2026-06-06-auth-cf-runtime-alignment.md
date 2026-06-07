@@ -40,7 +40,8 @@
 
 ## Implementation Status (2026-06-06)
 
-- 已落地：Android onboarding 删除隐藏的 `restore_session_button`、`onboarding_restore_session`、旧 `bootstrapping_layout`、旧 `error_banner`、只服务这些死 UI 的 `AuthViewModel`、`bg_error_banner` 和未使用的 `action_onboarding_to_home`。
+- 已落地：Android onboarding 删除隐藏的 `restore_session_button`、`onboarding_restore_session`、旧 `bootstrapping_layout`、旧 `error_banner`、只服务这些死 UI 的 `AuthViewModel`、`bg_error_banner`、未使用的 `action_onboarding_to_home` 和残留 `action_restore_session` 字符串。
+- 已核对：iOS onboarding/login 没有生产级“恢复已有会话”入口；Developer Tools 的“恢复会话”只会重新执行 `loadInitialState()` 诊断路径。
 - 已存在：Rust `is_cloudflare_challenge_response()` 已按 `403/429 + server=cloudflare + text/html + cf-mitigated/body` 分类 CF。
 - 已存在：Rust `execute_api_request_with_csrf_retry()` 已做缺失 CSRF 预刷新和 `BAD CSRF` 一次重试。
 - 已存在：Rust `response_login_invalidation_error()` 已把 `not_logged_in` 与普通 `invalid_access` 分开，且不会因成功 CSRF 响应直接登出。
@@ -476,11 +477,11 @@ If future product code explicitly sets `Cookie` headers and needs FluxDO's stric
 
 Delete `restore_session_button`, `onboarding_restore_session`, unused onboarding-to-home action, and the same stale onboarding branch's hidden loading/error UI.
 
-- [ ] **Step 2: Re-audit iOS login/onboarding**
+- [x] **Step 2: Re-audit iOS login/onboarding**
 
 Confirm there is no equivalent login-below restore entry. Developer tools may keep a diagnostic “恢复会话” action if it only re-runs startup loading and is clearly not a production login shortcut.
 
-- [ ] **Step 3: Clean stale recovery docs**
+- [x] **Step 3: Clean stale recovery docs**
 
 After Tasks 5-8 land, remove any doc text claiming the app auto-opens login or recovery WebView for ordinary request errors.
 

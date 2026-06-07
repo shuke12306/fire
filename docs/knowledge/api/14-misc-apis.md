@@ -38,7 +38,7 @@ If-None-Match: <ETag>  （有缓存时）
 
 **Base URL：** `https://s.pwsh.us.kg`（可配置，存储在 SharedPreferences）
 
-**使用独立 Dio 实例**，不需要 Discourse 认证。
+**使用独立 HTTP request profile**，不需要 Discourse 认证或 Discourse Cookie。
 
 ---
 

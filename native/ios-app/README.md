@@ -250,6 +250,7 @@ Current UX note:
 
 - The app now opens login as a full-screen browser instead of a partial sheet.
 - The app now keeps the same onboarding visual shell visible during cold-start login-state verification. The login button is hidden during PreheatGate, the button slot shows the verification state, and startup failures stay on that screen with a retry action.
+- iOS does not expose a production "restore existing session" action under onboarding/login. The Developer Tools "恢复会话" action is diagnostic-only and reruns the Rust-owned startup loading path.
 - Once startup or login reaches the authenticated shell, the Home list owns its data-loading presentation and renders topic-row skeletons for the initial empty load instead of showing another full-screen gate.
 - The login browser can navigate back from Google or other intermediate pages without forcing the user to close and reopen login.
 - The login browser now auto-probes whether sync would actually succeed, re-checking on navigation, scene resume, debounced WebKit auth-cookie changes, and loading-state transitions. `完成登录` stays disabled until username, auth cookies, reusable bootstrap HTML, and an idle WebView are all present.
