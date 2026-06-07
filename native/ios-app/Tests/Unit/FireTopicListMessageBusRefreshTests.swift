@@ -171,13 +171,14 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
     @MainActor
     func testHomeTopicCountPatchOnlyUpdatesMatchingExistingRow() {
         let row = makeTopicRow(id: 42, activityTimestampUnixMs: 100)
-        let detail = makeTopicDetail(id: 42, postsCount: 9, replyCount: 8)
+        let detail = makeTopicDetail(id: 42, postsCount: 9, replyCount: 8, views: 321)
 
         let patched = FireHomeFeedStore.patchedTopicRow(row, from: detail)
 
         XCTAssertEqual(patched?.topic.id, 42)
         XCTAssertEqual(patched?.topic.postsCount, 9)
         XCTAssertEqual(patched?.topic.replyCount, 8)
+        XCTAssertEqual(patched?.topic.views, 321)
         XCTAssertEqual(patched?.topic.highestPostNumber, 9)
         XCTAssertEqual(patched?.topic.lastReadPostNumber, 8)
         XCTAssertNil(FireHomeFeedStore.patchedTopicRow(
@@ -265,7 +266,8 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
     private func makeTopicDetail(
         id: UInt64,
         postsCount: UInt32,
-        replyCount: UInt32
+        replyCount: UInt32,
+        views: UInt32 = 0
     ) -> TopicDetailState {
         TopicDetailState(
             id: id,
@@ -276,7 +278,7 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
             replyCount: replyCount,
             categoryId: nil,
             tags: [],
-            views: 0,
+            views: views,
             likeCount: 0,
             createdAt: nil,
             highestPostNumber: postsCount,

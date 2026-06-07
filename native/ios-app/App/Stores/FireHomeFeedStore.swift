@@ -103,6 +103,7 @@ final class FireHomeFeedStore: ObservableObject {
         }
         guard row.topic.postsCount != detail.postsCount
             || row.topic.replyCount != detail.replyCount
+            || row.topic.views != detail.views
             || row.topic.lastReadPostNumber != detail.lastReadPostNumber
             || row.topic.highestPostNumber != detail.highestPostNumber else {
             return nil
@@ -111,6 +112,7 @@ final class FireHomeFeedStore: ObservableObject {
         var patched = row
         patched.topic.postsCount = detail.postsCount
         patched.topic.replyCount = detail.replyCount
+        patched.topic.views = detail.views
         patched.topic.lastReadPostNumber = detail.lastReadPostNumber
         patched.topic.highestPostNumber = detail.highestPostNumber
         return patched

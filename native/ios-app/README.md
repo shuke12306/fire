@@ -106,7 +106,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
 - `App/Stores/FireHomeFeedStore.swift`
   - owns selected feed kind, selected category/tags, paginated home rows, and bootstrap-derived category/tag metadata for the authenticated home shell
   - applies MessageBus-driven home refreshes only as incremental entity patching while the home list surface is actually foreground-visible and the app scene is active, instead of falling back to whole-array replacement or pulling from background/off-screen pages
-  - patches already-loaded home rows from topic-detail counts after detail loads or local reply creation, without inserting missing topics or changing the current home order
+  - patches already-loaded home rows from topic-detail reply counts, view counts, highest post number, and read position after detail loads or local reply creation, without inserting missing topics or changing the current home order
 - `App/Stores/FireTopicDetailStore.swift`
   - owns topic-detail cache, anchor post numbers, post hydration/pagination, reply presence, and topic-detail mutation flags
   - now builds a host-only render cache for timeline rows plus Rust `RenderDocument` text/image payloads, including compact render signatures that let list diff/layout tokens avoid re-hashing large cooked HTML on the main thread
