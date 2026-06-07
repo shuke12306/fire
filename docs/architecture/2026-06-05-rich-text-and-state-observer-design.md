@@ -18,7 +18,7 @@
   - `fire-models::RenderBlock`
   - `fire-models::RenderDocument`
   - `fire-models::RenderImageAttachment`
-- `fire-core` 新增 `render_cooked_html(raw_html, base_url)`，保留 `parse_cooked_html(raw_html)` 兼容旧 AST 调试/测试路径
+- `fire-core` 新增 `render_cooked_html(raw_html, base_url)`；`parse_cooked_html(raw_html)` 是 Rust 内部 parser / AST 单测入口，不是平台渲染入口
 
 ### 1.2 FFI 边界
 
@@ -37,15 +37,15 @@
 ### 1.3 双端接入
 
 - iOS:
-  - `FireRichTextParser` 不再消费 `CookedHtmlDocumentState`
-  - 改为消费 `RenderDocumentState`
+  - 删除平台侧 cooked HTML 解析路径
+  - 只消费 `TopicPostState.render_document` / `RenderDocumentState`
   - `FireRenderBlockNodeBuilder` 负责 `RenderDocumentState -> [FireRichTextNode]` 的轻映射
-  - `FireTopicPresentation.renderContent(from post:)` 优先使用 `TopicPostState.renderDocument`
+  - `FireTopicPresentation.renderContent(from post:)` 缺少 `renderDocument` 时返回空，不再从 `post.cooked` 生成正文 fallback
 - Android:
-  - `FireRichTextParser` 不再消费 `CookedHtmlDocumentState`
-  - 改为消费 `RenderDocumentState`
+  - 删除平台侧 cooked HTML 解析路径
+  - 只消费 `TopicPostState.render_document` / `RenderDocumentState`
   - `FireRenderBlockBuilder` 负责 `RenderDocumentState -> [FireRichTextNode]` 的轻映射
-  - `PostViewHolder` / `TopicDetailViewModel` 优先使用 `TopicPostState.renderDocument`
+  - `PostViewHolder` / `TopicDetailViewModel` 缺少 `renderDocument` 时不显示伪造正文，不再从 `post.cooked` 生成正文 fallback
 
 ### 1.4 StateObserver
 
@@ -62,7 +62,7 @@
 
 - `PollOption` / `PollOptionState` 现在携带 Rust 侧生成的 `plain_text` / `plainText`。
 - iOS `FirePostPollRenderModel` 和 Android `PostViewHolder` 直接消费这个纯文本标题，空值才回退到 option id。
-- poll-bearing cell configure、layout key、layout precompute 路径不得调用 `render_cooked_html` / `FireRichTextParser.parse(html:)` 来同步解析 option HTML。
+- poll-bearing cell configure、layout key、layout precompute 路径不得调用 `render_cooked_html` 或任何平台 HTML parser 来同步解析 option HTML。
 
 ---
 
@@ -202,7 +202,6 @@ pub struct RenderBlock {
 
 ```text
 TopicPostState.render_document / render_cooked_html()
-  -> FireRichTextParser
   -> FireRenderBlockNodeBuilder
   -> [FireRichTextNode]
   -> FireTopicPostRenderSegment
@@ -221,8 +220,9 @@ TopicPostState.render_document / render_cooked_html()
 - quote 标准化
 - details summary/body 拆分
 - emoji fallback 解析
-- image attachment 选择与过滤
+- image attachment 选择与过滤，包括图片元信息文本和 quote chrome/avatar 过滤
 - 相对 URL 解析
+- 平台本地从 cooked HTML 合成 RenderDocument 的路径
 
 ### 4.2 Android
 
@@ -230,7 +230,6 @@ TopicPostState.render_document / render_cooked_html()
 
 ```text
 TopicPostState.render_document / render_cooked_html()
-  -> FireRichTextParser
   -> FireRenderBlockBuilder
   -> [FireRichTextNode]
   -> FireRichTextBlockBuilder
@@ -259,6 +258,7 @@ TopicPostState.render_document / render_cooked_html()
 - [x] iOS 富文本改为消费 `RenderDocumentState`
 - [x] Android 富文本改为消费 `RenderDocumentState`
 - [x] 双端提取出 RenderDocument builder 分层，平台 parser 不再承担语义映射
+- [x] 删除双端 topic detail 正文 cooked HTML fallback；平台缺少 `render_document` 时暴露缺口，不伪造正文
 - [x] 新增统一 `StateObserver`
 - [x] Rust 内部建立 observer 注册与推送机制
 - [x] Rust observer 推送具备 debounce 与 callback 错误隔离
@@ -267,9 +267,9 @@ TopicPostState.render_document / render_cooked_html()
 
 ### 5.2 当前明确保留的边界
 
-- [x] 保留平台原生渲染器，不引入并行 fallback renderer
+- [x] 保留平台原生显示适配器，不引入并行 renderer 或 cooked HTML fallback
 - [x] 保留显式分页/刷新命令
-- [x] 保留 `parse_cooked_html()` 兼容旧 AST 调试路径
+- [x] Rust 内部保留 `parse_cooked_html()` 作为 parser / AST 单测入口；平台不得调用它来渲染 topic body
 - [x] 不把 observer 扩大成无边界的“任何状态变化都广播”
 
 ---

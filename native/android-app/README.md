@@ -69,12 +69,19 @@ Current topic-detail interactions:
 - per-post custom reaction selection from Rust bootstrap-enabled reactions
 - topic and per-post bookmark create/update/delete through shared Rust
   notification bookmark APIs
-- topic edit and post edit through shared Rust mutation APIs
-- author/profile navigation through the app `fire://profile/{username}` route
-- cooked image blocks rendered inline in the Rust `RenderDocument` order, with
+- topic edit and post edit through shared Rust mutation APIs; post edit requires
+  server-provided raw text and does not derive editable text from `cooked`
+- author/profile taps, mentions, and profile links open the compact user sheet,
+  with a private-message entry when the backend allows it
+- rich text and image blocks rendered inline from Rust `RenderDocument` order,
+  without Android-side `post.cooked` parsing or render-document fallback, with
   compact loading/error placeholders, manual retry, and a full-screen ZoomImage
   + Coil preview that supports pinch/pan gestures and reuses the shared image
   cache for the same URL
+- Rust filters image metadata text such as `image 1080x1920 52.5kb` and quote
+  chrome/avatar content before Android maps blocks to `Spannable` / image views
+- ordinary web links open the host-owned in-app WebView, while LinuxDo topic
+  links route to native topic detail
 - AI summary loading in the topic header when Rust reports summary availability,
   including retry and metadata display
 - topic vote / remove-vote plus topic voter lookup when the backend exposes
