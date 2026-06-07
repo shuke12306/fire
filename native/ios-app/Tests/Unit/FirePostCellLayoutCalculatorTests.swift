@@ -286,6 +286,90 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertGreaterThan(layout.reactionsFrame?.minY ?? 0, layout.boostFrames[1].maxY)
     }
 
+    func testBoostDisplayUsesBarrageOnlyForExpandedOriginalBodyText() {
+        let boost = makeBoost(username: "carol", displayText: "Hello")
+        let expanded = FirePostTextExpansionState.disabled
+        let collapsed = FirePostTextExpansionState(isCollapsible: true, isExpanded: false)
+
+        XCTAssertTrue(FirePostBoostDisplay.usesBodyBarrage(
+            depth: 0,
+            textExpansionState: expanded,
+            hasBodyTextTarget: true
+        ))
+        XCTAssertFalse(FirePostBoostDisplay.usesBodyBarrage(
+            depth: 1,
+            textExpansionState: expanded,
+            hasBodyTextTarget: true
+        ))
+        XCTAssertFalse(FirePostBoostDisplay.usesBodyBarrage(
+            depth: 0,
+            textExpansionState: collapsed,
+            hasBodyTextTarget: true
+        ))
+        XCTAssertFalse(FirePostBoostDisplay.usesBodyBarrage(
+            depth: 0,
+            textExpansionState: expanded,
+            hasBodyTextTarget: false
+        ))
+        XCTAssertTrue(FirePostBoostDisplay.fixedDisplayLines(
+            for: [boost],
+            depth: 0,
+            textExpansionState: expanded,
+            hasBodyTextTarget: true
+        ).isEmpty)
+        XCTAssertEqual(
+            FirePostBoostDisplay.fixedDisplayLines(
+                for: [boost],
+                depth: 1,
+                textExpansionState: expanded,
+                hasBodyTextTarget: true
+            ),
+            ["@carol: Hello"]
+        )
+        XCTAssertEqual(
+            FirePostBoostDisplay.fixedDisplayLines(
+                for: [boost],
+                depth: 0,
+                textExpansionState: expanded,
+                hasBodyTextTarget: false
+            ),
+            ["@carol: Hello"]
+        )
+    }
+
+    func testBoostBarrageTextTargetRequiresRenderedText() throws {
+        let textContent = renderContent(
+            plainText: "Hello",
+            attributedText: NSAttributedString(string: "Hello")
+        )
+        let segmentedTextContent = renderContent(
+            plainText: "Hello",
+            attributedText: nil,
+            segments: [.text(NSAttributedString(string: "Hello"))]
+        )
+        let image = FireCookedImage(
+            url: try XCTUnwrap(URL(string: "https://linux.do/uploads/default/original/1x/example.png")),
+            altText: nil,
+            width: 120,
+            height: 80
+        )
+        let imageOnlyContent = renderContent(
+            plainText: "",
+            attributedText: nil,
+            imageAttachments: [image],
+            segments: [.image(image)]
+        )
+        let emptyContent = renderContent(
+            plainText: "",
+            attributedText: nil
+        )
+
+        XCTAssertTrue(textContent.hasBoostBarrageTextTarget)
+        XCTAssertTrue(segmentedTextContent.hasBoostBarrageTextTarget)
+        XCTAssertFalse(imageOnlyContent.hasBoostBarrageTextTarget)
+        XCTAssertFalse(emptyContent.hasBoostBarrageTextTarget)
+    }
+
     func testPollPreferredHeightGrowsForLongOptionText() {
         let shortPoll = FirePostPollRenderModel(
             id: 1,
@@ -651,6 +735,46 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             canDelete: false,
             canRecover: false,
             hidden: false
+        )
+    }
+
+    private func makeBoost(
+        username: String,
+        displayText: String
+    ) -> TopicPostBoostState {
+        TopicPostBoostState(
+            id: 9,
+            cooked: "<p>\(displayText)</p>",
+            displayText: displayText,
+            user: TopicPostBoostUserState(
+                id: 7,
+                username: username,
+                name: nil,
+                avatarTemplate: nil
+            ),
+            canDelete: false,
+            canFlag: false,
+            userFlagStatus: nil,
+            availableFlags: []
+        )
+    }
+
+    private func renderContent(
+        plainText: String,
+        attributedText: NSAttributedString?,
+        imageAttachments: [FireCookedImage] = [],
+        segments: [FireTopicPostRenderSegment] = []
+    ) -> FireTopicPostRenderContent {
+        FireTopicPostRenderContent(
+            plainText: plainText,
+            attributedText: attributedText,
+            imageAttachments: imageAttachments,
+            segments: segments,
+            signature: FireTopicPostRenderSignature.make(
+                source: plainText,
+                imageAttachments: imageAttachments,
+                segments: segments
+            )
         )
     }
 

@@ -63,6 +63,30 @@ enum FirePostReactionDisplayPolicy {
 }
 
 enum FirePostBoostDisplay {
+    static func usesBodyBarrage(
+        depth: Int,
+        textExpansionState: FirePostTextExpansionState,
+        hasBodyTextTarget: Bool
+    ) -> Bool {
+        hasBodyTextTarget && depth == 0 && !textExpansionState.isCollapsed
+    }
+
+    static func fixedDisplayLines(
+        for boosts: [TopicPostBoostState],
+        depth: Int,
+        textExpansionState: FirePostTextExpansionState,
+        hasBodyTextTarget: Bool
+    ) -> [String] {
+        guard !usesBodyBarrage(
+            depth: depth,
+            textExpansionState: textExpansionState,
+            hasBodyTextTarget: hasBodyTextTarget
+        ) else {
+            return []
+        }
+        return boosts.map(displayLine(for:))
+    }
+
     static func displayLine(for boost: TopicPostBoostState) -> String {
         let username = cleaned(boost.user.username)
         let displayName = cleaned(boost.user.name)
@@ -91,6 +115,18 @@ enum FirePostBoostDisplay {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+extension FireTopicPostRenderContent {
+    var hasBoostBarrageTextTarget: Bool {
+        if let attributedText, attributedText.length > 0 {
+            return true
+        }
+        return segments.contains { segment in
+            guard case .text(let attributedText) = segment else { return false }
+            return attributedText.length > 0
+        }
     }
 }
 

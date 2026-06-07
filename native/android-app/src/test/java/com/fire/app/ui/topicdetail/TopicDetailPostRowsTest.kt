@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import uniffi.fire_uniffi_topics.TopicPostAuthorMetadataState
+import uniffi.fire_uniffi_topics.TopicPostBoostState
+import uniffi.fire_uniffi_topics.TopicPostBoostUserState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.TopicTreeRowState
 
@@ -78,10 +80,31 @@ class TopicDetailPostRowsTest {
         )
     }
 
+    @Test
+    fun usesBoostBarrage_onlyForOriginalPostRowsWithBoosts() {
+        val original = PostRow(
+            post = post(id = 1uL, postNumber = 1u, username = "author", boosts = listOf(boost())),
+            depth = 0,
+        )
+        val reply = PostRow(
+            post = post(id = 2uL, postNumber = 2u, username = "reply", boosts = listOf(boost())),
+            depth = 1,
+        )
+        val originalWithoutBoosts = PostRow(
+            post = post(id = 1uL, postNumber = 1u, username = "author"),
+            depth = 0,
+        )
+
+        assertEquals(true, TopicDetailPostRows.usesBoostBarrage(original))
+        assertEquals(false, TopicDetailPostRows.usesBoostBarrage(reply))
+        assertEquals(false, TopicDetailPostRows.usesBoostBarrage(originalWithoutBoosts))
+    }
+
     private fun post(
         id: ULong,
         postNumber: UInt,
         username: String,
+        boosts: List<TopicPostBoostState> = emptyList(),
     ): TopicPostState {
         return TopicPostState(
             id = id,
@@ -105,7 +128,7 @@ class TopicDetailPostRowsTest {
             bookmarkReminderAt = null,
             reactions = emptyList(),
             currentUserReaction = null,
-            boosts = emptyList(),
+            boosts = boosts,
             canBoost = false,
             polls = emptyList(),
             renderDocument = null,
@@ -116,6 +139,24 @@ class TopicDetailPostRowsTest {
             canDelete = false,
             canRecover = false,
             hidden = false,
+        )
+    }
+
+    private fun boost(): TopicPostBoostState {
+        return TopicPostBoostState(
+            id = 99uL,
+            cooked = "<p>Hello</p>",
+            displayText = "Hello",
+            user = TopicPostBoostUserState(
+                id = 7uL,
+                username = "booster",
+                name = null,
+                avatarTemplate = null,
+            ),
+            canDelete = false,
+            canFlag = false,
+            userFlagStatus = null,
+            availableFlags = emptyList(),
         )
     }
 

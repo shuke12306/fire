@@ -35,6 +35,16 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private let imageContainerNode = ASDisplayNode()
     private let pollContainerNode = ASDisplayNode()
     private let boostContainerNode = ASDisplayNode()
+    private lazy var boostBarrageNode: ASDisplayNode = {
+        let node = ASDisplayNode(viewBlock: {
+            FirePostBoostBarrageView()
+        })
+        node.onDidLoad { [weak self] node in
+            guard let view = node.view as? FirePostBoostBarrageView else { return }
+            view.configure(lines: self?.boostBarrageLines ?? [])
+        }
+        return node
+    }()
     private let replyShortcutNode = ASButtonNode()
     private let reactionContainerNode = ASDisplayNode()
     private let dividerNode = ASDisplayNode()
@@ -63,6 +73,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private var pollWidth: CGFloat = 0
     private var boostNodes: [FirePostBoostNode] = []
     private var boostSignature: [String] = []
+    private var boostBarrageLines: [String] = []
     private var reactionButtons: [ASButtonNode] = []
     private var reactionButtonIDs: [String] = []
     private var displayedReactions: [TopicReactionState] = []
@@ -213,6 +224,8 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             stack.lineSpacing = FirePostCellLayoutCalculator.boostSpacing
             return stack
         }
+        boostBarrageNode.isHidden = true
+        boostBarrageNode.isUserInteractionEnabled = false
 
         // Reply shortcut
         replyShortcutNode.isHidden = true
@@ -637,12 +650,29 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private func configureBoosts(payload: FirePostCellRenderPayload) {
         guard !payload.post.boosts.isEmpty else {
             boostContainerNode.isHidden = true
+            boostBarrageNode.isHidden = true
+            configureBoostBarrage(lines: [])
             rebuildBoostNodes([])
             boostSignature = []
             return
         }
 
-        boostContainerNode.isHidden = false
+        let usesBodyBarrage = FirePostBoostDisplay.usesBodyBarrage(
+            depth: currentDepth,
+            textExpansionState: payload.textExpansionState,
+            hasBodyTextTarget: payload.renderContent.hasBoostBarrageTextTarget
+        )
+        boostBarrageNode.isHidden = !usesBodyBarrage
+        configureBoostBarrage(lines: usesBodyBarrage
+            ? payload.post.boosts.map(FirePostBoostDisplay.displayLine(for:))
+            : [])
+        boostContainerNode.isHidden = usesBodyBarrage
+        if usesBodyBarrage {
+            rebuildBoostNodes([])
+            boostSignature = []
+            return
+        }
+
         let nextSignature = payload.post.boosts.map { boost in
             [
                 String(boost.id),
@@ -677,6 +707,15 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         for (node, boost) in zip(boostNodes, boosts) {
             node.configure(boost: boost)
         }
+    }
+
+    private func configureBoostBarrage(lines: [String]) {
+        boostBarrageLines = lines
+        guard boostBarrageNode.isNodeLoaded,
+              let view = boostBarrageNode.view as? FirePostBoostBarrageView else {
+            return
+        }
+        view.configure(lines: lines)
     }
 
     private func configureReactions(payload: FirePostCellRenderPayload) {
@@ -871,20 +910,21 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
         // Content column
         var contentChildren: [ASLayoutElement] = [metaRow]
+        var didAttachBoostBarrage = false
         if !authorMetadataNode.isHidden {
             contentChildren.append(authorMetadataNode)
         }
 
         if !bodyTextNode.isHidden {
-            contentChildren.append(bodyTextNode)
+            contentChildren.append(bodyElement(bodyTextNode, didAttachBoostBarrage: &didAttachBoostBarrage))
         }
         if !bodySelectableTextNode.isHidden {
-            contentChildren.append(bodySelectableTextNode)
+            contentChildren.append(bodyElement(bodySelectableTextNode, didAttachBoostBarrage: &didAttachBoostBarrage))
         }
 
         if !shouldSuppressAttachments {
             for segmentNode in contentSegmentNodes {
-                contentChildren.append(segmentNode)
+                contentChildren.append(bodyElement(segmentNode, didAttachBoostBarrage: &didAttachBoostBarrage))
             }
 
             // Poll container
@@ -1267,6 +1307,21 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private static func profileURL(for username: String) -> URL? {
         let encodedUsername = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         return URL(string: "fire://profile/\(encodedUsername)")
+    }
+
+    private func bodyElement(
+        _ node: ASDisplayNode,
+        didAttachBoostBarrage: inout Bool
+    ) -> ASLayoutElement {
+        guard !boostBarrageNode.isHidden,
+              !didAttachBoostBarrage,
+              node is ASTextNode || node is FireSelectableRichTextNode else {
+            return node
+        }
+        didAttachBoostBarrage = true
+        boostBarrageNode.style.flexGrow = 1.0
+        boostBarrageNode.style.flexShrink = 1.0
+        return ASOverlayLayoutSpec(child: node, overlay: boostBarrageNode)
     }
 
     private static func availableContentWidth(
@@ -1774,6 +1829,120 @@ private final class FirePostImageNode: ASControlNode {
         return image.preparingThumbnail(of: targetSize)
             ?? image.preparingForDisplay()
             ?? image
+    }
+}
+
+// MARK: - Boost Barrage
+
+private final class FirePostBoostBarrageView: UIView {
+    private static let maximumVisibleLines = 6
+    private static let maximumLaneCount = 3
+    private static let chipHeight: CGFloat = 24
+
+    private var labels: [UILabel] = []
+    private var signature: String = ""
+    private var lastAnimatedBounds: CGRect = .null
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        backgroundColor = .clear
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(lines: [String]) {
+        let visibleLines = lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(Self.maximumVisibleLines)
+        let nextSignature = visibleLines.joined(separator: "\u{1E}")
+        guard nextSignature != signature else { return }
+
+        signature = nextSignature
+        lastAnimatedBounds = .null
+        labels.forEach { label in
+            label.layer.removeAllAnimations()
+            label.removeFromSuperview()
+        }
+        labels.removeAll()
+        isHidden = visibleLines.isEmpty
+
+        for line in visibleLines {
+            let label = UILabel()
+            label.text = line
+            label.font = .preferredFont(forTextStyle: .caption1)
+            label.textColor = .label
+            label.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.78)
+            label.layer.cornerRadius = Self.chipHeight / 2
+            label.layer.masksToBounds = true
+            label.textAlignment = .center
+            label.numberOfLines = 1
+            label.lineBreakMode = .byTruncatingTail
+            label.isUserInteractionEnabled = false
+            addSubview(label)
+            labels.append(label)
+        }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutLabelsAndStartAnimationIfNeeded()
+    }
+
+    private func layoutLabelsAndStartAnimationIfNeeded() {
+        guard !labels.isEmpty,
+              bounds.width > 1,
+              bounds.height > 1,
+              lastAnimatedBounds != bounds else {
+            return
+        }
+        lastAnimatedBounds = bounds
+
+        let laneCount = max(1, min(labels.count, Self.maximumLaneCount))
+        let laneHeight = min(Self.chipHeight + 4, max(bounds.height / CGFloat(laneCount), Self.chipHeight))
+        let maxChipWidth = max(bounds.width * 0.86, 1)
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+
+        for (index, label) in labels.enumerated() {
+            label.layer.removeAllAnimations()
+            label.transform = .identity
+            let measured = label.sizeThatFits(CGSize(width: maxChipWidth, height: Self.chipHeight))
+            let chipWidth = min(max(measured.width + 20, 48), maxChipWidth)
+            let lane = index % laneCount
+            let y = min(CGFloat(lane) * laneHeight, max(bounds.height - Self.chipHeight, 0))
+            let startX = bounds.width + CGFloat(index) * 28
+            label.frame = CGRect(
+                x: reduceMotion ? staticX(for: index, width: chipWidth) : startX,
+                y: y,
+                width: chipWidth,
+                height: Self.chipHeight
+            )
+            label.alpha = 0.92
+
+            guard !reduceMotion else { continue }
+            let travel = bounds.width + chipWidth + CGFloat(index) * 28 + 24
+            UIView.animate(
+                withDuration: 7.5 + Double(index % 3) * 0.8,
+                delay: Double(index) * 0.35,
+                options: [.curveLinear, .allowUserInteraction, .repeat],
+                animations: {
+                    label.transform = CGAffineTransform(translationX: -travel, y: 0)
+                    label.alpha = 0.72
+                }
+            )
+        }
+    }
+
+    private func staticX(for index: Int, width: CGFloat) -> CGFloat {
+        let slotCount = max(labels.count + 1, 2)
+        let progress = CGFloat(index + 1) / CGFloat(slotCount)
+        return max((bounds.width - width) * progress, 0)
     }
 }
 

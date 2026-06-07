@@ -873,6 +873,10 @@ object TopicDetailPostRows {
         return suggestedUnreadRootPostNumber?.takeIf { it > 1u }
     }
 
+    fun usesBoostBarrage(row: PostRow): Boolean {
+        return row.depth == 0 && row.post.boosts.isNotEmpty()
+    }
+
     fun postsForDetail(
         bodyPost: TopicPostState,
         loadedPosts: List<TopicPostState>,

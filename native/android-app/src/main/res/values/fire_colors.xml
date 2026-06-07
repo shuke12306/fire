@@ -14,6 +14,7 @@
     <color name="fire_background_surface">#FFFFFFFF</color>
     <color name="fire_background_elevated">#FFFFFFFF</color>
     <color name="fire_boost_background">#FFF3F4F6</color>
+    <color name="fire_boost_barrage_background">#CCFFFFFF</color>
     <color name="fire_skeleton_primary">#FFE5E7EB</color>
     <color name="fire_skeleton_secondary">#FFF0F1F3</color>
 

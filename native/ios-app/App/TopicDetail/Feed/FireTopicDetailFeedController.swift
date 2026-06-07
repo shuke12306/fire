@@ -369,7 +369,12 @@ final class FireTopicDetailFeedController: NSObject,
                 plainText: postContext.renderContent.plainText,
                 images: postContext.renderContent.imageAttachments,
                 polls: FirePostPollRenderModel.models(from: postContext.post.polls),
-                boostLines: postContext.post.boosts.map(FirePostBoostDisplay.displayLine(for:)),
+                boostLines: FirePostBoostDisplay.fixedDisplayLines(
+                    for: postContext.post.boosts,
+                    depth: postContext.depth,
+                    textExpansionState: postContext.textExpansionState,
+                    hasBodyTextTarget: postContext.renderContent.hasBoostBarrageTextTarget
+                ),
                 trait: trait
             )
         }
