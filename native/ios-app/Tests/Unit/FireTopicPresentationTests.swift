@@ -1073,6 +1073,8 @@ final class FireTopicPresentationTests: XCTestCase {
             bookmarkReminderAt: nil,
             reactions: reactions,
             currentUserReaction: nil,
+            boosts: [],
+            canBoost: false,
             polls: [],
             acceptedAnswer: false,
             canAcceptAnswer: false,

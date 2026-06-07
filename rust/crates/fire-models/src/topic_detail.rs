@@ -228,6 +228,26 @@ pub struct TopicReplyToUser {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPostBoostUser {
+    pub id: u64,
+    pub username: String,
+    pub name: Option<String>,
+    pub avatar_template: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPostBoost {
+    pub id: u64,
+    pub cooked: String,
+    pub display_text: String,
+    pub user: TopicPostBoostUser,
+    pub can_delete: bool,
+    pub can_flag: bool,
+    pub user_flag_status: Option<i32>,
+    pub available_flags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TopicPostAuthorMetadata {
     pub user_id: Option<u64>,
     pub user_title: Option<String>,
@@ -267,6 +287,8 @@ pub struct TopicPost {
     pub bookmark_reminder_at: Option<String>,
     pub reactions: Vec<TopicReaction>,
     pub current_user_reaction: Option<TopicReaction>,
+    pub boosts: Vec<TopicPostBoost>,
+    pub can_boost: bool,
     pub polls: Vec<Poll>,
     pub accepted_answer: bool,
     pub can_accept_answer: bool,

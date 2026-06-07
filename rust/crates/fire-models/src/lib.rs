@@ -939,6 +939,8 @@ mod tests {
             bookmark_reminder_at: None,
             reactions: Vec::new(),
             current_user_reaction: None,
+            boosts: Vec::new(),
+            can_boost: false,
             polls: Vec::new(),
             accepted_answer: false,
             can_accept_answer: false,

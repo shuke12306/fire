@@ -5,10 +5,10 @@ use fire_models::{
     ResolvedUploadUrl, TopicAiSummary, TopicBody, TopicCreateRequest, TopicDetail,
     TopicDetailCreatedBy, TopicDetailMeta, TopicDetailPage, TopicDetailSourceQuery,
     TopicDetailSourceSnapshot, TopicHeader, TopicListQuery, TopicLoadMoreOutcome,
-    TopicLoadMoreStopReason, TopicLoadedRange, TopicPost, TopicPostAuthorMetadata, TopicPostStream,
-    TopicReaction, TopicReplyRequest, TopicReplyToUser, TopicSourceCursor, TopicTimingEntry,
-    TopicTimingsRequest, TopicTreePresentation, TopicTreeRow, TopicUpdateRequest, UploadResult,
-    VoteResponse, VotedUser,
+    TopicLoadMoreStopReason, TopicLoadedRange, TopicPost, TopicPostAuthorMetadata, TopicPostBoost,
+    TopicPostBoostUser, TopicPostStream, TopicReaction, TopicReplyRequest, TopicReplyToUser,
+    TopicSourceCursor, TopicTimingEntry, TopicTimingsRequest, TopicTreePresentation, TopicTreeRow,
+    TopicUpdateRequest, UploadResult, VoteResponse, VotedUser,
 };
 
 use fire_uniffi_types::{
@@ -639,6 +639,78 @@ impl From<TopicPostAuthorMetadataState> for TopicPostAuthorMetadata {
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
+pub struct TopicPostBoostUserState {
+    pub id: u64,
+    pub username: String,
+    pub name: Option<String>,
+    pub avatar_template: Option<String>,
+}
+
+impl From<TopicPostBoostUser> for TopicPostBoostUserState {
+    fn from(value: TopicPostBoostUser) -> Self {
+        Self {
+            id: value.id,
+            username: value.username,
+            name: value.name,
+            avatar_template: value.avatar_template,
+        }
+    }
+}
+
+impl From<TopicPostBoostUserState> for TopicPostBoostUser {
+    fn from(value: TopicPostBoostUserState) -> Self {
+        Self {
+            id: value.id,
+            username: value.username,
+            name: value.name,
+            avatar_template: value.avatar_template,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct TopicPostBoostState {
+    pub id: u64,
+    pub cooked: String,
+    pub display_text: String,
+    pub user: TopicPostBoostUserState,
+    pub can_delete: bool,
+    pub can_flag: bool,
+    pub user_flag_status: Option<i32>,
+    pub available_flags: Vec<String>,
+}
+
+impl From<TopicPostBoost> for TopicPostBoostState {
+    fn from(value: TopicPostBoost) -> Self {
+        Self {
+            id: value.id,
+            cooked: value.cooked,
+            display_text: value.display_text,
+            user: value.user.into(),
+            can_delete: value.can_delete,
+            can_flag: value.can_flag,
+            user_flag_status: value.user_flag_status,
+            available_flags: value.available_flags,
+        }
+    }
+}
+
+impl From<TopicPostBoostState> for TopicPostBoost {
+    fn from(value: TopicPostBoostState) -> Self {
+        Self {
+            id: value.id,
+            cooked: value.cooked,
+            display_text: value.display_text,
+            user: value.user.into(),
+            can_delete: value.can_delete,
+            can_flag: value.can_flag,
+            user_flag_status: value.user_flag_status,
+            available_flags: value.available_flags,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
 pub struct TopicPostState {
     pub id: u64,
     pub username: String,
@@ -662,6 +734,8 @@ pub struct TopicPostState {
     pub bookmark_reminder_at: Option<String>,
     pub reactions: Vec<TopicReactionState>,
     pub current_user_reaction: Option<TopicReactionState>,
+    pub boosts: Vec<TopicPostBoostState>,
+    pub can_boost: bool,
     pub polls: Vec<PollState>,
     pub accepted_answer: bool,
     pub can_accept_answer: bool,
@@ -706,6 +780,8 @@ pub(crate) fn topic_post_state_from_model(value: TopicPost, base_url: &str) -> T
         bookmark_reminder_at: value.bookmark_reminder_at,
         reactions: value.reactions.into_iter().map(Into::into).collect(),
         current_user_reaction: value.current_user_reaction.map(Into::into),
+        boosts: value.boosts.into_iter().map(Into::into).collect(),
+        can_boost: value.can_boost,
         polls: value.polls.into_iter().map(Into::into).collect(),
         accepted_answer: value.accepted_answer,
         can_accept_answer: value.can_accept_answer,
@@ -751,6 +827,8 @@ impl From<TopicPostState> for TopicPost {
             bookmark_reminder_at: value.bookmark_reminder_at,
             reactions: value.reactions.into_iter().map(Into::into).collect(),
             current_user_reaction: value.current_user_reaction.map(Into::into),
+            boosts: value.boosts.into_iter().map(Into::into).collect(),
+            can_boost: value.can_boost,
             polls: value.polls.into_iter().map(Into::into).collect(),
             accepted_answer: value.accepted_answer,
             can_accept_answer: value.can_accept_answer,

@@ -16,6 +16,7 @@ struct FirePostCellLayoutKey: Hashable, Sendable {
     let textContentID: String
     let imageSignature: [String]
     let pollSignature: [String]
+    let boostSignature: [String]
     let hasReactions: Bool
     let replyShortcutCount: UInt32?
     let textExpansionState: FirePostTextExpansionState
@@ -35,6 +36,7 @@ struct FirePostCellLayout: Equatable, Sendable {
     let textExpansionFrame: CGRect?
     let imageFrames: [CGRect]
     let pollFrames: [CGRect]
+    let boostFrames: [CGRect]
     let replyShortcutFrame: CGRect?
     let reactionsFrame: CGRect?
     let menuFrame: CGRect?
@@ -57,6 +59,38 @@ enum FirePostReactionDisplayPolicy {
 
     static func allowsWrapping(depth: Int) -> Bool {
         depth == 0
+    }
+}
+
+enum FirePostBoostDisplay {
+    static func displayLine(for boost: TopicPostBoostState) -> String {
+        let username = cleaned(boost.user.username)
+        let displayName = cleaned(boost.user.name)
+        let author = username.map { "@\($0)" }
+            ?? displayName
+            ?? "User \(boost.user.id)"
+        let text = cleaned(boost.displayText)
+        guard let text else { return author }
+        return "\(author): \(text)"
+    }
+
+    static func contentToken(for boosts: [TopicPostBoostState]) -> String {
+        boosts.map { boost in
+            [
+                String(boost.id),
+                boost.user.username,
+                boost.user.name ?? "",
+                boost.displayText,
+                String(boost.canDelete),
+                String(boost.canFlag),
+            ].joined(separator: "\u{1E}")
+        }.joined(separator: "\u{1D}")
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

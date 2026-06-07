@@ -34,6 +34,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private let bodySelectableTextNode = FireSelectableRichTextNode()
     private let imageContainerNode = ASDisplayNode()
     private let pollContainerNode = ASDisplayNode()
+    private let boostContainerNode = ASDisplayNode()
     private let replyShortcutNode = ASButtonNode()
     private let reactionContainerNode = ASDisplayNode()
     private let dividerNode = ASDisplayNode()
@@ -60,6 +61,8 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private var pollHeights: [CGFloat] = []
     private var pollSignature: [String] = []
     private var pollWidth: CGFloat = 0
+    private var boostNodes: [FirePostBoostNode] = []
+    private var boostSignature: [String] = []
     private var reactionButtons: [ASButtonNode] = []
     private var reactionButtonIDs: [String] = []
     private var displayedReactions: [TopicReactionState] = []
@@ -181,6 +184,36 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         // Polls
         pollContainerNode.isHidden = true
 
+        // Boosts
+        boostContainerNode.isHidden = true
+        boostContainerNode.automaticallyManagesSubnodes = true
+        boostContainerNode.layoutSpecBlock = { [weak self] _, _ in
+            guard let self else { return ASLayoutSpec() }
+            let nodes = self.boostNodes.filter { !$0.isHidden }
+            guard !nodes.isEmpty else { return ASLayoutSpec() }
+            let availableWidth = Self.availableContentWidth(
+                totalWidth: self.currentLayoutWidth,
+                depth: self.currentDepth,
+                avatarSize: self.currentAvatarSize,
+                avatarSpacing: self.currentAvatarSpacing
+            )
+            for node in nodes {
+                node.style.maxWidth = ASDimensionMake(max(availableWidth, 1))
+                node.style.flexShrink = 1.0
+            }
+            let stack = ASStackLayoutSpec(
+                direction: .horizontal,
+                spacing: FirePostCellLayoutCalculator.boostSpacing,
+                justifyContent: .start,
+                alignItems: .start,
+                children: nodes
+            )
+            stack.flexWrap = .wrap
+            stack.alignContent = .start
+            stack.lineSpacing = FirePostCellLayoutCalculator.boostSpacing
+            return stack
+        }
+
         // Reply shortcut
         replyShortcutNode.isHidden = true
         replyShortcutNode.addTarget(self, action: #selector(handleReplyShortcutTap), forControlEvents: .touchUpInside)
@@ -228,6 +261,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         configureMeta(payload: payload)
         configureBodyContent(payload: payload)
         configurePolls(payload: payload)
+        configureBoosts(payload: payload)
         configureReplyShortcut(payload: payload)
         configureReactions(payload: payload)
         configureDivider(shows: showsDivider)
@@ -600,6 +634,51 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         replyShortcutNode.accessibilityLabel = title
     }
 
+    private func configureBoosts(payload: FirePostCellRenderPayload) {
+        guard !payload.post.boosts.isEmpty else {
+            boostContainerNode.isHidden = true
+            rebuildBoostNodes([])
+            boostSignature = []
+            return
+        }
+
+        boostContainerNode.isHidden = false
+        let nextSignature = payload.post.boosts.map { boost in
+            [
+                String(boost.id),
+                boost.user.username,
+                boost.user.name ?? "",
+                boost.displayText,
+            ].joined(separator: "\u{1E}")
+        }
+        if boostSignature != nextSignature {
+            rebuildBoostNodes(payload.post.boosts)
+            boostSignature = nextSignature
+        } else {
+            updateBoostNodes(payload.post.boosts)
+        }
+    }
+
+    private func rebuildBoostNodes(_ boosts: [TopicPostBoostState]) {
+        for node in boostNodes {
+            node.removeFromSupernode()
+        }
+        boostNodes.removeAll()
+
+        for boost in boosts {
+            let node = FirePostBoostNode()
+            node.configure(boost: boost)
+            boostNodes.append(node)
+        }
+        boostContainerNode.setNeedsLayout()
+    }
+
+    private func updateBoostNodes(_ boosts: [TopicPostBoostState]) {
+        for (node, boost) in zip(boostNodes, boosts) {
+            node.configure(boost: boost)
+        }
+    }
+
     private func configureReactions(payload: FirePostCellRenderPayload) {
         guard !payload.post.reactions.isEmpty else {
             reactionContainerNode.isHidden = true
@@ -811,6 +890,10 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             // Poll container
             if !pollContainerNode.isHidden {
                 contentChildren.append(pollContainerNode)
+            }
+
+            if !boostContainerNode.isHidden {
+                contentChildren.append(boostContainerNode)
             }
         }
 
@@ -1217,7 +1300,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
                 layout.textFrame,
                 layout.replyShortcutFrame,
                 layout.reactionsFrame,
-            ].compactMap { $0 } + layout.imageFrames + layout.pollFrames
+            ].compactMap { $0 } + layout.imageFrames + layout.pollFrames + layout.boostFrames
             let union = visibleFrames.reduce(CGRect.null) { partial, frame in
                 partial.union(frame)
             }
@@ -1691,6 +1774,59 @@ private final class FirePostImageNode: ASControlNode {
         return image.preparingThumbnail(of: targetSize)
             ?? image.preparingForDisplay()
             ?? image
+    }
+}
+
+// MARK: - Boost Chip
+
+private final class FirePostBoostNode: ASDisplayNode {
+    private let textNode = ASTextNode()
+    private var signature: String?
+
+    override init() {
+        super.init()
+        automaticallyManagesSubnodes = true
+        backgroundColor = UIColor.secondarySystemFill.withAlphaComponent(0.78)
+        cornerRadius = 13
+        clipsToBounds = true
+        textNode.maximumNumberOfLines = 2
+        textNode.truncationMode = .byTruncatingTail
+        textNode.isLayerBacked = true
+        textNode.style.flexShrink = 1.0
+    }
+
+    func configure(boost: TopicPostBoostState) {
+        let line = FirePostBoostDisplay.displayLine(for: boost)
+        let nextSignature = [
+            String(boost.id),
+            boost.user.username,
+            boost.user.name ?? "",
+            line,
+        ].joined(separator: "\u{1F}")
+        guard signature != nextSignature else { return }
+        signature = nextSignature
+
+        textNode.attributedText = NSAttributedString(
+            string: line,
+            attributes: [
+                .font: UIFont.preferredFont(forTextStyle: .caption1),
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        )
+        accessibilityLabel = line
+        setNeedsLayout()
+    }
+
+    override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
+        ASInsetLayoutSpec(
+            insets: UIEdgeInsets(
+                top: FirePostCellLayoutCalculator.boostVerticalInset,
+                left: FirePostCellLayoutCalculator.boostHorizontalInset,
+                bottom: FirePostCellLayoutCalculator.boostVerticalInset,
+                right: FirePostCellLayoutCalculator.boostHorizontalInset
+            ),
+            child: textNode
+        )
     }
 }
 

@@ -369,6 +369,7 @@ final class FireTopicDetailFeedController: NSObject,
                 plainText: postContext.renderContent.plainText,
                 images: postContext.renderContent.imageAttachments,
                 polls: FirePostPollRenderModel.models(from: postContext.post.polls),
+                boostLines: postContext.post.boosts.map(FirePostBoostDisplay.displayLine(for:)),
                 trait: trait
             )
         }
@@ -598,6 +599,14 @@ final class FireTopicDetailFeedController: NSObject,
 
         let pollSignature = FirePostPollRenderModel.models(from: context.post.polls)
             .map(\.signature)
+        let boostSignature = context.post.boosts.map { boost in
+            [
+                String(boost.id),
+                boost.user.username,
+                boost.user.name ?? "",
+                boost.displayText,
+            ].joined(separator: "\u{1E}")
+        }
 
         return FirePostCellLayoutKey(
             postID: context.post.id,
@@ -609,6 +618,7 @@ final class FireTopicDetailFeedController: NSObject,
             textContentID: textContentID,
             imageSignature: context.renderContent.segments.map(\.signatureToken),
             pollSignature: pollSignature,
+            boostSignature: boostSignature,
             hasReactions: !context.post.reactions.isEmpty,
             replyShortcutCount: context.replyShortcutCount,
             textExpansionState: context.textExpansionState,

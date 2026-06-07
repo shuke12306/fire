@@ -993,6 +993,8 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
             bookmarkReminderAt: nil,
             reactions: reactions,
             currentUserReaction: nil,
+            boosts: [],
+            canBoost: false,
             polls: [],
             acceptedAnswer: false,
             canAcceptAnswer: false,

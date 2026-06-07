@@ -8,7 +8,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
         let publicationCounter = CounterBox()
         let manager = FirePostLayoutManager(
             backgroundQueue: DispatchQueue(label: "FirePostLayoutManagerTests.enqueue")
-        ) { key, _, _, _, _, _ in
+        ) { key, _, _, _, _, _, _ in
             Self.makeLayout(key: key, totalHeight: 123)
         }
         manager.onSnapshotRevisionChanged = {
@@ -22,6 +22,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: "",
             images: [],
             polls: [],
+            boostLines: [],
             trait: key.trait
         )
 
@@ -40,7 +41,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
         let freshKey = Self.makeKey(width: 400, postID: 2)
         let manager = FirePostLayoutManager(
             backgroundQueue: DispatchQueue(label: "FirePostLayoutManagerTests.invalidate")
-        ) { key, _, _, _, _, _ in
+        ) { key, _, _, _, _, _, _ in
             if key == staleKey {
                 gate.wait()
             }
@@ -53,6 +54,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: "",
             images: [],
             polls: [],
+            boostLines: [],
             trait: staleKey.trait
         )
         manager.invalidateAll(reason: .widthChanged)
@@ -62,6 +64,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: "",
             images: [],
             polls: [],
+            boostLines: [],
             trait: freshKey.trait
         )
         gate.signal()
@@ -81,7 +84,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
         let key = Self.makeKey(width: 360, postID: 3)
         let manager = FirePostLayoutManager(
             backgroundQueue: DispatchQueue(label: "FirePostLayoutManagerTests.dedup")
-        ) { key, _, _, _, _, _ in
+        ) { key, _, _, _, _, _, _ in
             counter.increment()
             gate.wait()
             return Self.makeLayout(key: key, totalHeight: 88)
@@ -93,6 +96,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: "",
             images: [],
             polls: [],
+            boostLines: [],
             trait: key.trait
         )
         manager.enqueueCalculation(
@@ -101,6 +105,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: "",
             images: [],
             polls: [],
+            boostLines: [],
             trait: key.trait
         )
         gate.signal()
@@ -136,6 +141,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             plainText: longPlainText,
             images: [],
             polls: [],
+            boostLines: [],
             trait: key.trait
         )
 
@@ -161,6 +167,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: textExpansionState,
@@ -185,6 +192,7 @@ final class FirePostLayoutManagerTests: XCTestCase {
             textExpansionFrame: nil,
             imageFrames: [],
             pollFrames: [],
+            boostFrames: [],
             replyShortcutFrame: nil,
             reactionsFrame: nil,
             menuFrame: nil,

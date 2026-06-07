@@ -1,5 +1,7 @@
 package com.fire.app.ui.topicdetail
 
+import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -19,6 +21,7 @@ import com.fire.app.richtext.FireRenderBlockBuilder
 import com.fire.app.richtext.FireRichTextView
 import com.fire.app.richtext.FireSpannableBuilder
 import uniffi.fire_uniffi_topics.PollState
+import uniffi.fire_uniffi_topics.TopicPostBoostState
 import uniffi.fire_uniffi_topics.TopicPostState
 
 class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -31,6 +34,7 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     private val replyContextText: TextView = itemView.findViewById(R.id.post_reply_context)
     private val bodyContainer: LinearLayout = itemView.findViewById(R.id.post_body_container)
     private val pollContainer: LinearLayout = itemView.findViewById(R.id.post_poll_container)
+    private val boostContainer: LinearLayout = itemView.findViewById(R.id.post_boost_container)
     private val likeAction: TextView = itemView.findViewById(R.id.action_like)
     private val reactAction: TextView = itemView.findViewById(R.id.action_react)
     private val replyAction: TextView = itemView.findViewById(R.id.action_reply)
@@ -108,6 +112,7 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         }
 
         bindPolls(post, callbacks)
+        bindBoosts(post)
 
         // Actions
         val likedByCurrentUser = post.currentUserReaction?.id == HEART_REACTION_ID
@@ -309,6 +314,38 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         }
     }
 
+    private fun bindBoosts(post: TopicPostState) {
+        boostContainer.removeAllViews()
+        if (post.boosts.isEmpty()) {
+            boostContainer.visibility = View.GONE
+            return
+        }
+
+        val context = itemView.context
+        boostContainer.visibility = View.VISIBLE
+        post.boosts.forEachIndexed { index, boost ->
+            val boostView = TextView(context).apply {
+                text = displayBoostLine(boost)
+                setTextAppearance(androidx.appcompat.R.style.TextAppearance_AppCompat_Caption)
+                setTextColor(context.getColor(R.color.fire_text_secondary))
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(13).toFloat()
+                    setColor(context.getColor(R.color.fire_boost_background))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    if (index > 0) topMargin = dp(6)
+                }
+            }
+            boostContainer.addView(boostView)
+        }
+    }
+
     private fun pollTitleView(poll: PollState): TextView {
         val context = itemView.context
         val labels = buildList {
@@ -441,6 +478,10 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         return "${baseUrl.trimEnd('/')}/${template.trimStart('/').replace("{size}", size.toString())}"
     }
 
+    private fun dp(value: Int): Int {
+        return itemView.resources.displayMetrics.density.times(value).toInt()
+    }
+
     companion object {
         private const val HEART_REACTION_ID = "heart"
 
@@ -501,6 +542,14 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
                     statusEmoji?.let(::add)
                 }
             }
+        }
+
+        private fun displayBoostLine(boost: TopicPostBoostState): String {
+            val username = cleaned(boost.user.username)?.let { "@$it" }
+            val displayName = cleaned(boost.user.name)
+            val author = username ?: displayName ?: "User ${boost.user.id}"
+            val text = cleaned(boost.displayText)
+            return if (text == null) author else "$author: $text"
         }
 
         private fun cleaned(value: String?): String? {

@@ -105,6 +105,8 @@ class TopicDetailPostRowsTest {
             bookmarkReminderAt = null,
             reactions = emptyList(),
             currentUserReaction = null,
+            boosts = emptyList(),
+            canBoost = false,
             polls = emptyList(),
             renderDocument = null,
             acceptedAnswer = false,

@@ -108,6 +108,8 @@ Current topic-detail interactions:
 - post poll display and regular/multiple poll vote submission/removal
 - poll option titles from Rust-provided plain text, without HTML parsing in the
   row binding path
+- Boost short replies render from Rust-owned `TopicPostBoostState.displayText`
+  as native RecyclerView row chips, without Android-side Boost HTML parsing
 - reaction-user lookup from the rendered post reaction summary
 - topic notification-level selection for non-private-message topics
 - reply-context lookup from the rendered reply target, showing source and

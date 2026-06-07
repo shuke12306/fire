@@ -878,6 +878,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
             FirePostAuthorMetadataDisplay.contentToken(for: post),
             renderContent?.signature.token ?? "pending",
             Self.pollsContentToken(post.polls),
+            FirePostBoostDisplay.contentToken(for: post.boosts),
             String(!post.reactions.isEmpty),
             String(replyShortcutCount != nil),
             String(textExpansionState.isExpanded),
@@ -910,6 +911,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
         parts.append(Self.reactionsContentToken(post.reactions))
         parts.append(post.currentUserReaction?.id ?? "")
         parts.append(Self.pollsContentToken(post.polls))
+        parts.append(FirePostBoostDisplay.contentToken(for: post.boosts))
         parts.append(String(post.acceptedAnswer))
         parts.append(String(post.canEdit))
         parts.append(String(post.canDelete))

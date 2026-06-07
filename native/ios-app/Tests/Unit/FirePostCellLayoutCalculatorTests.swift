@@ -19,6 +19,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: .disabled,
@@ -84,6 +85,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: .disabled,
@@ -115,6 +117,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: .disabled,
@@ -132,6 +135,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: .disabled,
@@ -171,6 +175,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: true,
             replyShortcutCount: 3,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
@@ -217,6 +222,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: ["image"],
             pollSignature: ["poll"],
+            boostSignature: [],
             hasReactions: true,
             replyShortcutCount: nil,
             textExpansionState: .disabled,
@@ -236,6 +242,48 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertEqual(layout.pollFrames.count, 1)
         XCTAssertGreaterThan(layout.pollFrames[0].minY, layout.imageFrames[0].maxY)
         XCTAssertGreaterThan(layout.reactionsFrame?.minY ?? 0, layout.pollFrames[0].maxY)
+    }
+
+    func testBoostFramesSitBetweenBodyAndActionRow() {
+        let trait = FirePostLayoutTraitSignature(
+            contentWidthPixels: 320,
+            contentSizeCategory: UIContentSizeCategory.large.rawValue
+        )
+        let key = FirePostCellLayoutKey(
+            postID: 100,
+            depth: 1,
+            showsThreadLine: false,
+            showsDivider: false,
+            replyTargetPostNumber: nil,
+            replyContext: nil,
+            textContentID: "text",
+            imageSignature: [],
+            pollSignature: [],
+            boostSignature: ["boost-a", "boost-b"],
+            hasReactions: true,
+            replyShortcutCount: nil,
+            textExpansionState: .disabled,
+            acceptedAnswer: false,
+            hasAuthorMetadata: false,
+            trait: trait
+        )
+
+        let layout = FirePostCellLayoutCalculator.calculate(
+            key: key,
+            textHeight: 40,
+            imageSizes: [],
+            boostLines: ["@carol: Hello :wave:", "@dave: Thanks for the detail"],
+            trait: trait
+        )
+
+        XCTAssertEqual(layout.boostFrames.count, 2)
+        XCTAssertGreaterThan(layout.boostFrames[0].minY, layout.textFrame?.maxY ?? 0)
+        XCTAssertEqual(
+            layout.boostFrames[1].minY,
+            layout.boostFrames[0].maxY + FirePostCellLayoutCalculator.boostSpacing,
+            accuracy: 0.01
+        )
+        XCTAssertGreaterThan(layout.reactionsFrame?.minY ?? 0, layout.boostFrames[1].maxY)
     }
 
     func testPollPreferredHeightGrowsForLongOptionText() {
@@ -298,6 +346,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: false,
             replyShortcutCount: nil,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
@@ -346,6 +395,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: "text",
             imageSignature: ["image"],
             pollSignature: ["poll"],
+            boostSignature: ["boost"],
             hasReactions: true,
             replyShortcutCount: nil,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
@@ -360,12 +410,14 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textHeight: collapsedHeight + 20,
             imageSizes: [CGSize(width: 180, height: 120)],
             pollHeights: [120],
+            boostLines: ["@carol: This should be hidden while text is collapsed"],
             trait: trait
         )
 
         XCTAssertNotNil(layout.textExpansionFrame)
         XCTAssertTrue(layout.imageFrames.isEmpty)
         XCTAssertTrue(layout.pollFrames.isEmpty)
+        XCTAssertTrue(layout.boostFrames.isEmpty)
         XCTAssertEqual(
             layout.reactionsFrame?.minY ?? 0,
             (layout.textFrame?.maxY ?? 0) + FirePostCellLayoutCalculator.replyShortcutTopSpacing,
@@ -495,6 +547,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             textContentID: renderContent.signature.token,
             imageSignature: [],
             pollSignature: [],
+            boostSignature: [],
             hasReactions: true,
             replyShortcutCount: 3,
             textExpansionState: .disabled,
@@ -588,6 +641,8 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             bookmarkReminderAt: nil,
             reactions: reactions,
             currentUserReaction: nil,
+            boosts: [],
+            canBoost: false,
             polls: [],
             acceptedAnswer: false,
             canAcceptAnswer: false,
