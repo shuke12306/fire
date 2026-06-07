@@ -1362,7 +1362,7 @@ private final class FireSelectableRichTextNode: ASDisplayNode, UITextViewDelegat
 
     override func didLoad() {
         super.didLoad()
-        let textView = UITextView()
+        let textView = FireRichTextTextView()
         textView.backgroundColor = .clear
         textView.isEditable = false
         textView.isSelectable = true
@@ -1422,6 +1422,7 @@ private final class FireSelectableRichTextNode: ASDisplayNode, UITextViewDelegat
             return
         }
         richTextView?.attributedText = attributedText
+        (richTextView as? FireRichTextTextView)?.refreshQuotePreviewLayers()
     }
 }
 

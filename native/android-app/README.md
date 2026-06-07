@@ -81,6 +81,9 @@ Current topic-detail interactions:
 - Rust filters attachment metadata text whose prefix may be a filename/hash but
   whose suffix is dimensions plus file size, and quote chrome/avatar content
   before Android maps blocks to `Spannable` / image views
+- quote previews render as shared two-line compact blocks, and onebox previews
+  display Rust-derived title/description without Android-side link-preview
+  fetching or HTML parsing
 - ordinary web links open the host-owned in-app WebView, while LinuxDo topic
   links route to native topic detail
 - AI summary loading in the topic header when Rust reports summary availability,

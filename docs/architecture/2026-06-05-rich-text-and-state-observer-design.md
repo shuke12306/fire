@@ -110,6 +110,7 @@ pub struct RenderBlock {
 
 - 平台端只做轻映射
 - quote/details/emoji/attachment/lightbox 规则只有 Rust 一处
+- onebox 标题/描述提取也只有 Rust 一处，平台不抓取或解析 Open Graph / HTML preview
 - 现有 iOS `NSAttributedString` / Android `Spannable` 渲染器可以直接复用
 
 ### 2.3 图片附件提取也回到 Rust
@@ -131,6 +132,10 @@ pub struct RenderBlock {
 
 图片附件旁的上传元信息 chrome 也只在 Rust 侧过滤。匹配规则不依赖 `image` 这种固定前缀，前缀可以是文件名、
 hash 或其他服务器输出字符串；只有末尾满足“尺寸 + 文件大小”的附件说明会被剥离，普通 caption / 正文文本必须保留。
+
+Quote / onebox preview 的语义同样在 Rust 侧收口。Rust 会移除 Discourse quote chrome/avatar，并从 onebox
+节点树提取标题与描述；iOS / Android 只负责把共享节点映射成两行以内的 compact quote preview、可点击链接和原生
+onebox 文本展示，不保留平台侧 link-preview fetcher 或 HTML fallback。
 
 ### 2.4 RenderDocument 辅助能力也回到 Rust
 
@@ -222,6 +227,7 @@ TopicPostState.render_document / render_cooked_html()
 - mention / mention-group / hashtag 语义识别
 - quote 标准化
 - details summary/body 拆分
+- onebox 标题/描述提取
 - emoji fallback 解析
 - image attachment 选择与过滤，包括图片元信息文本和 quote chrome/avatar 过滤
 - 相对 URL 解析

@@ -9,9 +9,13 @@ import android.text.style.QuoteSpan
 class FireQuoteSpan(
     private val insetWidth: Int,
     private val backgroundColor: Int,
+    private val stripeColor: Int,
 ) : QuoteSpan() {
 
-    override fun getLeadingMargin(first: Boolean): Int = insetWidth
+    private val stripeWidth: Int = maxOf(3, insetWidth / 4)
+    private val stripeGap: Int = maxOf(6, insetWidth / 2)
+
+    override fun getLeadingMargin(first: Boolean): Int = insetWidth + stripeWidth + stripeGap
 
     override fun drawLeadingMargin(
         c: Canvas,
@@ -35,6 +39,22 @@ class FireQuoteSpan(
         val left = if (dir >= 0) x.toFloat() else (x - c.width).toFloat()
         val right = if (dir >= 0) c.width.toFloat() else x.toFloat()
         c.drawRect(left, top.toFloat(), right, bottom.toFloat(), p)
+
+        p.color = stripeColor
+        val stripeLeft = if (dir >= 0) {
+            x + insetWidth / 2
+        } else {
+            x - insetWidth / 2 - stripeWidth
+        }.toFloat()
+        c.drawRoundRect(
+            stripeLeft,
+            top.toFloat(),
+            stripeLeft + stripeWidth,
+            bottom.toFloat(),
+            stripeWidth / 2f,
+            stripeWidth / 2f,
+            p,
+        )
 
         p.style = style
         p.color = color

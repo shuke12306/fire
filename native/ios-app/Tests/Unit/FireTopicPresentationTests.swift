@@ -557,6 +557,10 @@ final class FireTopicPresentationTests: XCTestCase {
         XCTAssertNotEqual(authorRange.location, NSNotFound)
         XCTAssertNotEqual(postRange.location, NSNotFound)
         XCTAssertEqual(
+            attributedText.attribute(.fireQuotePreviewBlock, at: authorRange.location, effectiveRange: nil) as? Bool,
+            true
+        )
+        XCTAssertEqual(
             attributedText.attribute(.link, at: authorRange.location, effectiveRange: nil) as? URL,
             URL(string: "fire://profile/alice")
         )
@@ -568,6 +572,30 @@ final class FireTopicPresentationTests: XCTestCase {
         XCTAssertEqual(
             attributedText.attribute(.link, at: bodyLinkRange.location, effectiveRange: nil) as? URL,
             URL(string: "https://linux.do/t/fire/987/12")
+        )
+    }
+
+    func testRenderContentCompactsQuotedReplyPreview() throws {
+        let content = fireRenderContentFixture(#"""
+            <aside class="quote" data-username="alice" data-post="12" data-topic="987">
+              <blockquote>
+                <p>First quoted line</p>
+                <p>Second quoted line</p>
+                <p>Third quoted line should be hidden</p>
+              </blockquote>
+            </aside>
+            """#)
+
+        let attributedText = try XCTUnwrap(content.attributedText)
+        let text = attributedText.string
+
+        XCTAssertTrue(text.contains("First quoted line"))
+        XCTAssertTrue(text.contains("Second quoted line"))
+        XCTAssertFalse(text.contains("Third quoted line should be hidden"))
+        XCTAssertTrue(text.contains("引用"))
+        XCTAssertEqual(
+            attributedText.attribute(.fireQuotePreviewBlock, at: 0, effectiveRange: nil) as? Bool,
+            true
         )
     }
 

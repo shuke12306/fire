@@ -3,6 +3,7 @@ package com.fire.app.richtext
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.*
@@ -283,34 +284,55 @@ object FireSpannableBuilder {
     ) {
         ensureBlockBoundary(builder)
         val quoteStart = builder.length
-        if (author != null || postNumber != null) {
+        val trimmedAuthor = author?.trim()?.ifBlank { null }
+        if (trimmedAuthor != null || postNumber != null) {
             val headerStart = builder.length
+            val labelStart = builder.length
             builder.append("引用") // 引用
-            if (author != null) {
-                builder.append(" @$author")
+            val labelEnd = builder.length
+            builder.setSpan(ForegroundColorSpan(0xFF6B7280.toInt()), labelStart, labelEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (trimmedAuthor != null) {
+                val separatorStart = builder.length
+                builder.append(' ')
+                builder.setSpan(ForegroundColorSpan(0xFF6B7280.toInt()), separatorStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val authorStart = builder.length
+                builder.append("@$trimmedAuthor")
+                val authorEnd = builder.length
+                builder.setSpan(FireLinkSpan(profileUrl(trimmedAuthor), onLinkClicked), authorStart, authorEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                builder.setSpan(ForegroundColorSpan(context.accentColor), authorStart, authorEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             if (postNumber != null) {
-                builder.append(" · #$postNumber")
+                val separatorStart = builder.length
+                builder.append(" · ")
+                builder.setSpan(ForegroundColorSpan(0xFF6B7280.toInt()), separatorStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val postStart = builder.length
+                builder.append("#$postNumber")
+                val postEnd = builder.length
+                if (topicId != null) {
+                    builder.setSpan(FireLinkSpan(topicUrl(topicId, postNumber), onLinkClicked), postStart, postEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                builder.setSpan(ForegroundColorSpan(context.accentColor), postStart, postEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             val headerEnd = builder.length
-            builder.setSpan(ForegroundColorSpan(0xFF6B7280.toInt()), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             builder.setSpan(RelativeSizeSpan(0.8f), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             builder.append('\n')
         }
-        val bodyStart = builder.length
         val bodyBuilder = SpannableStringBuilder()
         appendNodes(children, bodyBuilder, context.indented().copy(textColor = 0xFF6B7280.toInt()), ctx, onLinkClicked)
         builder.append(compactQuoteText(bodyBuilder))
-        val bodyEnd = builder.length
         val quoteEnd = builder.length
         if (quoteStart < quoteEnd) {
-            builder.setSpan(BackgroundColorSpan(context.quoteBackgroundColor), quoteStart, quoteEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            builder.setSpan(LeadingMarginSpan.Standard(dp(ctx, 10)), quoteStart, quoteEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            builder.setSpan(
+                FireQuoteSpan(
+                    dp(ctx, 10),
+                    context.quoteBackgroundColor,
+                    context.quoteStripeColor,
+                ),
+                quoteStart,
+                quoteEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
         }
-        builder.setSpan(FireQuoteSpan(
-            dp(ctx, 10),
-            context.quoteBackgroundColor,
-        ), bodyStart, bodyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         ensureBlockBoundary(builder)
     }
 
@@ -318,7 +340,7 @@ object FireSpannableBuilder {
         val ranges = nonBlankLineRanges(value)
         val compact = SpannableStringBuilder()
         val selectedRanges = if (ranges.isNotEmpty()) {
-            ranges.take(3)
+            ranges.take(QUOTE_PREVIEW_LINE_LIMIT)
         } else {
             listOfNotNull(trimmedRange(value))
         }
@@ -458,9 +480,14 @@ object FireSpannableBuilder {
 
     private fun dp(context: Context, value: Int): Int = context.dp(value)
 
+    private fun profileUrl(username: String): String = "fire://profile/${Uri.encode(username)}"
+
+    private fun topicUrl(topicId: ULong, postNumber: UInt): String = "fire://topic/$topicId/$postNumber"
+
     private data class TextRange(val start: Int, val end: Int)
 
-    private const val MAX_QUOTE_PREVIEW_LENGTH = 160
+    private const val QUOTE_PREVIEW_LINE_LIMIT = 2
+    private const val MAX_QUOTE_PREVIEW_LENGTH = 120
     private const val QUOTE_ELLIPSIS = "..."
 
     // Emoji placeholder span — replaced with ImageSpan by FireRichTextView
