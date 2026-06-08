@@ -208,6 +208,8 @@ struct FireFilteredTopicListView: View {
     @StateObject private var listViewModel: FireFilteredTopicListViewModel
     @State private var copiedErrorMessage = false
     @State private var selectedRoute: FireAppRoute?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
     @Namespace private var feedSelectorNamespace
     @Namespace private var pushTransitionNamespace
 
@@ -247,6 +249,11 @@ struct FireFilteredTopicListView: View {
         case .loading, .blockingError:
             return nil
         }
+    }
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     var body: some View {
@@ -310,6 +317,46 @@ struct FireFilteredTopicListView: View {
         .task {
             await listViewModel.loadIfNeeded()
         }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await viewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await viewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    await listViewModel.refresh()
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        await listViewModel.refresh()
+                    }
+                }
+            )
+        }
+        .alert("提示", isPresented: Binding(
+            get: { topicActionNotice != nil },
+            set: { presenting in
+                if !presenting {
+                    topicActionNotice = nil
+                }
+            }
+        )) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(topicActionNotice ?? "")
+        }
     }
 
     // MARK: - Kind Selector
@@ -361,6 +408,21 @@ struct FireFilteredTopicListView: View {
                     id: FireAppRoute.topic(row: topicRow).id,
                     in: pushTransitionNamespace
                 )
+                .contextMenu {
+                    FireTopicContextMenu(
+                        row: topicRow,
+                        shareURL: topicRow.fireTopicURL(baseURL: baseURLString),
+                        onOpen: {
+                            presentRoute(.topic(row: topicRow))
+                        },
+                        onBookmark: {
+                            editingBookmarkContext = topicRow.fireBookmarkEditorContext()
+                        },
+                        onMute: {
+                            muteTopic(topicRow)
+                        }
+                    )
+                }
             }
 
             if listViewModel.currentKindNextPage != nil {
@@ -437,5 +499,19 @@ struct FireFilteredTopicListView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                topicActionNotice = "已静音话题"
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 }

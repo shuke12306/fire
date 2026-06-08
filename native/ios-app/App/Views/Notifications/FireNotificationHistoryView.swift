@@ -88,16 +88,16 @@ struct FireNotificationHistoryView: View {
             }
 
             ForEach(notificationStore.fullNotifications, id: \.id) { item in
-                Button {
-                    handleNotificationTap(item)
-                } label: {
-                    FireNotificationRowContent(
-                        item: item,
-                        baseURLString: baseURLString
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(notificationAccessibilityLabel(for: item))
+                FireNotificationRow(
+                    item: item,
+                    baseURLString: baseURLString,
+                    onOpen: {
+                        handleNotificationTap(item)
+                    },
+                    onMarkRead: {
+                        notificationStore.markRead(id: item.id)
+                    }
+                )
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -196,14 +196,5 @@ struct FireNotificationHistoryView: View {
             return
         }
         selectedRoute = route
-    }
-
-    private func notificationAccessibilityLabel(for item: NotificationItemState) -> String {
-        var parts = [item.displayDescription]
-        if let timestamp = FireTopicPresentation.compactTimestamp(item.createdAt) {
-            parts.append(timestamp)
-        }
-        parts.append(item.read ? "已读" : "未读")
-        return parts.joined(separator: "，")
     }
 }

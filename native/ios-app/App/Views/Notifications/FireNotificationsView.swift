@@ -287,7 +287,16 @@ struct FireNotificationsView: View {
             }
 
             ForEach(notificationStore.recentNotifications, id: \.id) { item in
-                notificationRow(item)
+                FireNotificationRow(
+                    item: item,
+                    baseURLString: baseURLString,
+                    onOpen: {
+                        handleNotificationTap(item)
+                    },
+                    onMarkRead: {
+                        notificationStore.markRead(id: item.id)
+                    }
+                )
                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -329,16 +338,6 @@ struct FireNotificationsView: View {
         }
     }
 
-    private func notificationRow(_ item: NotificationItemState) -> some View {
-        Button {
-            handleNotificationTap(item)
-        } label: {
-            notificationRowContent(item)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(notificationAccessibilityLabel(for: item))
-    }
-
     private func handleNotificationTap(_ item: NotificationItemState) {
         if !item.read {
             notificationStore.markRead(id: item.id)
@@ -349,10 +348,6 @@ struct FireNotificationsView: View {
             return
         }
         presentRoute(route)
-    }
-
-    private func notificationRowContent(_ item: NotificationItemState) -> some View {
-        FireNotificationRowContent(item: item, baseURLString: baseURLString)
     }
 
     // MARK: - Loading skeleton
@@ -428,7 +423,33 @@ struct FireNotificationsView: View {
         selectedRoute = route
     }
 
-    private func notificationAccessibilityLabel(for item: NotificationItemState) -> String {
+}
+
+// MARK: - Shared notification row
+
+struct FireNotificationRow: View {
+    let item: NotificationItemState
+    let baseURLString: String
+    let onOpen: () -> Void
+    let onMarkRead: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            FireNotificationRowContent(item: item, baseURLString: baseURLString)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(notificationAccessibilityLabel)
+        .contextMenu {
+            FireNotificationContextMenu(
+                item: item,
+                shareURL: item.fireShareURL(baseURL: baseURLString),
+                onOpen: onOpen,
+                onMarkRead: onMarkRead
+            )
+        }
+    }
+
+    private var notificationAccessibilityLabel: String {
         var parts = [item.displayDescription]
         if let timestamp = FireTopicPresentation.compactTimestamp(item.createdAt) {
             parts.append(timestamp)
@@ -437,8 +458,6 @@ struct FireNotificationsView: View {
         return parts.joined(separator: "，")
     }
 }
-
-// MARK: - Shared notification row
 
 struct FireNotificationRowContent: View {
     let item: NotificationItemState

@@ -48,8 +48,11 @@ struct FireHomeCollectionView: View {
     let onShowCategoryBrowser: () -> Void
     let onShowTagPicker: () -> Void
     let onSelectTopic: (FireAppRoute) -> Void
+    let onEditTopicBookmark: (FireTopicRowPresentation) -> Void
+    let onMuteTopic: (FireTopicRowPresentation) -> Void
     let onRefresh: () async -> Void
     let onScrollMetricsChanged: (FireCollectionScrollMetrics) -> Void
+    let baseURLString: String
 
     private var parentCategories: [FireTopicCategoryPresentation] {
         homeFeedStore.allCategories.filter { $0.parentCategoryId == nil }
@@ -225,6 +228,21 @@ struct FireHomeCollectionView: View {
                     category: homeFeedStore.categoryPresentation(for: row.topic.categoryId)
                 )
                 .padding(.horizontal, 16)
+                .contextMenu {
+                    FireTopicContextMenu(
+                        row: row,
+                        shareURL: row.fireTopicURL(baseURL: baseURLString),
+                        onOpen: {
+                            onSelectTopic(.topic(row: row))
+                        },
+                        onBookmark: {
+                            onEditTopicBookmark(row)
+                        },
+                        onMute: {
+                            onMuteTopic(row)
+                        }
+                    )
+                }
             } else {
                 Color.clear
                     .frame(height: 0)

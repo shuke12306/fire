@@ -7,12 +7,19 @@ struct FireSearchView: View {
     @FocusState private var isSearchFieldFocused: Bool
     @State private var hasAppeared = false
     @State private var selectedRoute: FireAppRoute?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
 
     private var scopeBinding: Binding<FireSearchScope> {
         Binding(
             get: { searchStore.scope },
             set: { searchStore.setScope($0) }
         )
+    }
+
+    private var baseURLString: String {
+        let trimmed = appViewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     var body: some View {
@@ -33,6 +40,46 @@ struct FireSearchView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isSearchFieldFocused = true
             }
+        }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await appViewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await appViewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    searchStore.submit(reset: true)
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await appViewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        searchStore.submit(reset: true)
+                    }
+                }
+            )
+        }
+        .alert("提示", isPresented: Binding(
+            get: { topicActionNotice != nil },
+            set: { presenting in
+                if !presenting {
+                    topicActionNotice = nil
+                }
+            }
+        )) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(topicActionNotice ?? "")
         }
     }
 
@@ -164,6 +211,25 @@ struct FireSearchView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("搜索结果：\(topic.title)")
+                        .contextMenu {
+                            FireTopicContextMenu(
+                                row: row,
+                                shareURL: row.fireTopicURL(baseURL: baseURLString),
+                                onOpen: {
+                                    presentRoute(.topic(
+                                        topicId: topic.id,
+                                        postNumber: nil,
+                                        preview: FireTopicRoutePreview(row: row)
+                                    ))
+                                },
+                                onBookmark: {
+                                    editingBookmarkContext = row.fireBookmarkEditorContext()
+                                },
+                                onMute: {
+                                    muteTopic(row)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -288,6 +354,20 @@ struct FireSearchView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await appViewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                topicActionNotice = "已静音话题"
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 
     private func dslHintRow(_ keyword: String, _ hint: String) -> some View {

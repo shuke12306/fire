@@ -111,6 +111,7 @@ struct FireBookmarksView: View {
     @StateObject private var bookmarksViewModel: FireBookmarksViewModel
     @State private var editingContext: FireBookmarkEditorContext?
     @State private var selectedRoute: FireAppRoute?
+    @State private var topicActionNotice: String?
     @Namespace private var pushTransitionNamespace
 
     private struct ContentVersion: Hashable {
@@ -139,6 +140,11 @@ struct FireBookmarksView: View {
             hasLoadedOnce: bookmarksViewModel.hasLoadedOnce,
             errorMessage: bookmarksViewModel.errorMessage
         )
+    }
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     private var sections: [FireListSectionModel<FireBookmarksCollectionSection, FireBookmarksCollectionItem>] {
@@ -218,6 +224,18 @@ struct FireBookmarksView: View {
                     }
                 }
             )
+        }
+        .alert("提示", isPresented: Binding(
+            get: { topicActionNotice != nil },
+            set: { presenting in
+                if !presenting {
+                    topicActionNotice = nil
+                }
+            }
+        )) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(topicActionNotice ?? "")
         }
     }
 
@@ -448,6 +466,24 @@ struct FireBookmarksView: View {
                 row: row,
                 category: viewModel.categoryPresentation(for: row.topic.categoryId)
             )
+            .contextMenu {
+                FireTopicContextMenu(
+                    row: row,
+                    shareURL: row.fireTopicURL(baseURL: baseURLString),
+                    onOpen: {
+                        presentRoute(.topic(
+                            row: row,
+                            postNumber: row.topic.bookmarkedPostNumber ?? row.topic.lastReadPostNumber
+                        ))
+                    },
+                    onBookmark: {
+                        editingContext = editorContext(for: row)
+                    },
+                    onMute: {
+                        muteTopic(row)
+                    }
+                )
+            }
         }
     }
 
@@ -482,5 +518,19 @@ struct FireBookmarksView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                topicActionNotice = "已静音话题"
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 }

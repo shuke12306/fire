@@ -43,9 +43,16 @@ struct FireHomeView: View {
     @State private var selectedRoute: FireAppRoute?
     @State private var lastTriggeredTopicsPage: UInt32?
     @State private var composerNotice: String?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
     @Namespace private var pushTransitionNamespace
 
     private static let paginationPrefetchDistance: CGFloat = 480
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
+    }
 
     var body: some View {
         NavigationStack {
@@ -57,8 +64,13 @@ struct FireHomeView: View {
                     showTagPicker = true
                 },
                 onSelectTopic: selectTopic(_:),
+                onEditTopicBookmark: { row in
+                    editingBookmarkContext = row.fireBookmarkEditorContext()
+                },
+                onMuteTopic: muteTopic(_:),
                 onRefresh: refreshTopics,
-                onScrollMetricsChanged: handleTopicListScrollMetricsChange(_: )
+                onScrollMetricsChanged: handleTopicListScrollMetricsChange(_: ),
+                baseURLString: baseURLString
             )
             .onAppear {
                 homeFeedStore.setTopicListVisible(true)
@@ -155,17 +167,46 @@ struct FireHomeView: View {
                 )
             }
         }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await viewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await viewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    await homeFeedStore.refreshTopicsAsync()
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        await homeFeedStore.refreshTopicsAsync()
+                    }
+                }
+            )
+        }
         .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil },
+            get: { composerNotice != nil || topicActionNotice != nil },
             set: { presenting in
                 if !presenting {
                     composerNotice = nil
+                    topicActionNotice = nil
                 }
             }
         )) {
             Button("知道了", role: .cancel) {}
         } message: {
-            Text(composerNotice ?? "")
+            Text(composerNotice ?? topicActionNotice ?? "")
         }
     }
 
@@ -191,6 +232,20 @@ struct FireHomeView: View {
 
     private func selectTopic(_ route: FireAppRoute) {
         presentRoute(route)
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                topicActionNotice = "已静音话题"
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 
     private func handleTopicListScrollMetricsChange(_ newMetrics: FireCollectionScrollMetrics) {

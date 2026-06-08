@@ -447,73 +447,47 @@ git commit -m "feat(ios): add shimmer animation and reuse empty states"
 
 **Files:**
 - Create: `native/ios-app/App/Core/FireContextMenus.swift`
-- Modify: `native/ios-app/App/Views/FireTopicRow.swift`
+- Modify: `native/ios-app/App/ListKit/Home/FireHomeCollectionView.swift`
+- Modify: `native/ios-app/App/Views/Home/FireHomeView.swift`
+- Modify: `native/ios-app/App/Views/Home/FireFilteredTopicListView.swift`
+- Modify: `native/ios-app/App/Views/Search/FireSearchView.swift`
+- Modify: `native/ios-app/App/Views/Bookmarks/FireBookmarksView.swift`
+- Modify: `native/ios-app/App/Views/Other/FireReadHistoryView.swift`
 - Modify: `native/ios-app/App/Views/FireNotificationsView.swift`
+- Modify: `native/ios-app/App/Views/Notifications/FireNotificationHistoryView.swift`
+- Modify: `native/ios-app/Fire.xcodeproj/project.pbxproj`
 
-- [ ] **Step 1: 创建上下文菜单构建器**
+- [x] **Step 1: 创建上下文菜单构建器**
 
-```swift
-import SwiftUI
+`FireContextMenus.swift` now provides:
+- `FireTopicContextMenu` for open, bookmark editor, share, copy link, and mute actions.
+- `FireNotificationContextMenu` for open, mark-read, copy content, share link, and copy link actions.
+- small URL/context helpers for topic share URLs, notification share URLs, and bookmark editor contexts.
 
-struct FireTopicContextMenu: View {
-    let isBookmarked: Bool
-    let onBookmark: () -> Void
-    let onShare: () -> Void
-    let onMute: () -> Void
+- [x] **Step 2: 话题行添加上下文菜单**
 
-    var body: some View {
-        Button {
-            onBookmark()
-        } label: {
-            Label(isBookmarked ? "取消收藏" : "收藏", systemImage: isBookmarked ? "bookmark.fill" : "bookmark")
-        }
-        Button {
-            onShare()
-        } label: {
-            Label("分享", systemImage: "square.and.arrow.up")
-        }
-        Button {
-            onMute()
-        } label: {
-            Label("静音", systemImage: "bell.slash")
-        }
-    }
-}
-```
+`FireTopicRow` remains presentation-only. Owning views attach menus with local closures so routing, bookmark sheets, mutation services, and refresh behavior stay with the surface that owns them:
+- Home collection rows
+- Filtered category/tag topic lists
+- Search topic results
+- Bookmarks
+- Read history
 
-- [ ] **Step 2: 话题行添加上下文菜单**
+Bookmark actions reuse `FireBookmarkEditorSheet`; muting uses `FireTopicInteractionService.setTopicNotificationLevel(.muted)`. There is no topic-list mark-read API, so no synthetic fallback action was added.
 
-在 `FireTopicRow` 上添加 `.contextMenu`：
+- [x] **Step 3: 通知行添加上下文菜单**
 
-```swift
-.contextMenu {
-    FireTopicContextMenu(
-        isBookmarked: topic.isBookmarked,
-        onBookmark: { /* toggle bookmark */ },
-        onShare: { /* share URL */ },
-        onMute: { /* set notification level to muted */ }
-    )
-}
-```
+Recent and full notification history now share `FireNotificationRow`, which wraps `FireNotificationRowContent` with tap handling, accessibility labels, and context-menu actions. Mark-read uses `FireNotificationStore.markRead(id:)`; open uses the existing route presentation path.
 
-- [ ] **Step 3: 通知行添加上下文菜单**
+- [x] **Step 4: 构建验证**
 
-```swift
-.contextMenu {
-    Button("标记为已读") { /* mark read */ }
-    Button("跳转到话题") { /* navigate */ }
-}
-```
+Verified:
+- `cd native/ios-app && xcodebuild build -scheme Fire -destination 'id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF' -quiet`
 
-- [ ] **Step 4: 构建验证**
-
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Expected: `** BUILD SUCCEEDED **`
-
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add native/ios-app/App/Core/FireContextMenus.swift native/ios-app/App/Views/FireTopicRow.swift native/ios-app/App/Views/FireNotificationsView.swift
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md native/ios-app/App/Core/FireContextMenus.swift native/ios-app/App/ListKit/Home/FireHomeCollectionView.swift native/ios-app/App/Views/Home/FireHomeView.swift native/ios-app/App/Views/Home/FireFilteredTopicListView.swift native/ios-app/App/Views/Search/FireSearchView.swift native/ios-app/App/Views/Bookmarks/FireBookmarksView.swift native/ios-app/App/Views/Other/FireReadHistoryView.swift native/ios-app/App/Views/Notifications/FireNotificationsView.swift native/ios-app/App/Views/Notifications/FireNotificationHistoryView.swift native/ios-app/Fire.xcodeproj/project.pbxproj
 git commit -m "feat(ios): add context menus to topic rows and notifications"
 ```
 
