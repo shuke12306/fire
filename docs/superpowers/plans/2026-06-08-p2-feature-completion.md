@@ -463,7 +463,9 @@ cd native/android-app
 
 Result: focused tests and both final build commands completed successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
+
+Included in commit `02f0a0e`.
 
 ```bash
 git add docs/superpowers/plans/2026-06-08-p2-feature-completion.md native/ios-app/README.md native/ios-app/App/Views/Composer/FireComposerView.swift native/ios-app/App/Views/Composer/FirePostEditorView.swift native/ios-app/Tests/Unit/FireComposerValidationTests.swift native/android-app/README.md native/android-app/src/main/java/com/fire/app/ui/composer/ComposerAssist.kt native/android-app/src/main/java/com/fire/app/ui/composer/MarkdownToolbarView.kt native/android-app/src/main/java/com/fire/app/ui/composer/ReplyComposerSheet.kt native/android-app/src/main/java/com/fire/app/ui/composer/TopicComposerSheet.kt native/android-app/src/main/java/com/fire/app/ui/composer/PrivateMessageComposerSheet.kt native/android-app/src/main/res/layout/sheet_reply_composer.xml native/android-app/src/main/res/layout/sheet_topic_composer.xml native/android-app/src/main/res/layout/sheet_private_message_composer.xml native/android-app/src/main/res/values/strings.xml native/android-app/src/test/java/com/fire/app/ui/composer/MarkdownInsertionTest.kt
@@ -803,7 +805,9 @@ Run:
 
 Result: passed, with existing iOS deprecation / Swift 6 migration warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
+
+Included in commit `2725b39`.
 
 ```bash
 git add native/ios-app/App/TopicDetail/ native/ios-app/App/ListKit/TopicDetail/ native/ios-app/Tests/Unit/FireTopicPresentationTests.swift native/ios-app/Tests/Unit/FirePostCellLayoutCalculatorTests.swift native/ios-app/Tests/Unit/FireTopicDetailRuntimeTests.swift native/android-app/src/main/java/com/fire/app/ui/topicdetail/ native/android-app/src/main/res/layout/activity_topic_detail.xml native/android-app/src/main/res/values/ids.xml native/android-app/src/main/res/values/strings.xml native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicDetailPostRowsTest.kt docs/superpowers/plans/2026-06-08-p2-feature-completion.md native/ios-app/README.md native/android-app/README.md
