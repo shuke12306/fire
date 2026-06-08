@@ -884,7 +884,7 @@ struct FireComposerView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(FireTheme.divider, lineWidth: 1)
             )
 
             if let mentionContext, (!mentionUsers.isEmpty || !mentionGroups.isEmpty) {

@@ -89,9 +89,9 @@ struct FirePanel<Content: View>: View {
     private var shadowColor: Color {
         switch style {
         case .contrast:
-            return Color.black.opacity(0.14)
+            return FireTheme.contrastPanelShadow
         case .chrome, .quiet:
-            return Color.black.opacity(0.06)
+            return FireTheme.panelShadow
         }
     }
 

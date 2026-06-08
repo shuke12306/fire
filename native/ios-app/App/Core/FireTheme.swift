@@ -141,6 +141,14 @@ enum FireTheme {
         UIColor(white: 0, alpha: 0.10),
         UIColor(white: 1, alpha: 0.10)
     )
+    static let panelShadow = adaptive(
+        UIColor(white: 0, alpha: 0.06),
+        UIColor(white: 0, alpha: 0.36)
+    )
+    static let contrastPanelShadow = adaptive(
+        UIColor(white: 0, alpha: 0.14),
+        UIColor(white: 0, alpha: 0.48)
+    )
 
     // MARK: - Chips
 

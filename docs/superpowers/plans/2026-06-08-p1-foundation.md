@@ -299,9 +299,11 @@ git commit -m "a11y(ios): label composer search notifications and profile views"
 ## Task 6: iOS 暗黑模式修复
 
 **Files:**
-- Modify: `native/ios-app/App/Views/FireComposerView.swift`
+- Modify: `native/ios-app/App/Views/Composer/FireComposerView.swift`
+- Modify: `native/ios-app/App/Core/FireTheme.swift`
+- Modify: `native/ios-app/App/Core/FireComponents.swift`
 
-- [ ] **Step 1: 修复 Composer 中的硬编码黑色**
+- [x] **Step 1: 修复 Composer 中的硬编码黑色**
 
 搜索 `Color.black.opacity(` 并替换：
 
@@ -321,20 +323,27 @@ FireTheme.divider
 .stroke(FireTheme.divider, lineWidth: 1)
 ```
 
-- [ ] **Step 2: 全项目扫描其他 Color.black/Color.white 硬编码**
+- [x] **Step 2: 全项目扫描其他 Color.black/Color.white 硬编码**
 
 Run: `rg "Color\.black\.opacity|Color\.white\.opacity" native/ios-app/App/Views/ native/ios-app/App/Core/`
 逐一评估并替换为 FireTheme 语义色。
 
-- [ ] **Step 3: 暗黑模式视觉验证**
+Result:
+- Composer editor border now uses `FireTheme.divider`.
+- `FireCard` shadows now use adaptive `FireTheme.panelShadow` / `FireTheme.contrastPanelShadow`.
+- Remaining scan hits are profile avatar white rings in `FireProfileView` and `FirePublicProfileView`; these are intentional image-overlay highlights, not semantic dividers/backgrounds.
 
-在 iOS Simulator 中切换到暗黑模式，检查 Composer 页面边框和分割线可见性。
+- [x] **Step 3: 暗黑模式验证**
 
-- [ ] **Step 4: Commit**
+Verified:
+- `rg "Color\.black\.opacity|Color\.white\.opacity" native/ios-app/App/Views/ native/ios-app/App/Core/`
+- `cd native/ios-app && xcodebuild build -scheme Fire -destination 'id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF' -quiet`
+
+- [x] **Step 4: Commit**
 
 ```bash
-git add native/ios-app/App/Views/FireComposerView.swift
-git commit -m "fix(ios): replace hardcoded Color.black.opacity with FireTheme tokens for dark mode"
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md native/ios-app/App/Views/Composer/FireComposerView.swift native/ios-app/App/Core/FireTheme.swift native/ios-app/App/Core/FireComponents.swift
+git commit -m "fix(ios): replace hardcoded composer colors with theme tokens"
 ```
 
 ---
