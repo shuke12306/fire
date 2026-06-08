@@ -77,6 +77,7 @@ class TopicDetailActivity : AppCompatActivity() {
     private var enabledReactionIds: List<String> = emptyList()
     private var timingTracker: TopicTimingTracker? = null
     private var viewModeMenuItem: MenuItem? = null
+    private var notificationMenuItem: MenuItem? = null
     private val appScope by lazy { FireApplication.applicationScope() }
     private val viewModelDelegate: TopicDetailViewModel by viewModels {
         TopicDetailViewModelFactory(sessionStore)
@@ -115,6 +116,17 @@ class TopicDetailActivity : AppCompatActivity() {
                 showViewModeChooser()
                 true
             }
+        }
+        notificationMenuItem = binding.topicDetailToolbar.menu.add(
+            R.string.topic_detail_notification_topic,
+        ).apply {
+            setIcon(R.drawable.ic_notifications)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                viewModel?.detail?.value?.let(::showTopicNotificationOptions)
+                true
+            }
+            isVisible = false
         }
 
         lifecycleScope.launch {
@@ -156,7 +168,6 @@ class TopicDetailActivity : AppCompatActivity() {
                 onShowTopicVoters = ::showTopicVoters,
                 onEditTopicClick = ::showTopicEditor,
                 onTopicBookmarkClick = ::showTopicBookmarkEditor,
-                onTopicNotificationClick = ::showTopicNotificationOptions,
             )
             postListAdapter = PostListAdapter(postCallbacks)
 
@@ -252,6 +263,7 @@ class TopicDetailActivity : AppCompatActivity() {
                     HomeTopicDetailPatchRepository.publish(detail)
                     binding.topicDetailToolbar.title = detail.title.trim()
                 }
+                updateTopicNotificationToolbar(detail)
                 updateVisiblePostTimings()
             }
         }
@@ -343,6 +355,38 @@ class TopicDetailActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun updateTopicNotificationToolbar(detail: TopicDetailState?) {
+        val item = notificationMenuItem ?: return
+        val isPrivateMessageThread = detail?.archetype
+            ?.trim()
+            ?.equals("private_message", ignoreCase = true) == true
+        item.isVisible = detail != null && !isPrivateMessageThread
+        if (detail == null || isPrivateMessageThread) return
+
+        val level = detail.details.notificationLevel ?: 1
+        val title = topicNotificationTitle(level)
+        item.title = getString(R.string.topic_detail_notification_button, title)
+        item.setIcon(topicNotificationIcon(level))
+        item.isEnabled = true
+    }
+
+    private fun topicNotificationTitle(level: Int): String {
+        return when (level) {
+            0 -> getString(R.string.topic_detail_notification_muted)
+            2 -> getString(R.string.topic_detail_notification_tracking)
+            3 -> getString(R.string.topic_detail_notification_watching)
+            else -> getString(R.string.topic_detail_notification_regular)
+        }
+    }
+
+    private fun topicNotificationIcon(level: Int): Int {
+        return when (level) {
+            0 -> R.drawable.ic_notifications_off
+            2, 3 -> R.drawable.ic_notifications_active
+            else -> R.drawable.ic_notifications
+        }
     }
 
     private fun updateViewModeToolbar(mode: TopicDetailViewMode) {
@@ -1022,30 +1066,22 @@ class TopicDetailActivity : AppCompatActivity() {
             TopicNotificationOption(
                 level = 0,
                 title = getString(R.string.topic_detail_notification_muted),
-                description = getString(R.string.topic_detail_notification_muted_description),
             ),
             TopicNotificationOption(
                 level = 1,
                 title = getString(R.string.topic_detail_notification_regular),
-                description = getString(R.string.topic_detail_notification_regular_description),
             ),
             TopicNotificationOption(
                 level = 2,
                 title = getString(R.string.topic_detail_notification_tracking),
-                description = getString(R.string.topic_detail_notification_tracking_description),
             ),
             TopicNotificationOption(
                 level = 3,
                 title = getString(R.string.topic_detail_notification_watching),
-                description = getString(R.string.topic_detail_notification_watching_description),
             ),
         )
         val labels = options.map { option ->
-            getString(
-                R.string.topic_detail_notification_option,
-                option.title,
-                option.description,
-            )
+            option.title
         }.toTypedArray()
         val selectedIndex = options.indexOfFirst {
             it.level == (detail.details.notificationLevel ?: 1)
@@ -1509,7 +1545,6 @@ class TopicDetailActivity : AppCompatActivity() {
 private data class TopicNotificationOption(
     val level: Int,
     val title: String,
-    val description: String,
 )
 
 private data class PostFlagOption(

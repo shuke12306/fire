@@ -390,7 +390,9 @@ cd native/android-app
 
 Result: both commands completed with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+Committed as `31f9216 feat(android): add threaded view mode for topic detail`.
 
 ```bash
 git add docs/superpowers/plans/2026-06-08-p2-feature-completion.md native/android-app/README.md native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt native/android-app/src/main/res/values/strings.xml native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicDetailPostRowsTest.kt
@@ -518,7 +520,9 @@ xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 1
 iOS still emits the existing deprecation / Swift 6 migration warnings noted in
 earlier tasks, but the build and focused test target pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+Committed as `d0528bd feat(composer): add quote insertion from topic detail posts`.
 
 ```bash
 git add -u
@@ -564,37 +568,59 @@ Included in `feat(composer): add Markdown formatting toolbar for iOS and Android
 ## Task 11: 话题通知级别控制
 
 **Files:**
-- Modify: `native/ios-app/App/TopicDetail/FireTopicDetailToolbarCoordinator.swift`
+- Modify: `native/ios-app/App/TopicDetail/Controller/FireTopicDetailToolbarCoordinator.swift`
+- Modify: `native/ios-app/App/TopicDetail/Support/FireTopicDetailSharedModels.swift`
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/PostListAdapter.kt`
+- Modify: `native/android-app/src/main/res/layout/item_topic_header.xml`
+- Modify: `native/android-app/src/main/res/values/strings.xml`
+- Create: `native/android-app/src/main/res/drawable/ic_notifications_active.xml`
+- Create: `native/android-app/src/main/res/drawable/ic_notifications_off.xml`
 - Reference: `docs/knowledge/api/03-topics.md` (topic notification level API)
 
-- [ ] **Step 1: iOS 通知级别按钮**
+- [x] **Step 1: iOS 通知级别按钮**
 
-在话题详情工具栏添加通知级别按钮（bell 图标）。
+`FireTopicDetailToolbarCoordinator` now owns a dedicated bell item in the topic
+detail navigation toolbar. The item is hidden for private-message threads,
+disabled when write interactions are unavailable, and opens a `UIMenu` titled
+「通知设置」 with the four Discourse levels: 静音、常规、跟踪、关注.
 
-点击弹出 `.confirmationDialog`：
+The icon reflects the Rust-provided current notification level:
 
-```swift
-.confirmationDialog("通知设置", isPresented: $showNotificationLevel) {
-    Button("静音") { setLevel(.muted) }
-    Button("常规") { setLevel(.regular) }
-    Button("跟踪") { setLevel(.tracking) }
-    Button("关注") { setLevel(.watching) }
-    Button("取消", role: .cancel) {}
-}
+- muted: `bell.slash.fill`
+- regular: `bell`
+- tracking / watching: `bell.fill`
+
+The old notification section was removed from the ellipsis menu so the toolbar
+bell is the one authoritative control.
+
+- [x] **Step 2: Android 通知级别按钮**
+
+`TopicDetailActivity` now adds a toolbar bell menu item that is hidden for
+private-message threads, updates its title and icon from
+`detail.details.notificationLevel`, and opens the notification-level chooser.
+The previous header-row notification button was removed from
+`PostListAdapter` / `item_topic_header.xml` so Android also has one
+authoritative toolbar control.
+
+- [x] **Step 3: 构建验证**
+
+Run:
+
+```bash
+cd native/android-app
+./gradlew assembleDebug
+
+cd native/ios-app
+xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet
 ```
 
-图标根据当前级别变化：静音用 `bell.slash.fill`，跟踪用 `bell.fill`，其他用 `bell`。
+Result: both commands completed successfully. iOS still emits the existing
+deprecation / Swift 6 migration warnings noted in earlier tasks.
 
-- [ ] **Step 2: Android 通知级别按钮**
+- [x] **Step 4: Commit**
 
-在 `TopicDetailActivity` 工具栏添加同样的弹窗选择。
-
-- [ ] **Step 3: 构建验证**
-
-Run: Both platforms build successfully
-
-- [ ] **Step 4: Commit**
+Included in `feat(topic-detail): add topic notification level control to toolbar`.
 
 ```bash
 git add -u

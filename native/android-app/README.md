@@ -153,7 +153,7 @@ Current topic-detail interactions:
   around active RecyclerView scrolling to avoid overlap and broad body-text
   occlusion, while reply/comment Boost chips move only through user swipes
 - reaction-user lookup from the rendered post reaction summary
-- topic notification-level selection for non-private-message topics
+- toolbar bell notification-level selection for non-private-message topics
 - reply-context lookup from the rendered reply target, showing source and
   direct replies
 - post delete/recover actions when the backend exposes those permissions

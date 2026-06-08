@@ -103,7 +103,6 @@ class HeaderAdapter(
     private val onShowTopicVoters: (TopicDetailState) -> Unit,
     private val onEditTopicClick: (TopicDetailState) -> Unit,
     private val onTopicBookmarkClick: (TopicDetailState) -> Unit,
-    private val onTopicNotificationClick: (TopicDetailState) -> Unit,
 ) : RecyclerView.Adapter<HeaderAdapter.HeaderViewHolder>() {
     private val attachedHolders = mutableSetOf<HeaderViewHolder>()
     private var boostAnimationsEnabled = true
@@ -155,7 +154,6 @@ class HeaderAdapter(
             onShowTopicVoters = onShowTopicVoters,
             onEditTopicClick = onEditTopicClick,
             onTopicBookmarkClick = onTopicBookmarkClick,
-            onTopicNotificationClick = onTopicNotificationClick,
         )
     }
 
@@ -231,11 +229,9 @@ class HeaderAdapter(
         private val onShowTopicVoters: (TopicDetailState) -> Unit,
         private val onEditTopicClick: (TopicDetailState) -> Unit,
         private val onTopicBookmarkClick: (TopicDetailState) -> Unit,
-        private val onTopicNotificationClick: (TopicDetailState) -> Unit,
     ) : RecyclerView.ViewHolder(itemView) {
         private val titleText: TextView = itemView.findViewById(R.id.topic_title)
         private val chips: ChipGroup = itemView.findViewById(R.id.topic_chips)
-        private val topicNotificationButton: TextView = itemView.findViewById(R.id.topic_notification_button)
         private val topicEditButton: TextView = itemView.findViewById(R.id.topic_edit_button)
         private val topicBookmarkButton: TextView = itemView.findViewById(R.id.topic_bookmark_button)
         private val aiSummaryContainer: View = itemView.findViewById(R.id.ai_summary_container)
@@ -300,7 +296,6 @@ class HeaderAdapter(
             } else {
                 chips.visibility = View.GONE
             }
-            bindTopicNotification(detail)
             bindTopicEdit(detail)
             bindTopicBookmark(detail)
             bindAiSummary(aiSummary, isAiSummaryLoading, aiSummaryError)
@@ -327,26 +322,6 @@ class HeaderAdapter(
             }
         }
 
-        private fun bindTopicNotification(detail: TopicDetailState) {
-            val isPrivateMessageThread = detail.archetype
-                ?.trim()
-                ?.equals("private_message", ignoreCase = true) == true
-            topicNotificationButton.visibility = if (isPrivateMessageThread) View.GONE else View.VISIBLE
-            if (isPrivateMessageThread) {
-                topicNotificationButton.setOnClickListener(null)
-                return
-            }
-
-            val title = topicNotificationTitle(detail.details.notificationLevel ?: 1)
-            topicNotificationButton.text = itemView.context.getString(
-                R.string.topic_detail_notification_button,
-                title,
-            )
-            topicNotificationButton.setOnClickListener {
-                onTopicNotificationClick(detail)
-            }
-        }
-
         private fun bindTopicEdit(detail: TopicDetailState) {
             val isPrivateMessageThread = detail.archetype
                 ?.trim()
@@ -370,16 +345,6 @@ class HeaderAdapter(
             )
             topicBookmarkButton.setOnClickListener {
                 onTopicBookmarkClick(detail)
-            }
-        }
-
-        private fun topicNotificationTitle(level: Int): String {
-            val context = itemView.context
-            return when (level) {
-                0 -> context.getString(R.string.topic_detail_notification_muted)
-                2 -> context.getString(R.string.topic_detail_notification_tracking)
-                3 -> context.getString(R.string.topic_detail_notification_watching)
-                else -> context.getString(R.string.topic_detail_notification_regular)
             }
         }
 

@@ -186,4 +186,15 @@ enum FireTopicNotificationLevelOption: Int32, CaseIterable, Identifiable {
         case .watching: "关注"
         }
     }
+
+    var systemImageName: String {
+        switch self {
+        case .muted:
+            return "bell.slash.fill"
+        case .tracking, .watching:
+            return "bell.fill"
+        case .regular:
+            return "bell"
+        }
+    }
 }

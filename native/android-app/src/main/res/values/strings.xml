@@ -274,15 +274,10 @@
     <string name="topic_detail_notification_topic">Notify</string>
     <string name="topic_detail_notification_button">Notify: %1$s</string>
     <string name="topic_detail_notification_title">Topic Notifications</string>
-    <string name="topic_detail_notification_option">%1$s - %2$s</string>
     <string name="topic_detail_notification_muted">Muted</string>
     <string name="topic_detail_notification_regular">Regular</string>
     <string name="topic_detail_notification_tracking">Tracking</string>
     <string name="topic_detail_notification_watching">Watching</string>
-    <string name="topic_detail_notification_muted_description">Do not notify for this topic</string>
-    <string name="topic_detail_notification_regular_description">Notify only on mentions or replies</string>
-    <string name="topic_detail_notification_tracking_description">Track unread and new replies</string>
-    <string name="topic_detail_notification_watching_description">Notify for every new reply</string>
     <string name="topic_detail_notification_error">Unable to update topic notifications.</string>
     <string name="topic_detail_delete_post">Delete</string>
     <string name="topic_detail_recover_post">Recover</string>
