@@ -1,8 +1,13 @@
 package com.fire.app.ui.topicdetail
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MenuItem
@@ -17,9 +22,11 @@ import android.widget.Toast
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -59,6 +66,11 @@ import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.VotedUserState
 import uniffi.fire_uniffi_user.UserProfileState
 import uniffi.fire_uniffi_user.UserSummaryState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 class TopicDetailActivity : AppCompatActivity() {
 
@@ -83,6 +95,17 @@ class TopicDetailActivity : AppCompatActivity() {
     private var timingTracker: TopicTimingTracker? = null
     private var viewModeMenuItem: MenuItem? = null
     private var notificationMenuItem: MenuItem? = null
+    private val pendingBookmarkReminders = mutableMapOf<BookmarkReminderKey, BookmarkReminderRequest>()
+    private var pendingNotificationPermissionRequest: BookmarkReminderRequest? = null
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val request = pendingNotificationPermissionRequest
+        pendingNotificationPermissionRequest = null
+        if (granted && request != null) {
+            BookmarkReminderScheduler.sync(this, request)
+        }
+    }
     private val appScope by lazy { FireApplication.applicationScope() }
     private val viewModelDelegate: TopicDetailViewModel by viewModels {
         TopicDetailViewModelFactory(sessionStore)
@@ -315,6 +338,28 @@ class TopicDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             vm.actionError.collectLatest { error ->
                 Toast.makeText(this@TopicDetailActivity, error, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        lifecycleScope.launch {
+            vm.bookmarkEvents.collectLatest { event ->
+                when (event) {
+                    is BookmarkEvent.Saved -> {
+                        val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
+                        pendingBookmarkReminders.remove(key)?.let { request ->
+                            scheduleBookmarkReminderAfterSave(request.copy(reminderAt = event.reminderAt))
+                        }
+                    }
+                    is BookmarkEvent.Deleted -> {
+                        val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
+                        pendingBookmarkReminders.remove(key)
+                        BookmarkReminderScheduler.cancel(
+                            this@TopicDetailActivity,
+                            event.bookmarkableId,
+                            event.bookmarkableType,
+                        )
+                    }
+                }
             }
         }
 
@@ -554,16 +599,34 @@ class TopicDetailActivity : AppCompatActivity() {
             hint = getString(R.string.topic_detail_bookmark_name_hint)
             setSingleLine(true)
         }
-        val reminderInput = EditText(this).apply {
-            setText(bookmarkReminderAt.orEmpty())
-            hint = getString(R.string.topic_detail_bookmark_reminder_hint)
-            setSingleLine(true)
+        val reminderSelection = BookmarkReminderSelection.from(bookmarkReminderAt)
+        val reminderToggle = androidx.appcompat.widget.SwitchCompat(this).apply {
+            text = getString(R.string.topic_detail_bookmark_reminder_label)
+            isChecked = reminderSelection.hasReminder
+        }
+        val reminderButton = TextView(this).apply {
+            setPadding(0, dp(12), 0, dp(4))
+            text = reminderSelection.displayText(this@TopicDetailActivity)
+            setTextColor(getColor(R.color.fire_accent))
+            setOnClickListener {
+                showBookmarkReminderDatePicker(reminderSelection, this)
+            }
+        }
+        reminderButton.visibility = if (reminderSelection.hasReminder) View.VISIBLE else View.GONE
+        reminderToggle.setOnCheckedChangeListener { _, isChecked ->
+            reminderSelection.hasReminder = isChecked
+            if (isChecked && reminderSelection.dateTime == null) {
+                reminderSelection.dateTime = ZonedDateTime.now().plusHours(1)
+            }
+            reminderButton.text = reminderSelection.displayText(this)
+            reminderButton.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 8, 48, 0)
+            setPadding(dp(24), dp(8), dp(24), 0)
             addView(nameInput)
-            addView(reminderInput)
+            addView(reminderToggle)
+            addView(reminderButton)
         }
 
         val dialog = AlertDialog.Builder(this)
@@ -585,24 +648,104 @@ class TopicDetailActivity : AppCompatActivity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reminderAt = reminderSelection.reminderAt()
+                val key = BookmarkReminderKey(bookmarkableId, bookmarkableType)
+                pendingBookmarkReminders[key] = BookmarkReminderRequest(
+                    bookmarkableId = bookmarkableId,
+                    bookmarkableType = bookmarkableType,
+                    topicId = route?.topicId ?: -1L,
+                    postNumber = targetPostNumber?.toInt() ?: -1,
+                    title = bookmarkReminderTitle(bookmarkableType, targetPostNumber),
+                    reminderAt = reminderAt,
+                )
                 viewModel?.saveBookmark(
                     bookmarkableId = bookmarkableId,
                     bookmarkableType = bookmarkableType,
                     bookmarkId = bookmarkId,
                     name = nameInput.text.toString(),
-                    reminderAt = reminderInput.text.toString(),
+                    reminderAt = reminderAt,
                     targetPostNumber = targetPostNumber,
                 )
                 dialog.dismiss()
             }
             if (bookmarkId != null) {
                 dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                    viewModel?.deleteBookmark(bookmarkId, targetPostNumber)
+                    viewModel?.deleteBookmark(
+                        bookmarkId = bookmarkId,
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                        targetPostNumber = targetPostNumber,
+                    )
                     dialog.dismiss()
                 }
             }
         }
         dialog.show()
+    }
+
+    private fun showBookmarkReminderDatePicker(
+        selection: BookmarkReminderSelection,
+        target: TextView,
+    ) {
+        val current = selection.dateTime ?: ZonedDateTime.now().plusHours(1)
+        DatePickerDialog(
+            this,
+            { _, year, month, dayOfMonth ->
+                TimePickerDialog(
+                    this,
+                    { _, hourOfDay, minute ->
+                        val selectedDateTime = current
+                            .withYear(year)
+                            .withMonth(month + 1)
+                            .withDayOfMonth(dayOfMonth)
+                            .withHour(hourOfDay)
+                            .withMinute(minute)
+                            .withSecond(0)
+                            .withNano(0)
+                        selection.dateTime = selectedDateTime.takeIf { it.isAfter(ZonedDateTime.now()) }
+                            ?: ZonedDateTime.now().plusMinutes(1).withSecond(0).withNano(0)
+                        target.text = selection.displayText(this)
+                    },
+                    current.hour,
+                    current.minute,
+                    true,
+                ).show()
+            },
+            current.year,
+            current.monthValue - 1,
+            current.dayOfMonth,
+        ).apply {
+            datePicker.minDate = System.currentTimeMillis()
+        }.show()
+    }
+
+    private fun scheduleBookmarkReminderAfterSave(request: BookmarkReminderRequest) {
+        if (request.reminderAt.isNullOrBlank()) {
+            BookmarkReminderScheduler.sync(this, request)
+            return
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingNotificationPermissionRequest = request
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        BookmarkReminderScheduler.sync(this, request)
+    }
+
+    private fun bookmarkReminderTitle(bookmarkableType: String, targetPostNumber: UInt?): String {
+        val detail = viewModel?.detail?.value
+        val title = detail?.title?.trim()?.takeIf { it.isNotEmpty() }
+            ?: route?.title?.trim()?.takeIf { it.isNotEmpty() }
+            ?: getString(R.string.topic_detail_title_fallback, route?.topicId?.toString().orEmpty())
+        return if (bookmarkableType.equals("Post", ignoreCase = true) && targetPostNumber != null) {
+            "$title #$targetPostNumber"
+        } else {
+            title
+        }
     }
 
     private fun showFlagPostOptions(post: TopicPostState) {
@@ -1630,6 +1773,48 @@ private data class TopicNotificationOption(
     val level: Int,
     val title: String,
 )
+
+private data class BookmarkReminderKey(
+    val bookmarkableId: ULong,
+    val bookmarkableType: String,
+)
+
+private class BookmarkReminderSelection(
+    var hasReminder: Boolean,
+    var dateTime: ZonedDateTime?,
+) {
+    fun reminderAt(): String? {
+        if (!hasReminder) return null
+        val normalizedDateTime = dateTime
+            ?.takeIf { it.isAfter(ZonedDateTime.now()) }
+            ?: ZonedDateTime.now().plusMinutes(1)
+        return normalizedDateTime
+            ?.withSecond(0)
+            ?.withNano(0)
+            ?.toInstant()
+            ?.toString()
+    }
+
+    fun displayText(context: Context): String {
+        val dateTime = dateTime ?: return context.getString(R.string.topic_detail_bookmark_reminder_pick)
+        return DateTimeFormatter
+            .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .format(dateTime.withZoneSameInstant(ZoneId.systemDefault()))
+    }
+
+    companion object {
+        fun from(rawValue: String?): BookmarkReminderSelection {
+            val parsed = rawValue
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()) }.getOrNull() }
+            return BookmarkReminderSelection(
+                hasReminder = parsed != null,
+                dateTime = parsed,
+            )
+        }
+    }
+}
 
 private data class PostFlagOption(
     val id: UInt,

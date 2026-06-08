@@ -96,6 +96,8 @@ extension FireTopicRowPresentation {
             bookmarkID: topic.bookmarkId,
             bookmarkableID: topic.id,
             bookmarkableType: topic.bookmarkableType ?? "Topic",
+            topicID: topic.id,
+            postNumber: topic.bookmarkedPostNumber,
             title: topic.title,
             initialName: topic.bookmarkName,
             initialReminderAt: topic.bookmarkReminderAt,

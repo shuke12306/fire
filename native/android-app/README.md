@@ -155,6 +155,8 @@ Current topic-detail interactions:
 - searchable full reaction picker from Rust-provided enabled reactions, with
   reaction-user lookup from both the rendered summary and picker rows
 - toolbar bell notification-level selection for non-private-message topics
+- bookmark reminder date/time picker with host-owned local notifications after
+  successful Rust bookmark mutations
 - reply-context lookup from the rendered reply target, showing source and
   direct replies
 - post delete/recover actions when the backend exposes those permissions

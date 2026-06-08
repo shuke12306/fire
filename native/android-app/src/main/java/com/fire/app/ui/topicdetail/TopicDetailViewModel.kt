@@ -80,6 +80,9 @@ class TopicDetailViewModel(
     private val _actionError = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val actionError = _actionError.asSharedFlow()
 
+    private val _bookmarkEvents = MutableSharedFlow<BookmarkEvent>(extraBufferCapacity = 1)
+    val bookmarkEvents = _bookmarkEvents.asSharedFlow()
+
     private var sourceCursor: TopicSourceCursorState? = null
     private var sourceSnapshot: TopicDetailSourceSnapshotState? = null
     private var treePresentation: TopicTreePresentationState? = null
@@ -578,6 +581,12 @@ class TopicDetailViewModel(
                     val bookmarkId = post.bookmarkId
                     if (bookmarkId != null) {
                         sessionStore.deleteBookmark(bookmarkId)
+                        _bookmarkEvents.tryEmit(
+                            BookmarkEvent.Deleted(
+                                bookmarkableId = post.id,
+                                bookmarkableType = "Post",
+                            ),
+                        )
                     }
                 } else {
                     sessionStore.createBookmark(post.id, "Post")
@@ -615,6 +624,13 @@ class TopicDetailViewModel(
                         reminderAt = normalizedReminder,
                     )
                 }
+                _bookmarkEvents.tryEmit(
+                    BookmarkEvent.Saved(
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                        reminderAt = normalizedReminder,
+                    ),
+                )
                 refreshCurrentTopic(targetPostNumber)
             } catch (e: Exception) {
                 handleActionError(e, "书签更新失败")
@@ -622,10 +638,21 @@ class TopicDetailViewModel(
         }
     }
 
-    fun deleteBookmark(bookmarkId: ULong, targetPostNumber: UInt?) {
+    fun deleteBookmark(
+        bookmarkId: ULong,
+        bookmarkableId: ULong,
+        bookmarkableType: String,
+        targetPostNumber: UInt?,
+    ) {
         viewModelScope.launch {
             try {
                 sessionStore.deleteBookmark(bookmarkId)
+                _bookmarkEvents.tryEmit(
+                    BookmarkEvent.Deleted(
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                    ),
+                )
                 refreshCurrentTopic(targetPostNumber)
             } catch (e: Exception) {
                 handleActionError(e, "书签删除失败")
@@ -870,6 +897,19 @@ class TopicDetailViewModel(
             return TopicDetailViewModel(topicRepo, sessionStore, messageBusCoordinator)
         }
     }
+}
+
+sealed class BookmarkEvent {
+    data class Saved(
+        val bookmarkableId: ULong,
+        val bookmarkableType: String,
+        val reminderAt: String?,
+    ) : BookmarkEvent()
+
+    data class Deleted(
+        val bookmarkableId: ULong,
+        val bookmarkableType: String,
+    ) : BookmarkEvent()
 }
 
 class TopicDetailViewModelFactory(

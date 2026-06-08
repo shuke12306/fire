@@ -269,10 +269,13 @@
     <string name="topic_detail_bookmark_name_label">Name</string>
     <string name="topic_detail_bookmark_name_hint">Optional bookmark name</string>
     <string name="topic_detail_bookmark_reminder_label">Reminder</string>
-    <string name="topic_detail_bookmark_reminder_hint">Optional ISO reminder time</string>
+    <string name="topic_detail_bookmark_reminder_pick">Pick reminder time</string>
     <string name="topic_detail_bookmark_save">Save Bookmark</string>
     <string name="topic_detail_bookmark_delete">Delete Bookmark</string>
     <string name="topic_detail_bookmark_error">Unable to update bookmark.</string>
+    <string name="bookmark_reminder_channel_name">Bookmark Reminders</string>
+    <string name="bookmark_reminder_channel_description">Local reminders for saved Linux.do bookmarks</string>
+    <string name="bookmark_reminder_notification_title">Bookmark Reminder</string>
     <string name="topic_detail_notification_topic">Notify</string>
     <string name="topic_detail_notification_button">Notify: %1$s</string>
     <string name="topic_detail_notification_title">Topic Notifications</string>

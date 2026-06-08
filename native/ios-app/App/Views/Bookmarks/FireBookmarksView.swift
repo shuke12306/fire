@@ -496,6 +496,8 @@ struct FireBookmarksView: View {
             bookmarkID: row.topic.bookmarkId,
             bookmarkableID: row.topic.id,
             bookmarkableType: row.topic.bookmarkableType ?? "Topic",
+            topicID: row.topic.id,
+            postNumber: row.topic.bookmarkedPostNumber,
             title: row.topic.title,
             initialName: row.topic.bookmarkName,
             initialReminderAt: row.topic.bookmarkReminderAt,

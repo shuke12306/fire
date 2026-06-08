@@ -1,10 +1,13 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct FireBookmarkEditorContext: Identifiable, Equatable {
     let bookmarkID: UInt64?
     let bookmarkableID: UInt64
     let bookmarkableType: String
+    let topicID: UInt64?
+    let postNumber: UInt32?
     let title: String
     let initialName: String?
     let initialReminderAt: String?
@@ -37,6 +40,7 @@ struct FireBookmarkEditorSheet: View {
         self.onSave = onSave
         self.onDelete = onDelete
         let parsedReminder = Self.parseReminder(context.initialReminderAt)
+            .flatMap { $0 > Date() ? $0 : nil }
         _name = State(initialValue: context.initialName ?? "")
         _hasReminder = State(initialValue: parsedReminder != nil)
         _reminderDate = State(initialValue: parsedReminder ?? Date().addingTimeInterval(3600))
@@ -51,7 +55,7 @@ struct FireBookmarkEditorSheet: View {
         guard hasReminder else {
             return nil
         }
-        return Self.isoFormatter.string(from: reminderDate)
+        return fireBookmarkReminderISOFormatter.string(from: reminderDate)
     }
 
     var body: some View {
@@ -153,6 +157,7 @@ struct FireBookmarkEditorSheet: View {
 
         do {
             try await onSave(trimmedName, reminderAt)
+            await FireBookmarkReminderScheduler.sync(context: context, reminderAt: reminderAt)
             saveCompletionPulse += 1
             dismiss()
         } catch {
@@ -167,6 +172,7 @@ struct FireBookmarkEditorSheet: View {
 
         do {
             try await onDelete()
+            await FireBookmarkReminderScheduler.cancel(context: context)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -177,18 +183,107 @@ struct FireBookmarkEditorSheet: View {
         guard let rawValue, !rawValue.isEmpty else {
             return nil
         }
-        return fractionalISOFormatter.date(from: rawValue) ?? isoFormatter.date(from: rawValue)
+        return fireBookmarkReminderFractionalISOFormatter.date(from: rawValue)
+            ?? fireBookmarkReminderISOFormatter.date(from: rawValue)
+    }
+}
+
+enum FireBookmarkReminderScheduler {
+    private static let threadIdentifier = "linux.do.bookmark-reminder"
+
+    static func sync(context: FireBookmarkEditorContext, reminderAt: String?) async {
+        guard let reminderAt,
+              let date = fireBookmarkReminderFractionalISOFormatter.date(from: reminderAt)
+                ?? fireBookmarkReminderISOFormatter.date(from: reminderAt),
+              date > Date() else {
+            await cancel(context: context)
+            return
+        }
+
+        do {
+            guard try await canScheduleNotifications() else {
+                return
+            }
+            let center = UNUserNotificationCenter.current()
+            center.removePendingNotificationRequests(withIdentifiers: [identifier(for: context)])
+
+            let content = UNMutableNotificationContent()
+            content.title = "书签提醒"
+            content.body = context.title
+            content.sound = .default
+            content.threadIdentifier = threadIdentifier
+            content.userInfo = userInfo(for: context)
+
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: date
+            )
+            let request = UNNotificationRequest(
+                identifier: identifier(for: context),
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            )
+            try await center.add(request)
+        } catch {
+            return
+        }
     }
 
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
+    static func cancel(context: FireBookmarkEditorContext) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [identifier(for: context)]
+        )
+    }
 
-    private static let fractionalISOFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
+    private static func canScheduleNotifications() async throws -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined:
+            return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        case .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private static func identifier(for context: FireBookmarkEditorContext) -> String {
+        "fire.bookmark-reminder.\(context.bookmarkableType.lowercased()).\(context.bookmarkableID)"
+    }
+
+    private static func userInfo(for context: FireBookmarkEditorContext) -> [String: Any] {
+        var userInfo: [String: Any] = [
+            "title": context.title,
+            "bookmarkableId": context.bookmarkableID,
+            "bookmarkableType": context.bookmarkableType,
+        ]
+        if let topicID = context.topicID ?? topicIDFromBookmarkableContext(context) {
+            userInfo["topicId"] = topicID
+        }
+        if let postNumber = context.postNumber {
+            userInfo["postNumber"] = postNumber
+        }
+        return userInfo
+    }
+
+    private static func topicIDFromBookmarkableContext(_ context: FireBookmarkEditorContext) -> UInt64? {
+        context.bookmarkableType.caseInsensitiveCompare("Topic") == .orderedSame
+            ? context.bookmarkableID
+            : nil
+    }
 }
+
+private let fireBookmarkReminderISOFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
+}()
+
+private let fireBookmarkReminderFractionalISOFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()

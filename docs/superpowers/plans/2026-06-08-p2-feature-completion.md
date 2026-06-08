@@ -692,38 +692,56 @@ git commit -m "feat(reactions): enhance reaction picker with full list, search, 
 ## Task 13: 书签提醒 UI
 
 **Files:**
-- Modify: `native/ios-app/App/Views/FireBookmarkEditorSheet.swift`
+- Modify: `native/ios-app/App/Views/Bookmarks/FireBookmarkEditorSheet.swift`
+- Modify: iOS bookmark context call sites
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt`
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt`
+- Create: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/BookmarkReminderScheduler.kt`
 - Reference: `docs/knowledge/api/10-presence-and-categories.md` (bookmark reminders)
 
-- [ ] **Step 1: iOS 书签编辑器添加提醒选择器**
+- [x] **Step 1: iOS 书签编辑器添加提醒选择器**
 
-在 `FireBookmarkEditorSheet` 中添加：
+`FireBookmarkEditorSheet` already owns the native `Toggle` + `DatePicker`
+reminder UI. This task kept that authoritative shared sheet, ensured past saved
+reminders do not initialize outside the DatePicker range, and continued passing
+ISO UTC `reminder_at` through the existing Rust bookmark APIs.
 
-```swift
-Section {
-    Toggle("设置提醒", isOn: $hasReminder)
-    if hasReminder {
-        DatePicker("提醒时间", selection: $reminderDate, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
-    }
-}
+- [x] **Step 2: 提醒触发时展示本地通知**
+
+Added host-owned local reminder scheduling to the shared iOS bookmark editor.
+Successful saves schedule or cancel `UNUserNotificationCenter` requests keyed by
+bookmarkable type/id; deletes cancel the matching local reminder. Notification
+payloads reuse the typed route keys so taps route back to the bookmarked topic
+or post.
+
+- [x] **Step 3: Android 对称实现**
+
+Android topic-detail bookmark editing now uses a native reminder toggle plus
+`DatePickerDialog` / `TimePickerDialog`, sends ISO UTC `reminder_at` to Rust,
+and schedules host-owned local notifications through `AlarmManager` only after
+the Rust bookmark mutation succeeds. Reminder notifications deep-link back to
+the topic detail screen, and Android 13+ notification permission is requested
+when needed.
+
+- [x] **Step 4: 构建验证**
+
+Run:
+
+```bash
+cd native/android-app
+./gradlew testDebugUnitTest --tests com.fire.app.ui.topicdetail.BookmarkReminderSchedulerTest
+./gradlew assembleDebug
+
+cd native/ios-app
+xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet
 ```
 
-保存时将 `reminderDate` 传递给 Rust core 的 `createBookmark` API。
+Result: all commands completed successfully. iOS still emits the existing
+deprecation / Swift 6 migration warnings noted in earlier tasks.
 
-- [ ] **Step 2: 提醒触发时展示本地通知**
+- [x] **Step 5: Commit**
 
-注册 `UNUserNotificationCenter` 通知，当书签提醒到期时展示本地通知。
-
-- [ ] **Step 3: Android 对称实现**
-
-在 Android 端的 AlertDialog 中添加日期时间选择器，使用 `AlarmManager` 触发本地通知。
-
-- [ ] **Step 4: 构建验证**
-
-Run: Both platforms build successfully
-
-- [ ] **Step 5: Commit**
+Included in `feat(bookmarks): add reminder date picker and local notifications for bookmark reminders`.
 
 ```bash
 git add -u
