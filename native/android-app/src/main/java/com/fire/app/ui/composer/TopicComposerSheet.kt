@@ -29,6 +29,7 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
 
     private lateinit var titleInput: EditText
     private lateinit var bodyInput: EditText
+    private lateinit var markdownToolbar: MarkdownToolbarView
     private lateinit var categorySpinner: Spinner
     private lateinit var categoryLabel: TextView
     private lateinit var tagsInput: EditText
@@ -69,6 +70,7 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
 
         titleInput = view.findViewById(R.id.topic_title_input)
         bodyInput = view.findViewById(R.id.topic_body_input)
+        markdownToolbar = view.findViewById(R.id.topic_markdown_toolbar)
         categorySpinner = view.findViewById(R.id.topic_category_spinner)
         categoryLabel = view.findViewById(R.id.topic_category_label)
         tagsInput = view.findViewById(R.id.topic_tags_input)
@@ -86,6 +88,7 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
                 sessionStore,
                 viewLifecycleOwner.lifecycleScope,
             )
+            markdownToolbar.bind(bodyInput)
 
             ComposerMentionAssist(
                 input = bodyInput,
@@ -255,6 +258,7 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
         val editorVisibility = if (previewMode) View.GONE else View.VISIBLE
         titleInput.visibility = editorVisibility
         bodyInput.visibility = editorVisibility
+        markdownToolbar.visibility = editorVisibility
         categoryLabel.visibility = editorVisibility
         categorySpinner.visibility = editorVisibility
         tagsInput.visibility = editorVisibility

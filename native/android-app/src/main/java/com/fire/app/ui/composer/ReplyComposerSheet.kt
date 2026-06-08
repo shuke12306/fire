@@ -29,6 +29,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
     private var onReplySubmitted: (() -> Unit)? = null
 
     private lateinit var bodyInput: EditText
+    private lateinit var markdownToolbar: MarkdownToolbarView
     private lateinit var submitButton: TextView
     private lateinit var uploadButton: TextView
     private lateinit var previewButton: TextView
@@ -59,6 +60,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         bodyInput = view.findViewById(R.id.reply_body_input)
+        markdownToolbar = view.findViewById(R.id.reply_markdown_toolbar)
         submitButton = view.findViewById(R.id.reply_submit_button)
         uploadButton = view.findViewById(R.id.reply_upload_button)
         previewButton = view.findViewById(R.id.reply_preview_button)
@@ -85,6 +87,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 sessionStore,
                 viewLifecycleOwner.lifecycleScope,
             )
+            markdownToolbar.bind(bodyInput)
 
             ComposerMentionAssist(
                 input = bodyInput,
@@ -174,6 +177,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
 
     private fun updatePreviewMode() {
         bodyInput.visibility = if (previewMode) View.GONE else View.VISIBLE
+        markdownToolbar.visibility = if (previewMode) View.GONE else View.VISIBLE
         view?.findViewById<LinearLayout>(R.id.reply_mention_suggestions)?.visibility = View.GONE
         previewContainer.visibility = if (previewMode) View.VISIBLE else View.GONE
         previewButton.text = getString(

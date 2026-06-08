@@ -82,6 +82,16 @@
     <string name="composer_uploading_image">Uploading image...</string>
     <string name="composer_upload_error">Unable to upload image.</string>
     <string name="composer_draft_restored">Draft restored.</string>
+    <string name="composer_markdown_bold">Bold</string>
+    <string name="composer_markdown_italic">Italic</string>
+    <string name="composer_markdown_strikethrough">Strikethrough</string>
+    <string name="composer_markdown_inline_code">Inline code</string>
+    <string name="composer_markdown_code_block">Code block</string>
+    <string name="composer_markdown_quote">Quote</string>
+    <string name="composer_markdown_unordered_list">Bulleted list</string>
+    <string name="composer_markdown_ordered_list">Numbered list</string>
+    <string name="composer_markdown_link">Link</string>
+    <string name="composer_markdown_image">Image marker</string>
     <string name="category_notification_select_category">Category Notifications</string>
     <string name="category_notification_title">%1$s Notifications</string>
     <string name="category_notification_category_choice">%1$s - %2$s</string>

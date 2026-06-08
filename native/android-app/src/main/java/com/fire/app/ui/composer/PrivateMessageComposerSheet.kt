@@ -28,6 +28,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
     private lateinit var recipientInput: EditText
     private lateinit var recipientTokens: ChipGroup
     private lateinit var bodyInput: EditText
+    private lateinit var markdownToolbar: MarkdownToolbarView
     private lateinit var submitButton: TextView
     private lateinit var uploadButton: TextView
     private lateinit var previewButton: TextView
@@ -68,6 +69,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
         recipientInput = view.findViewById(R.id.private_message_recipient_input)
         recipientTokens = view.findViewById(R.id.private_message_recipient_tokens)
         bodyInput = view.findViewById(R.id.private_message_body_input)
+        markdownToolbar = view.findViewById(R.id.private_message_markdown_toolbar)
         submitButton = view.findViewById(R.id.private_message_submit_button)
         uploadButton = view.findViewById(R.id.private_message_upload_button)
         previewButton = view.findViewById(R.id.private_message_preview_button)
@@ -95,6 +97,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                 sessionStore,
                 viewLifecycleOwner.lifecycleScope,
             )
+            markdownToolbar.bind(bodyInput)
 
             ComposerRecipientAssist(
                 input = recipientInput,
@@ -242,6 +245,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
         recipientTokens.visibility = if (previewMode || recipientValues().isEmpty()) View.GONE else View.VISIBLE
         titleInput.visibility = editorVisibility
         bodyInput.visibility = editorVisibility
+        markdownToolbar.visibility = editorVisibility
         view?.findViewById<LinearLayout>(R.id.private_message_recipient_suggestions)?.visibility = View.GONE
         view?.findViewById<LinearLayout>(R.id.private_message_mention_suggestions)?.visibility = View.GONE
         previewContainer.visibility = if (previewMode) View.VISIBLE else View.GONE

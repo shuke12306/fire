@@ -134,4 +134,37 @@ final class FireComposerValidationTests: XCTestCase {
             ["swift", "ios"]
         )
     }
+
+    func testMarkdownInsertionWrapsSelectedText() {
+        let result = FireMarkdownInsertion.apply(
+            .bold,
+            text: "hello world",
+            selectedRange: NSRange(location: 6, length: 5)
+        )
+
+        XCTAssertEqual(result.text, "hello **world**")
+        XCTAssertEqual(result.selectedRange, NSRange(location: 8, length: 5))
+    }
+
+    func testMarkdownInsertionCreatesOrderedListAcrossSelectedLines() {
+        let result = FireMarkdownInsertion.apply(
+            .orderedList,
+            text: "one\ntwo",
+            selectedRange: NSRange(location: 0, length: 7)
+        )
+
+        XCTAssertEqual(result.text, "1. one\n2. two")
+        XCTAssertEqual(result.selectedRange, NSRange(location: 0, length: 13))
+    }
+
+    func testMarkdownInsertionKeepsCursorInsideLinkPlaceholder() {
+        let result = FireMarkdownInsertion.apply(
+            .link,
+            text: "",
+            selectedRange: NSRange(location: 0, length: 0)
+        )
+
+        XCTAssertEqual(result.text, "[text](url)")
+        XCTAssertEqual(result.selectedRange, NSRange(location: 1, length: 4))
+    }
 }

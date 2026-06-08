@@ -23,10 +23,10 @@ the shared Rust core at build time.
   Android host still refreshes the active Paging source rather than merging
   `topic_ids` rows in place. New Topic opens `TopicComposerSheet`; successful
   creation opens the native topic detail screen. Topic compose supports Rust-backed tag
-  suggestions, `@mention` suggestions, image upload insertion, and shared Rust
-  draft restore/autosave/delete, and local Markdown preview with upload-image
-  preview. Empty initial Paging loads render topic-row skeletons in the list area
-  instead of a separate blocking spinner.
+  suggestions, `@mention` suggestions, image upload insertion, selection-aware
+  Markdown formatting, shared Rust draft restore/autosave/delete, and local
+  Markdown preview with upload-image preview. Empty initial Paging loads render
+  topic-row skeletons in the list area instead of a separate blocking spinner.
 - `SearchFragment` is a Navigation destination reachable from Home. It calls
   Rust search APIs for all/topic/post/user scopes, renders labeled result
   sections, loads additional full-page results while scrolling, and routes
@@ -51,8 +51,8 @@ the shared Rust core at build time.
   inbox/sent switching plus a New Message action. Public-profile compose
   pre-fills the target user; mailbox compose accepts searched usernames,
   multiple recipients with token chips, body `@mention` suggestions, image
-  upload insertion, shared Rust draft restore/autosave/delete, and local
-  Markdown preview with upload-image preview.
+  upload insertion, selection-aware Markdown formatting, shared Rust draft
+  restore/autosave/delete, and local Markdown preview with upload-image preview.
 - `TopicDetailActivity` is still the authoritative Android topic detail surface.
   It is intentionally a dedicated activity outside the main tab `NavHost`.
 
@@ -100,8 +100,9 @@ images that were not represented by render-tree image blocks instead of parsing
 Current topic-detail interactions:
 
 - topic-level reply FAB through `ReplyComposerSheet`, with `@mention`
-  suggestions, image upload insertion, shared Rust draft restore/autosave/delete,
-  and local Markdown preview with upload-image preview
+  suggestions, image upload insertion, selection-aware Markdown formatting,
+  shared Rust draft restore/autosave/delete, and local Markdown preview with
+  upload-image preview
 - per-post reply from the post row
 - per-post heart like/unlike through shared Rust interaction APIs
 - per-post custom reaction selection from Rust bootstrap-enabled reactions

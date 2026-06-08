@@ -32,9 +32,8 @@
 | Create | `App/Views/Profile/FireCDKView.swift` | CDK 连接页 |
 | Create | `App/Views/FireConnectStatsView.swift` | Connect 统计页 |
 | Modify | `App/TopicDetail/` | 原生 runtime 话题详情视图模式切换 |
-| Create | `App/Core/FireMarkdownToolbar.swift` | Markdown 格式化工具栏 |
-| Modify | `App/Views/FireComposerView.swift` | 集成工具栏和引用插入 |
-| Modify | `App/Views/FirePostEditorView.swift` | 升级为 FireComposerTextView |
+| Modify | `App/Views/Composer/FireComposerView.swift` | 集成 Markdown 工具栏和引用插入 |
+| Modify | `App/Views/Composer/FirePostEditorView.swift` | 升级为 FireComposerTextView |
 | Modify | `App/TopicDetail/` 相关文件 | 话题通知级别 UI、话题内搜索 |
 
 ### Android Changes
@@ -403,86 +402,69 @@ git commit -m "feat(android): add threaded view mode for topic detail"
 ## Task 8: 编辑器增强 — Markdown 工具栏
 
 **Files:**
-- Create: `native/ios-app/App/Core/FireMarkdownToolbar.swift`
+- Modify: `native/ios-app/App/Views/Composer/FireComposerView.swift`
+- Modify: `native/ios-app/App/Views/Composer/FirePostEditorView.swift`
+- Modify: `native/ios-app/Tests/Unit/FireComposerValidationTests.swift`
 - Create: `native/android-app/src/main/java/com/fire/app/ui/composer/MarkdownToolbarView.kt`
-- Modify: `native/ios-app/App/Views/FireComposerView.swift`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/composer/ComposerAssist.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/composer/ReplyComposerSheet.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/composer/TopicComposerSheet.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/composer/PrivateMessageComposerSheet.kt`
+- Modify: Android composer sheet layouts/resources/tests
 
-- [ ] **Step 1: iOS Markdown 工具栏组件**
+- [x] **Step 1: iOS Markdown 工具栏组件**
 
-```swift
-import SwiftUI
+Implemented in the already-compiled composer source to avoid mixing this task
+with the unrelated dirty `Fire.xcodeproj/project.pbxproj` state. The reusable
+`FireMarkdownToolbar` and `FireMarkdownInsertion` model support bold, italic,
+strikethrough, inline code, code block, quote, unordered list, ordered list,
+link, and image marker actions.
 
-struct FireMarkdownToolbar: View {
-    let onInsert: (String) -> Void
+- [x] **Step 2: 集成到 FireComposerView / FirePostEditorView**
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                toolbarButton("B", bold: true) { onInsert("**") }
-                toolbarButton("I", italic: true) { onInsert("*") }
-                toolbarButton("S", strikethrough: true) { onInsert("~~") }
-                toolbarButton("<>", systemImage: "chevron.left.forwardslash.chevron.right") { onInsert("`") }
-                toolbarButton("```", systemImage: "text.append") { onInsert("```\n") }
-                toolbarButton("Quote", systemImage: "text.quote") { onInsert("> ") }
-                toolbarButton("UL", systemImage: "list.bullet") { onInsert("- ") }
-                toolbarButton("OL", systemImage: "list.number") { onInsert("1. ") }
-                toolbarButton("Link", systemImage: "link") { onInsert("[") }
-                toolbarButton("Image", systemImage: "photo") { onInsert("![") }
-            }
-            .padding(.horizontal, 8)
-        }
-        .frame(height: 40)
-        .background(FireTheme.chrome)
-    }
+`FireComposerView` and `FirePostEditorView` now share the `FireComposerTextView`
+selection-binding path. Formatting wraps selected text, inserts paired markers
+at the cursor when there is no selection, and keeps focus/selection in the text
+view. This also completes the planned PostEditorView text editor upgrade without
+introducing a second edit path.
 
-    private func toolbarButton(
-        _ title: String? = nil,
-        bold: Bool = false,
-        italic: Bool = false,
-        strikethrough: Bool = false,
-        systemImage: String? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Group {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                } else if let title {
-                    Text(title)
-                        .font(.system(size: 14, weight: bold ? .bold : (italic ? .medium : .regular)))
-                        .strikethrough(strikethrough)
-                }
-            }
-            .frame(width: 36, height: 36)
-            .foregroundStyle(FireTheme.ink)
-        }
-        .accessibilityLabel(title ?? systemImage ?? "")
-    }
-}
+- [x] **Step 3: Android Markdown 工具栏**
+
+`MarkdownToolbarView.kt` provides the horizontal formatting toolbar and binds to
+the target body `EditText`. `ComposerAssist.kt` owns the pure
+`MarkdownInsertion` helper plus the `EditText` adapter. The toolbar is integrated
+into `ReplyComposerSheet`, `TopicComposerSheet`, and
+`PrivateMessageComposerSheet`, and is hidden with the editor while preview mode
+is active.
+
+- [x] **Step 4: 构建验证（两端）**
+
+Focused tests already passed:
+
+```bash
+cd native/ios-app
+xcodebuild test -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -only-testing:FireTests/FireComposerValidationTests -quiet
+
+cd native/android-app
+./gradlew testDebugUnitTest --tests com.fire.app.ui.composer.MarkdownInsertionTest
 ```
 
-- [ ] **Step 2: 集成到 FireComposerView**
+Final build commands:
 
-在键盘上方（`inputAccessoryView` 位置）添加 `FireMarkdownToolbar`。
+```bash
+cd native/ios-app
+xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet
 
-`onInsert` 回调需要在 `UITextView` 的当前光标位置插入 Markdown 标记。
+cd native/android-app
+./gradlew assembleDebug
+```
 
-- [ ] **Step 3: Android Markdown 工具栏**
-
-创建 `MarkdownToolbarView.kt`：水平 LinearLayout 内的格式化按钮组。
-
-集成到 `ReplyComposerSheet`、`TopicComposerSheet`、`PrivateMessageComposerSheet`。
-
-- [ ] **Step 4: 构建验证（两端）**
-
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Run: `cd native/android-app && ./gradlew assembleDebug 2>&1 | tail -5`
-Expected: Both BUILD SUCCEEDED
+Result: focused tests and both final build commands completed successfully.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ios-app/App/Core/FireMarkdownToolbar.swift native/ios-app/App/Views/FireComposerView.swift native/android-app/src/main/java/com/fire/app/ui/composer/MarkdownToolbarView.kt native/android-app/src/main/java/com/fire/app/ui/composer/
+git add docs/superpowers/plans/2026-06-08-p2-feature-completion.md native/ios-app/README.md native/ios-app/App/Views/Composer/FireComposerView.swift native/ios-app/App/Views/Composer/FirePostEditorView.swift native/ios-app/Tests/Unit/FireComposerValidationTests.swift native/android-app/README.md native/android-app/src/main/java/com/fire/app/ui/composer/ComposerAssist.kt native/android-app/src/main/java/com/fire/app/ui/composer/MarkdownToolbarView.kt native/android-app/src/main/java/com/fire/app/ui/composer/ReplyComposerSheet.kt native/android-app/src/main/java/com/fire/app/ui/composer/TopicComposerSheet.kt native/android-app/src/main/java/com/fire/app/ui/composer/PrivateMessageComposerSheet.kt native/android-app/src/main/res/layout/sheet_reply_composer.xml native/android-app/src/main/res/layout/sheet_topic_composer.xml native/android-app/src/main/res/layout/sheet_private_message_composer.xml native/android-app/src/main/res/values/strings.xml native/android-app/src/test/java/com/fire/app/ui/composer/MarkdownInsertionTest.kt
 git commit -m "feat(composer): add Markdown formatting toolbar for iOS and Android"
 ```
 
@@ -531,29 +513,34 @@ git commit -m "feat(composer): add quote insertion from topic detail posts"
 ## Task 10: 编辑器增强 — PostEditorView 升级
 
 **Files:**
-- Modify: `native/ios-app/App/Views/FirePostEditorView.swift`
+- Modify: `native/ios-app/App/Views/Composer/FirePostEditorView.swift`
 
-- [ ] **Step 1: 替换基础 TextEditor**
+- [x] **Step 1: 替换基础 TextEditor**
 
-将 `FirePostEditorView` 中的 SwiftUI `TextEditor` 替换为 `FireComposerTextView`（UITextView 包装），与主编辑器保持一致的编辑体验。
+Completed as part of Task 8 to keep Markdown formatting on one authoritative
+iOS text editing path. `FirePostEditorView` now uses `FireComposerTextView` with
+selection binding and `FireMarkdownToolbar`.
 
-包含：
-- `FireMarkdownToolbar` 集成
-- 自动保存
-- 预览模式
-- 图片上传支持
+Post edit remains intentionally narrower than full composer flows: it does not
+add draft autosave, preview mode, or image upload in this task because the
+existing post-edit API requires server-provided raw text and a direct save
+mutation path.
 
-- [ ] **Step 2: 构建验证**
+- [x] **Step 2: 构建验证**
 
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Expected: `** BUILD SUCCEEDED **`
-
-- [ ] **Step 3: Commit**
+Run:
 
 ```bash
-git add native/ios-app/App/Views/FirePostEditorView.swift
-git commit -m "refactor(ios): upgrade PostEditorView to use FireComposerTextView"
+cd native/ios-app
+xcodebuild test -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -only-testing:FireTests/FireComposerValidationTests -quiet
+xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet
 ```
+
+Result: both commands completed successfully.
+
+- [x] **Step 3: Commit**
+
+Included in `feat(composer): add Markdown formatting toolbar for iOS and Android`.
 
 ---
 

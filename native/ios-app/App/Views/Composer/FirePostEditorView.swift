@@ -9,6 +9,8 @@ struct FirePostEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rawText = ""
+    @State private var rawTextSelection = NSRange(location: 0, length: 0)
+    @State private var isRawTextFocused = false
     @State private var editReason = ""
     @State private var isLoading = false
     @State private var isSaving = false
@@ -45,9 +47,22 @@ struct FirePostEditorView: View {
                         Spacer()
                     }
                 } else {
-                    TextEditor(text: $rawText)
+                    FireMarkdownToolbar(onFormat: applyMarkdownFormat)
+
+                    FireComposerTextView(
+                        text: $rawText,
+                        selectedRange: $rawTextSelection,
+                        isFirstResponder: $isRawTextFocused
+                    )
                         .frame(minHeight: 280)
-                        .font(.body)
+                        .background(
+                            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                                .fill(FireTheme.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                                .strokeBorder(FireTheme.divider, lineWidth: 1)
+                        )
                 }
             }
 
@@ -86,6 +101,7 @@ struct FirePostEditorView: View {
             if let raw = post.raw,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 rawText = raw
+                rawTextSelection = NSRange(location: (raw as NSString).length, length: 0)
                 errorMessage = nil
             } else {
                 errorMessage = "服务端未返回可编辑原文，无法打开编辑器"
@@ -93,6 +109,17 @@ struct FirePostEditorView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func applyMarkdownFormat(_ action: FireMarkdownFormatAction) {
+        let result = FireMarkdownInsertion.apply(
+            action,
+            text: rawText,
+            selectedRange: rawTextSelection
+        )
+        rawText = result.text
+        rawTextSelection = result.selectedRange
+        isRawTextFocused = true
     }
 
     private func save() async {
