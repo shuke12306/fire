@@ -39,6 +39,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - persists the latest Rust session snapshot as a full `Application Support/Fire/session.json`; routine internal write paths mirror `session.json` and Keychain only when the corresponding Rust revision changes, while explicit `persistCurrentSession()` force-refreshes both from the current snapshot
   - lets Rust initialize shared logs under `Application Support/Fire/logs`
   - wraps `syncLoginContext`, async `refreshBootstrap`, async `refreshCsrfToken`, async topic fetches including `fetchTopicAiSummary`, and async logout
+  - wraps the Rust-owned LDC/CDK OAuth handle surface for profile screens: authorization URL, approval-link extraction, approve redirect, callback, user-info refresh, and logout
 - `Sources/FireAppSession/APM/*`
   - owns the beta-phase iOS crash/APM runtime
   - installs `PLCrashReporter` at launch, harvests pending crash reports on next cold start, and persists raw `.plcrash` payloads under `Application Support/Fire/ios-apm/crashes`
@@ -102,6 +103,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - now attempts a single-flight host cookie resync on passive reads (home feed, topic detail): if the WebKit cookie store has already rotated `_t` / `_forum_session` past the shared Rust epoch, the resync rotates the shared session in place and the read retries once; otherwise the original request failure is surfaced unchanged
   - now probes login sync readiness from the embedded `WKWebView` and keeps the `完成登录` button disabled until the shared login prerequisites are actually satisfied
   - now also emits host-owned APM spans for cold-start restore, login sync, bootstrap refresh, latest-feed load, topic-detail load, reply submit, notification refresh, and MessageBus start
+  - now forwards LDC/CDK profile commands through `FireSessionStore`, keeping OAuth API orchestration in Rust while the profile views own only native UI state
 - `App/FireMessageBusCoordinator.swift`
   - buffers and coalesces foreground MessageBus bursts before MainActor delivery so topic/detail/notification spikes no longer spawn one task per event on iOS
 - `App/Stores/FireHomeFeedStore.swift`

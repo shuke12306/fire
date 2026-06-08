@@ -28,8 +28,8 @@
 
 | Action | Path | Responsibility |
 |--------|------|----------------|
-| Create | `App/Views/FireLDCView.swift` | LDC 信用主页 |
-| Create | `App/Views/FireCDKView.swift` | CDK 连接页 |
+| Create | `App/Views/Profile/FireLDCView.swift` | LDC 信用主页 |
+| Create | `App/Views/Profile/FireCDKView.swift` | CDK 连接页 |
 | Create | `App/Views/FireConnectStatsView.swift` | Connect 统计页 |
 | Create | `App/Views/FireThreadedView.swift` | 线程视图 |
 | Create | `App/Core/FireMarkdownToolbar.swift` | Markdown 格式化工具栏 |
@@ -219,81 +219,50 @@ git commit -m "feat(uniffi): add LDC/CDK handle and FFI bridge"
 ## Task 4: LDC/CDK — iOS UI
 
 **Files:**
-- Create: `native/ios-app/App/Views/FireLDCView.swift`
-- Create: `native/ios-app/App/Views/FireCDKView.swift`
-- Modify: `native/ios-app/App/Views/FireProfileView.swift` (添加入口)
+- Create: `native/ios-app/App/Views/Profile/FireLDCView.swift`
+- Create: `native/ios-app/App/Views/Profile/FireCDKView.swift`
+- Modify: `native/ios-app/App/Views/Profile/FireProfileView.swift` (添加入口)
+- Modify: `native/ios-app/App/ViewModels/FireAppViewModel.swift` (透传 LDC/CDK calls)
+- Modify: `native/ios-app/Sources/FireAppSession/FireSessionStore.swift` (唯一 Rust bridge)
+- Modify: `native/ios-app/Fire.xcodeproj/project.pbxproj` (注册新 Swift sources)
 
-- [ ] **Step 1: 创建 LDC 信用视图**
+- [x] **Step 1: 创建 LDC 信用视图**
 
-`FireLDCView.swift`：
+`FireLDCView` lives in the existing profile SwiftUI surface and uses the shared `FireTheme`, `FireMetricTile`, `FireKeyValueRow`, and `FireErrorBanner` components. It loads `ldcUserInfo()` through `FireAppViewModel`, showing available/community balances, receive/payment/transfer/community totals, quota, pay score/level, pay-key/admin flags, daily limit, and optional gamification score.
 
-```swift
-import SwiftUI
+No LDC payment-history list is present yet because neither `docs/knowledge/api/13-ldc-cdk-oauth.md` nor the read-only FluxDo reference exposes a payment-history endpoint. The implemented UI displays the documented `user-info` balance/aggregate fields rather than adding an undocumented secondary API path.
 
-struct FireLDCView: View {
-    @State private var userInfo: LdcUserInfoState?
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+- [x] **Step 2: 创建 CDK 连接视图**
 
-    var body: some View {
-        List {
-            if let info = userInfo {
-                Section {
-                    HStack {
-                        Text("余额")
-                            .font(FireTheme.tertiaryInk)
-                        Spacer()
-                        Text(info.balance)
-                            .font(.title2.bold())
-                            .foregroundStyle(FireTheme.accent)
-                    }
-                    // total_earned, total_paid, pending_balance
-                } header: {
-                    Text("账户概览")
-                }
+`FireCDKView` mirrors the LDC authorization surface while using `CdkUserInfoState`: identity, trust level, and CDK score. CDK intentionally does not reuse LDC balance/payment fields.
 
-                Section {
-                    // 支付记录列表 (payments)
-                } header: {
-                    Text("交易记录")
-                }
-            }
-        }
-        .task { await loadUserInfo() }
-        .navigationTitle("LDC 信用")
-    }
+- [x] **Step 3: 在 Profile 中添加入口**
 
-    private func loadUserInfo() async {
-        // 调用 Rust core -> LdcHandle.user_info()
-    }
-}
-```
+`FireProfileView` adds two profile shortcuts:
+- `LDC 信用` (`creditcard.fill`) pushes `FireLDCView(viewModel:)`.
+- `CDK 连接` (`key.fill`) pushes `FireCDKView(viewModel:)`.
 
-- [ ] **Step 2: 创建 CDK 连接视图**
+- [x] **Step 4: 接入授权/登出流程**
 
-`FireCDKView.swift`：显示绑定状态、授权按钮、用户信息。
+The iOS session facade now exposes the full UniFFI LDC/CDK handle surface:
+- authorization URL fetch
+- approval-page link extraction
+- approve redirect
+- callback POST
+- user-info refresh
+- logout
 
-- [ ] **Step 3: 在 Profile 中添加入口**
+The views run the approval/callback sequence from explicit user actions and never own cookies, WebView login, or credential persistence; those remain platform-owned browser/session concerns and Rust-owned API orchestration as required by the architecture split.
 
-在 `FireProfileView` 的 sections 中添加：
+- [x] **Step 5: 构建验证**
 
-```swift
-NavigationLink {
-    FireLDCView()
-} label: {
-    Label("LDC 信用", systemImage: "creditcard")
-}
-```
-
-- [ ] **Step 4: 构建验证**
-
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
+Run: `cd native/ios-app && xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet`
 Expected: `** BUILD SUCCEEDED **`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-git add native/ios-app/App/Views/FireLDCView.swift native/ios-app/App/Views/FireCDKView.swift native/ios-app/App/Views/FireProfileView.swift
+git add native/ios-app/App/Views/Profile/FireLDCView.swift native/ios-app/App/Views/Profile/FireCDKView.swift native/ios-app/App/Views/Profile/FireProfileView.swift native/ios-app/App/ViewModels/FireAppViewModel.swift native/ios-app/Sources/FireAppSession/FireSessionStore.swift native/ios-app/Fire.xcodeproj/project.pbxproj
 git commit -m "feat(ios): add LDC Credit and CDK connection views"
 ```
 
@@ -311,12 +280,12 @@ git commit -m "feat(ios): add LDC Credit and CDK connection views"
 - [ ] **Step 1: 创建 LDC ViewModel 和 Fragment**
 
 遵循 Android MVVM 模式（参考 `HomeViewModel` + `HomeFragment`）：
-- `LDCViewModel`: `StateFlow<LdcUserInfoState?>`, `loadUserInfo()`, `loadPayments()`
-- `LDCFragment`: 余额展示 + 交易记录列表 + 空状态/加载状态
+- `LDCViewModel`: `StateFlow<LdcUserInfoState?>`, authorization state, `loadUserInfo()`, `prepareAuthorization()`, `completeAuthorization()`, `logout()`
+- `LDCFragment`: 余额/信用指标展示 + 授权/登出操作 + 空状态/加载状态
 
 - [ ] **Step 2: 布局和导航**
 
-`fragment_ldc.xml`：余额卡片 + 交易记录 RecyclerView。
+`fragment_ldc.xml`：余额卡片、信用指标、授权/登出操作。
 导航图添加 `ldcFragment`。
 Profile 中添加入口。
 

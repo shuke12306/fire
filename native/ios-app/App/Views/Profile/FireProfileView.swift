@@ -70,6 +70,14 @@ struct FireProfileView: View {
         "生成和整理待使用的邀请码链接。"
     }
 
+    private var ldcSubtitle: String {
+        "查看 LDC 信用余额、配额和支付等级。"
+    }
+
+    private var cdkSubtitle: String {
+        "查看 CDK 连接状态和积分。"
+    }
+
     private var followingSubtitle: String {
         "当前关注 \(formatNumber(profileViewModel.profile?.totalFollowing ?? 0)) 位用户。"
     }
@@ -208,6 +216,28 @@ struct FireProfileView: View {
                             tint: .green,
                             title: "邀请链接",
                             subtitle: inviteSubtitle
+                        )
+                    }
+
+                    NavigationLink {
+                        FireLDCView(viewModel: viewModel)
+                    } label: {
+                        shortcutRowContent(
+                            icon: "creditcard.fill",
+                            tint: .teal,
+                            title: "LDC 信用",
+                            subtitle: ldcSubtitle
+                        )
+                    }
+
+                    NavigationLink {
+                        FireCDKView(viewModel: viewModel)
+                    } label: {
+                        shortcutRowContent(
+                            icon: "key.fill",
+                            tint: .purple,
+                            title: "CDK 连接",
+                            subtitle: cdkSubtitle
                         )
                     }
 

@@ -2004,4 +2004,64 @@ final class FireAppViewModel: ObservableObject {
         let sessionStore = try await sessionStoreValue()
         return try await sessionStore.fetchBadgeDetail(badgeID: badgeID)
     }
+
+    func ldcAuthorizationUrl() async throws -> LdcAuthorizationUrlState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.ldcAuthorizationUrl()
+    }
+
+    func ldcApprovalLink(authorizationURL: String) async throws -> String {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.ldcApprovalLink(authorizationURL: authorizationURL)
+    }
+
+    func ldcApprove(approvePath: String) async throws -> LdcApprovalStatusState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.ldcApprove(approvePath: approvePath)
+    }
+
+    func ldcCallback(code: String, state: String) async throws {
+        let sessionStore = try await sessionStoreValue()
+        try await sessionStore.ldcCallback(code: code, state: state)
+    }
+
+    func ldcUserInfo() async throws -> LdcUserInfoState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.ldcUserInfo()
+    }
+
+    func ldcLogout() async throws {
+        let sessionStore = try await sessionStoreValue()
+        try await sessionStore.ldcLogout()
+    }
+
+    func cdkAuthorizationUrl() async throws -> CdkAuthorizationUrlState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.cdkAuthorizationUrl()
+    }
+
+    func cdkApprovalLink(authorizationURL: String) async throws -> String {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.cdkApprovalLink(authorizationURL: authorizationURL)
+    }
+
+    func cdkApprove(approvePath: String) async throws -> LdcApprovalStatusState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.cdkApprove(approvePath: approvePath)
+    }
+
+    func cdkCallback(code: String, state: String) async throws {
+        let sessionStore = try await sessionStoreValue()
+        try await sessionStore.cdkCallback(code: code, state: state)
+    }
+
+    func cdkUserInfo() async throws -> CdkUserInfoState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.cdkUserInfo()
+    }
+
+    func cdkLogout() async throws {
+        let sessionStore = try await sessionStoreValue()
+        try await sessionStore.cdkLogout()
+    }
 }
