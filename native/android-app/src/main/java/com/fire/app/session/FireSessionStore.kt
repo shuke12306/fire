@@ -53,6 +53,8 @@ import uniffi.fire_uniffi_topics.TopicDetailSourceSnapshotState
 import uniffi.fire_uniffi_topics.LoadMoreTopicPostsQueryState
 import uniffi.fire_uniffi_topics.TopicListQueryState
 import uniffi.fire_uniffi_topics.TopicLoadMoreOutcomeState
+import uniffi.fire_uniffi_topics.TopicTimingEntryState
+import uniffi.fire_uniffi_topics.TopicTimingsRequestState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.TopicReplyRequestState
 import uniffi.fire_uniffi_topics.TopicUpdateRequestState
@@ -561,6 +563,38 @@ class FireSessionStore(
 
     suspend fun fetchTopicVoters(topicId: ULong): List<VotedUserState> = withContext(Dispatchers.IO) {
         core.topics().fetchTopicVoters(topicId)
+    }
+
+    suspend fun reportTopicTimings(
+        topicId: ULong,
+        topicTimeMs: UInt,
+        timings: Map<UInt, UInt>,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (topicId == 0uL || topicTimeMs == 0u) {
+            return@withContext true
+        }
+        val timingEntries = timings
+            .asSequence()
+            .filter { (postNumber, milliseconds) -> postNumber > 0u && milliseconds > 0u }
+            .sortedBy { (postNumber, _) -> postNumber }
+            .map { (postNumber, milliseconds) ->
+                TopicTimingEntryState(
+                    postNumber = postNumber,
+                    milliseconds = milliseconds,
+                )
+            }
+            .toList()
+        if (timingEntries.isEmpty()) {
+            return@withContext true
+        }
+
+        core.topics().reportTopicTimings(
+            TopicTimingsRequestState(
+                topicId = topicId,
+                topicTimeMs = topicTimeMs,
+                timings = timingEntries,
+            ),
+        )
     }
 
     suspend fun deletePost(postId: ULong) = withContext(Dispatchers.IO) {

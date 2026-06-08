@@ -2,6 +2,7 @@ package com.fire.app.ui.topicdetail
 
 import android.util.LruCache
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fire.app.TopicPresentation
 import com.fire.app.core.error.FireErrorReporter
@@ -850,6 +851,18 @@ class TopicDetailViewModel(
             val messageBusCoordinator = FireMessageBusCoordinator(sessionStore)
             return TopicDetailViewModel(topicRepo, sessionStore, messageBusCoordinator)
         }
+    }
+}
+
+class TopicDetailViewModelFactory(
+    private val sessionStore: FireSessionStore,
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(TopicDetailViewModel::class.java)) {
+            return TopicDetailViewModel.create(sessionStore) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
 

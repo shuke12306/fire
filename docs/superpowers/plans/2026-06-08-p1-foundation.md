@@ -132,7 +132,7 @@ git commit -m "refactor(ios): unify corner radius and background tokens across F
 Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
 Expected: `** BUILD SUCCEEDED **`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add native/ios-app/App/Views/FireFilteredTopicListView.swift
@@ -1258,79 +1258,29 @@ git commit -m "feat(android): add full-page notification history with grouped se
 
 **Files:**
 - Create: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicTimingTracker.kt`
+- Create: `native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicTimingTrackerTest.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/FireApplication.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt`
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt`
 
-- [ ] **Step 1: 创建 TopicTimingTracker**
+- [x] **Step 1: 创建 TopicTimingTracker**
 
-```kotlin
-package com.fire.app.ui.topicdetail
+Implemented `TopicTimingTracker` with one-second ticks, 60-second flushes, idle pause handling, per-post timing caps, rejected-report backoff, scene active/inactive control, and deterministic clock/dispatcher injection for JVM tests.
 
-import com.fire.app.session.FireSessionStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+- [x] **Step 2: 集成到 TopicDetailActivity / FireSessionStore**
 
-class TopicTimingTracker(
-    private val sessionStore: FireSessionStore,
-    private val scope: CoroutineScope,
-) {
-    private val timings = mutableMapOf<UInt, UInt>()
-    private var flushJob: Job? = null
-    private var topicId: ULong = 0u
+`TopicDetailActivity` now owns native visible-row collection from the `RecyclerView` lifecycle and reports through `FireSessionStore.reportTopicTimings(...)` into the Rust UniFFI `/topics/timings` API. `TopicDetailViewModel` is now provider-backed so its existing `onCleared()` cleanup reliably releases topic MessageBus subscriptions.
 
-    fun startTracking(topicId: ULong) {
-        this.topicId = topicId
-        timings.clear()
-        scheduleFlush()
-    }
+- [x] **Step 3: 构建验证**
 
-    fun recordVisiblePost(postNumber: UInt, durationMs: Long) {
-        val current = timings[postNumber] ?: 0u
-        timings[postNumber] = current + durationMs.toUInt().coerceAtMost(5000u)
-    }
-
-    fun stopTracking() {
-        flushJob?.cancel()
-        flushTimings()
-    }
-
-    private fun scheduleFlush() {
-        flushJob?.cancel()
-        flushJob = scope.launch(Dispatchers.IO) {
-            while (true) {
-                delay(5_000)
-                flushTimings()
-            }
-        }
-    }
-
-    private fun flushTimings() {
-        if (timings.isEmpty() || topicId == 0u) return
-        val toFlush = timings.toMap()
-        timings.clear()
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                sessionStore.reportTopicTimings(topicId, toFlush)
-            }
-        }
-    }
-}
-```
-
-- [ ] **Step 2: 集成到 TopicDetailViewModel**
-
-在 `TopicDetailViewModel` 中初始化 `TopicTimingTracker`，当帖子可见时调用 `recordVisiblePost`，在 `onCleared` 中调用 `stopTracking`。
-
-- [ ] **Step 3: 构建验证**
-
-Run: `cd native/android-app && ./gradlew assembleDebug 2>&1 | tail -5`
-Expected: `BUILD SUCCESSFUL`
+Verified:
+- `cd native/android-app && ./gradlew testDebugUnitTest --tests com.fire.app.ui.topicdetail.TopicTimingTrackerTest`
+- `cd native/android-app && ./gradlew assembleDebug`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicTimingTracker.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt
+git add native/android-app/src/main/java/com/fire/app/FireApplication.kt native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicTimingTracker.kt native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicTimingTrackerTest.kt docs/superpowers/plans/2026-06-08-p1-foundation.md
 git commit -m "feat(android): add topic timing tracker for read time reporting"
 ```

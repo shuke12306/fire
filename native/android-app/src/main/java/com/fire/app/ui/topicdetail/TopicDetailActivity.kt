@@ -15,6 +15,7 @@ import android.widget.Toast
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.text.HtmlCompat
@@ -25,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.fire.app.FireApplication
 import com.fire.app.R
 import com.fire.app.displayName
 import com.fire.app.databinding.ActivityTopicDetailBinding
@@ -71,6 +73,11 @@ class TopicDetailActivity : AppCompatActivity() {
     private var loadMorePostsPosted = false
     private var pendingScrollTargetPostNumber: UInt? = null
     private var enabledReactionIds: List<String> = emptyList()
+    private var timingTracker: TopicTimingTracker? = null
+    private val appScope by lazy { FireApplication.applicationScope() }
+    private val viewModelDelegate: TopicDetailViewModel by viewModels {
+        TopicDetailViewModelFactory(sessionStore)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,7 +107,16 @@ class TopicDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             sessionStore = FireSessionStoreRepository.get(this@TopicDetailActivity)
-            viewModel = TopicDetailViewModel.create(sessionStore)
+            viewModel = viewModelDelegate
+            timingTracker = TopicTimingTracker(
+                topicId = parsedRoute.topicId.toULong(),
+                scope = appScope,
+                reporter = { topicId, topicTimeMs, timings ->
+                    sessionStore.reportTopicTimings(topicId, topicTimeMs, timings)
+                },
+            ).also { tracker ->
+                tracker.start()
+            }
 
             val postCallbacks = PostRowCallbacks(
                 reactionIds = { enabledReactionIds },
@@ -138,6 +154,9 @@ class TopicDetailActivity : AppCompatActivity() {
 
             recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                    timingTracker?.recordInteraction()
+                    updateVisiblePostTimings()
+
                     val layoutManager = rv.layoutManager as? LinearLayoutManager ?: return
                     val totalItemCount = layoutManager.itemCount
                     val lastVisible = layoutManager.findLastVisibleItemPosition()
@@ -151,6 +170,9 @@ class TopicDetailActivity : AppCompatActivity() {
                     val isIdle = newState == RecyclerView.SCROLL_STATE_IDLE
                     headerAdapter.setBoostAnimationsEnabled(isIdle)
                     postListAdapter.setBoostAnimationsEnabled(isIdle)
+                    if (!isIdle) {
+                        timingTracker?.recordInteraction()
+                    }
                     viewModel?.setTopicDetailScrollInteractionActive(
                         !isIdle
                     )
@@ -169,6 +191,25 @@ class TopicDetailActivity : AppCompatActivity() {
 
             loadRoute(parsedRoute)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        timingTracker?.setSceneActive(true)
+        updateVisiblePostTimings()
+    }
+
+    override fun onPause() {
+        updateVisiblePostTimings()
+        timingTracker?.setSceneActive(false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        timingTracker?.stop()
+        timingTracker = null
+        viewModel = null
+        super.onDestroy()
     }
 
     private fun observeViewModel() {
@@ -198,6 +239,7 @@ class TopicDetailActivity : AppCompatActivity() {
                     HomeTopicDetailPatchRepository.publish(detail)
                     binding.topicDetailToolbar.title = detail.title.trim()
                 }
+                updateVisiblePostTimings()
             }
         }
 
@@ -222,6 +264,7 @@ class TopicDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             vm.postRows.collectLatest { rows ->
                 postListAdapter.submitList(rows) {
+                    updateVisiblePostTimings()
                     pendingScrollTargetPostNumber?.let { scrollToPostNumber(it) }
                 }
             }
@@ -1248,6 +1291,39 @@ class TopicDetailActivity : AppCompatActivity() {
             loadMorePostsPosted = false
             viewModel?.loadMorePosts()
         }
+    }
+
+    private fun updateVisiblePostTimings() {
+        val tracker = timingTracker ?: return
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+        if (firstVisible == RecyclerView.NO_POSITION || lastVisible == RecyclerView.NO_POSITION) {
+            tracker.updateVisiblePostNumbers(emptySet())
+            return
+        }
+
+        val visiblePostNumbers = buildSet {
+            for (adapterPosition in firstVisible..lastVisible) {
+                visiblePostNumberForAdapterPosition(adapterPosition)?.let(::add)
+            }
+        }
+        if (visiblePostNumbers.isNotEmpty()) {
+            tracker.recordInteraction()
+        }
+        tracker.updateVisiblePostNumbers(visiblePostNumbers)
+    }
+
+    private fun visiblePostNumberForAdapterPosition(adapterPosition: Int): UInt? {
+        if (adapterPosition < 0) return null
+        if (adapterPosition < headerAdapter.itemCount) {
+            return viewModel?.detail?.value?.postStream?.posts
+                ?.minByOrNull { it.postNumber }
+                ?.postNumber
+        }
+
+        val rowIndex = adapterPosition - headerAdapter.itemCount
+        return postListAdapter.currentList.getOrNull(rowIndex)?.post?.postNumber
     }
 
     private fun scrollToPostNumber(postNumber: UInt) {
