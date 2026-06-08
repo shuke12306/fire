@@ -122,6 +122,7 @@ impl From<TopicSourceCursorState> for TopicSourceCursor {
 pub struct TopicDetailSourceQueryState {
     pub topic_id: u64,
     pub target_post_number: Option<u32>,
+    pub allow_suggested_unread_root: bool,
     pub track_visit: bool,
     pub force_load: bool,
     pub initial_batch_size: u16,
@@ -135,6 +136,7 @@ impl From<TopicDetailSourceQueryState> for TopicDetailSourceQuery {
         Self {
             topic_id: value.topic_id,
             target_post_number: value.target_post_number,
+            allow_suggested_unread_root: value.allow_suggested_unread_root,
             track_visit: value.track_visit,
             force_load: value.force_load,
             initial_batch_size: value.initial_batch_size,

@@ -12,7 +12,7 @@ enum FirePostCellLayoutCalculator {
     static let avatarSpacingNested: CGFloat = 6
     static let avatarThreadLineTopPadding: CGFloat = 6
     static let threadLineWidth: CGFloat = 1
-    static let metaLineSpacing: CGFloat = 8
+    static let metaLineSpacing: CGFloat = 5
     static let textTopSpacing: CGFloat = 0
     static let imageTopSpacing: CGFloat = 10
     static let imageSpacing: CGFloat = 10
@@ -114,14 +114,11 @@ enum FirePostCellLayoutCalculator {
             width: contentAvailableWidth,
             height: metaHeight
         )
-        cursorY += metaHeight + metaLineSpacing
-        if key.hasAuthorMetadata {
-            let metadataHeight = ceil(UIFont.preferredFont(
-                forTextStyle: .caption1,
-                compatibleWith: contentTraitCollection
-            ).lineHeight)
-            cursorY += metadataHeight + metaLineSpacing
-        }
+        let metadataHeight = ceil(UIFont.preferredFont(
+            forTextStyle: .caption2,
+            compatibleWith: contentTraitCollection
+        ).lineHeight)
+        cursorY += metaHeight + metaLineSpacing + metadataHeight + metaLineSpacing
 
         // Text frame
         let textFrame: CGRect?

@@ -177,12 +177,12 @@ Fire 当前主详情页不再把 `GET /t/{id}.json` 或 `GET /t/{id}/posts.json`
   - Rust 基于已加载的 raw posts 生成 `reply_rows`、`depth`、`parent_post_number`、`root_post_number`
   - 树状 rows 只属于呈现层，不能反向决定下一批网络边界
   - Fire 的 UniFFI tree presentation 只传 post id / post number / hierarchy 元数据，完整 post payload 仍只来自 source snapshot
-  - 当没有显式 `target_post_number` 时，Rust 会依据 detail header 的 `last_read_post_number` / `highest_post_number` 和已加载根帖计算 `first_unread_root_post_number`；如果首批尚未覆盖首个未读根帖，`fetchTopicDetailPage` 会按现有自动 batch 限额继续拉 source batch，直到找到该根帖、source exhausted，或达到自动补批上限
-  - iOS/Android 只在首次打开且没有通知、书签、搜索、分享链接等显式 target 时消费 `first_unread_root_post_number`，刷新、load-more、MessageBus 更新不得触发自动跳转
+  - 当没有显式 `target_post_number` 且查询显式允许首次未读根帖建议时，Rust 会依据 detail header 的 `last_read_post_number` / `highest_post_number` 和已加载根帖计算 `first_unread_root_post_number`；如果首批尚未覆盖首个未读根帖，`fetchTopicDetailPage` 会按现有自动 batch 限额继续拉 source batch，直到找到该根帖、source exhausted，或达到自动补批上限
+  - iOS/Android 只在首次打开且没有通知、书签、搜索、分享链接等显式 target 时把该查询开关设为允许并消费 `first_unread_root_post_number`，刷新、load-more、MessageBus 更新不得触发自动补批或自动跳转
 
 每个 raw post 还会保留作者展示元数据：`user_id`、`user_title`、`primary_group_name`、`flair_url`、`flair_name`、`flair_bg_color`、`flair_color`、`flair_group_id`、`admin`、`moderator`、`group_moderator`，以及 `user_status.emoji` / `user_status.description`。Fire 在 Rust 模型中将这些字段收敛为 `TopicPostAuthorMetadata`，通过 UniFFI 暴露给 iOS/Android 原生 runtime cell；平台只负责展示，不重新解析 `post.cooked` 或从 profile API 拼装这些字段。
 
-带有 Boost 插件数据的 raw post 会暴露 `boosts` 与 `can_boost`。Fire 在 Rust 中解析每个 Boost 的 `id`、`cooked`、用户 `id` / `username` / `name` / `avatar_template`、`can_delete`、`can_flag`、`user_flag_status`、`available_flags`，并生成去 HTML 的 `display_text` 给原生端只读展示。iOS/Android 消费 UniFFI 的 `TopicPostBoostState`：原帖且正文可见时可以把 Boost 作为正文 overlay/弹幕展示，回复或无正文目标时仍使用固定 chips；平台不得重新解析 Boost `cooked` 或把 Boost 与 quote/blockquote preview 混用。
+带有 Boost 插件数据的 raw post 会暴露 `boosts` 与 `can_boost`。Fire 在 Rust 中解析每个 Boost 的 `id`、`cooked`、用户 `id` / `username` / `name` / `avatar_template`、`can_delete`、`can_flag`、`user_flag_status`、`available_flags`，并生成去 HTML 的 `display_text` 给原生端只读展示。iOS/Android 消费 UniFFI 的 `TopicPostBoostState`：原帖且正文可见时可以把 Boost 作为正文 overlay/弹幕展示，回复或无正文目标时仍使用固定 chips；overlay 展示必须限制 lane 数、错峰动画和可见数量，避免 Boost 之间重叠或大面积遮挡正文。平台不得重新解析 Boost `cooked` 或把 Boost 与 quote/blockquote preview 混用。
 
 `forceLoad` 当前仍保留在 Fire 主路径查询参数中，用于显式跳过当前 source session 缓存并重新拉取 source snapshot；它属于 Fire 运行时契约，不是 Discourse 原始端点字段。
 

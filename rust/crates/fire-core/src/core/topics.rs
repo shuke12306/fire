@@ -362,7 +362,8 @@ impl FireCore {
         query: TopicDetailSourceQuery,
     ) -> Result<TopicDetailPage, FireCoreError> {
         let topic_id = query.topic_id;
-        let should_seek_unread_root = query.target_post_number.is_none();
+        let should_seek_unread_root =
+            query.allow_suggested_unread_root && query.target_post_number.is_none();
         let source_started_at = Instant::now();
         let mut source_snapshot = self.fetch_topic_detail_source_snapshot(query).await?;
         let source_fetch_ms = source_started_at.elapsed().as_millis();

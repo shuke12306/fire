@@ -628,6 +628,7 @@ final class FireTopicDetailStore: ObservableObject {
                     targetPostNumber: targetPostNumber,
                     trackVisit: true,
                     forceLoad: currentForce || force,
+                    allowsSuggestedUnreadRootScrollTarget: allowsSuggestedUnreadRootScrollTarget,
                     sessionStore: sessionStore,
                     tracksInitialLoadAPM: true
                 )
@@ -677,6 +678,7 @@ final class FireTopicDetailStore: ObservableObject {
         targetPostNumber: UInt32?,
         trackVisit: Bool,
         forceLoad: Bool,
+        allowsSuggestedUnreadRootScrollTarget: Bool = false,
         sessionStore: FireSessionStore,
         tracksInitialLoadAPM: Bool
     ) async throws -> FireTopicDetailPagePayload {
@@ -693,6 +695,7 @@ final class FireTopicDetailStore: ObservableObject {
                         query: TopicDetailSourceQueryState(
                             topicId: topicId,
                             targetPostNumber: targetPostNumber,
+                            allowSuggestedUnreadRoot: allowsSuggestedUnreadRootScrollTarget,
                             trackVisit: trackVisit,
                             forceLoad: forceLoad,
                             initialBatchSize: Self.topicDetailInitialBatchSize,

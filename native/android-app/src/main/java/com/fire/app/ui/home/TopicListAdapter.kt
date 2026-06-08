@@ -23,25 +23,14 @@ class TopicListAdapter(
         holder.bind(displayRow, onTopicClick, onTagClick)
     }
 
-    fun clearDetailPatches() {
-        if (detailPatchesByTopicId.isEmpty()) {
-            return
+    fun applyDetailPatches(patches: Map<ULong, HomeTopicDetailPatch>): Boolean {
+        if (detailPatchesByTopicId == patches) {
+            return false
         }
         detailPatchesByTopicId.clear()
+        detailPatchesByTopicId.putAll(patches)
         notifyItemRangeChanged(0, itemCount)
-    }
-
-    fun applyDetailPatch(patch: HomeTopicDetailPatch): Boolean {
-        detailPatchesByTopicId[patch.topicId] = patch
-        var changed = false
-        for (index in 0 until itemCount) {
-            val row = peek(index) ?: continue
-            if (HomeTopicDetailPatcher.patch(row, patch) != null) {
-                notifyItemChanged(index)
-                changed = true
-            }
-        }
-        return changed
+        return true
     }
 
     companion object {

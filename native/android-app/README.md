@@ -63,13 +63,28 @@ loading footer. Load-more is driven only by the Rust source cursor over raw
 
 When Rust returns `firstUnreadRootPostNumber`, Android consumes it only for the
 initial topic-detail load with no explicit notification/search/bookmark/share
-target. Explicit target post numbers keep priority, and refresh or MessageBus
-updates never trigger unread-root scrolling.
+target. Android only enables the Rust unread-root suggestion query for that
+first-open path. Explicit target post numbers keep priority, and refresh or
+MessageBus updates never trigger unread-root scrolling or unread-root auto-batch
+requests.
 
 Post rows consume Rust-owned `TopicPostAuthorMetadata` for display name,
 username, title, group/flair name, staff markers, and status text. Android only
 renders this metadata in the native RecyclerView row; it does not reconstruct
 author badges from profile fetches or parsed cooked HTML.
+
+Post row avatars and usernames route directly to the native user-info sheet when
+the row has a non-empty username. Author metadata is split into compact colored
+badges on the username line (`Lv.N`, staff/group/flair) and a shorter secondary
+line (`@username`, title/status), with the timestamp trailing the first line and
+`#N楼` trailing the second line.
+
+Topic-detail rich text consumes Rust `RenderDocument` blocks plus
+`imageAttachments`. Android keeps inline image ordering from render blocks,
+uses Rust attachment URLs for linked/original image selection, normalizes
+relative LinuxDo image URLs before Coil load/preview, and appends attachment
+images that were not represented by render-tree image blocks instead of parsing
+`post.cooked`.
 
 Current topic-detail interactions:
 
@@ -114,7 +129,9 @@ Current topic-detail interactions:
 - Boost short replies render from Rust-owned `TopicPostBoostState.displayText`
   as a body overlay/barrage for original posts with visible body text, and as
   fixed RecyclerView row chips for replies or posts without a body text target,
-  without Android-side Boost HTML parsing
+  without Android-side Boost HTML parsing; overlay mode caps visible boosts,
+  uses at most two lanes, and staggers animation timing to avoid overlap and
+  broad body-text occlusion
 - reaction-user lookup from the rendered post reaction summary
 - topic notification-level selection for non-private-message topics
 - reply-context lookup from the rendered reply target, showing source and
@@ -157,10 +174,12 @@ Android now keeps request-failure handling single-path:
   so notification-tab refreshes align with home, topic detail, search, and other
   visible reads; recent notification cache refreshes remain background.
 - Topic detail publishes loaded header counters back to the visible home list
-  through `HomeTopicDetailPatchRepository`, letting already-loaded rows update
+  through a stateful `HomeTopicDetailPatchRepository`, letting already-loaded rows update
   `postsCount`, `replyCount`, `views`, `lastReadPostNumber`, and
-  `highestPostNumber` immediately while the next Paging load remains the
-  authoritative Rust-backed refresh.
+  `highestPostNumber` immediately even if Home was stopped while detail was
+  visible. The patch also recomputes unread/new state from the patched read
+  position while the next Paging load remains the authoritative Rust-backed
+  refresh.
 - Home, topic detail, notifications, search, bookmarks, private messages, and
   composer flows all surface those failures through the same error-display path
   used for any other request failure.

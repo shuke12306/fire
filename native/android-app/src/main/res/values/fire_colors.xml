@@ -15,6 +15,11 @@
     <color name="fire_background_elevated">#FFFFFFFF</color>
     <color name="fire_boost_background">#FFF3F4F6</color>
     <color name="fire_boost_barrage_background">#CCFFFFFF</color>
+    <color name="fire_chip_warning_background">#FFFFF1D6</color>
+    <color name="fire_chip_link_background">#FFE5F0FF</color>
+    <color name="fire_chip_success_background">#FFE1F7EB</color>
+    <color name="fire_chip_accent_background">#FFFFE8DC</color>
+    <color name="fire_chip_error_background">#FFFFE4E6</color>
     <color name="fire_skeleton_primary">#FFE5E7EB</color>
     <color name="fire_skeleton_secondary">#FFF0F1F3</color>
 

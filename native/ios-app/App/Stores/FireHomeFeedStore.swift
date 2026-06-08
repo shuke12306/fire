@@ -101,11 +101,19 @@ final class FireHomeFeedStore: ObservableObject {
         guard row.topic.id == detail.id else {
             return nil
         }
+        let nextHasUnreadPosts = detail.lastReadPostNumber.map { lastReadPostNumber in
+            lastReadPostNumber < detail.highestPostNumber
+        } ?? row.hasUnreadPosts
+        let nextUnreadPosts = nextHasUnreadPosts ? row.topic.unreadPosts : 0
+        let nextNewPosts = nextHasUnreadPosts ? row.topic.newPosts : 0
         guard row.topic.postsCount != detail.postsCount
             || row.topic.replyCount != detail.replyCount
             || row.topic.views != detail.views
             || row.topic.lastReadPostNumber != detail.lastReadPostNumber
-            || row.topic.highestPostNumber != detail.highestPostNumber else {
+            || row.topic.highestPostNumber != detail.highestPostNumber
+            || row.topic.unreadPosts != nextUnreadPosts
+            || row.topic.newPosts != nextNewPosts
+            || row.hasUnreadPosts != nextHasUnreadPosts else {
             return nil
         }
 
@@ -115,6 +123,9 @@ final class FireHomeFeedStore: ObservableObject {
         patched.topic.views = detail.views
         patched.topic.lastReadPostNumber = detail.lastReadPostNumber
         patched.topic.highestPostNumber = detail.highestPostNumber
+        patched.topic.unreadPosts = nextUnreadPosts
+        patched.topic.newPosts = nextNewPosts
+        patched.hasUnreadPosts = nextHasUnreadPosts
         return patched
     }
 
@@ -732,6 +743,7 @@ final class FireHomeFeedStore: ObservableObject {
         parts.append(String(topic.closed))
         parts.append(String(topic.archived))
         parts.append(String(topic.unseen))
+        parts.append(String(row.hasUnreadPosts))
         parts.append(String(topic.unreadPosts))
         parts.append(String(topic.newPosts))
         parts.append(topic.lastReadPostNumber.map(String.init) ?? "")

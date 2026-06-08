@@ -309,6 +309,7 @@ pub struct TopicPostStream {
 pub struct TopicDetailSourceQuery {
     pub topic_id: u64,
     pub target_post_number: Option<u32>,
+    pub allow_suggested_unread_root: bool,
     pub track_visit: bool,
     pub force_load: bool,
     pub initial_batch_size: u16,

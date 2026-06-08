@@ -111,6 +111,30 @@ class FireRichTextBlockBuilderTest {
     }
 
     @Test
+    fun build_emitsImageAttachmentsWhenRenderTreeHasNoImageBlock() {
+        val content = FireRichTextContent(
+            nodes = listOf(
+                FireRichTextNode.Paragraph(listOf(FireRichTextNode.Text("caption"))),
+            ),
+            plainText = "caption",
+            imageAttachments = listOf(
+                FireCookedImage(
+                    url = "https://linux.do/uploads/default/original/1X/attached.png",
+                    altText = "attached",
+                    width = 640f,
+                    height = 480f,
+                ),
+            ),
+        )
+
+        val blocks = FireRichTextBlockBuilder.build(content)
+
+        assertEquals(2, blocks.size)
+        assertTrue(blocks[0] is FireRichTextBlock.Text)
+        assertEquals("https://linux.do/uploads/default/original/1X/attached.png", (blocks[1] as FireRichTextBlock.Image).image.url)
+    }
+
+    @Test
     fun build_adaptsSharedRenderDocumentWithoutCookedHtmlFallback() {
         val document = RenderDocumentState(
             blocks = listOf(

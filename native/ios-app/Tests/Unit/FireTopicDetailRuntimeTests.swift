@@ -816,6 +816,7 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
                 onOpenPostNumber: { _ in },
                 onOpenPostReplies: { _ in },
                 onLinkTapped: { _ in },
+                onOpenProfile: { _ in },
                 onOpenImage: { _ in },
                 onToggleLike: { _ in },
                 onSelectReaction: { _, _ in },

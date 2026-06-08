@@ -1,8 +1,7 @@
 package com.fire.app.ui.home
 
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import uniffi.fire_uniffi_topics.TopicDetailState
 import uniffi.fire_uniffi_types.TopicRowState
 
@@ -29,14 +28,15 @@ data class HomeTopicDetailPatch(
 }
 
 object HomeTopicDetailPatchRepository {
-    private val _patches = MutableSharedFlow<HomeTopicDetailPatch>(
-        extraBufferCapacity = 32,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-    val patches = _patches.asSharedFlow()
+    private val _patches = MutableStateFlow<Map<ULong, HomeTopicDetailPatch>>(emptyMap())
+    val patches = _patches.asStateFlow()
 
     fun publish(detail: TopicDetailState) {
-        _patches.tryEmit(HomeTopicDetailPatch.from(detail))
+        publishPatch(HomeTopicDetailPatch.from(detail))
+    }
+
+    fun publishPatch(patch: HomeTopicDetailPatch) {
+        _patches.value = _patches.value + (patch.topicId to patch)
     }
 }
 
@@ -46,11 +46,19 @@ object HomeTopicDetailPatcher {
             return null
         }
         val topic = row.topic
+        val nextHasUnreadPosts = patch.lastReadPostNumber
+            ?.let { it < patch.highestPostNumber }
+            ?: row.hasUnreadPosts
+        val nextUnreadPosts = if (nextHasUnreadPosts) topic.unreadPosts else 0u
+        val nextNewPosts = if (nextHasUnreadPosts) topic.newPosts else 0u
         if (topic.postsCount == patch.postsCount &&
             topic.replyCount == patch.replyCount &&
             topic.views == patch.views &&
             topic.lastReadPostNumber == patch.lastReadPostNumber &&
-            topic.highestPostNumber == patch.highestPostNumber
+            topic.highestPostNumber == patch.highestPostNumber &&
+            topic.unreadPosts == nextUnreadPosts &&
+            topic.newPosts == nextNewPosts &&
+            row.hasUnreadPosts == nextHasUnreadPosts
         ) {
             return null
         }
@@ -62,7 +70,10 @@ object HomeTopicDetailPatcher {
                 views = patch.views,
                 lastReadPostNumber = patch.lastReadPostNumber,
                 highestPostNumber = patch.highestPostNumber,
+                unreadPosts = nextUnreadPosts,
+                newPosts = nextNewPosts,
             ),
+            hasUnreadPosts = nextHasUnreadPosts,
         )
     }
 }

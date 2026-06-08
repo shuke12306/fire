@@ -101,6 +101,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         onLinkTapped: { [weak self] url in
             self?.handleRichTextLink(url)
         },
+        onOpenProfile: { [weak self] username in
+            self?.modalRouter.presentProfile(username: username)
+        },
         onOpenImage: { [weak self] image in
             self?.modalRouter.presentImageViewer(image: image)
         },

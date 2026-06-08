@@ -197,6 +197,7 @@ struct FirePostCellRenderPayload {
 
 struct FirePostCellCallbacks {
     let onLinkTapped: (URL) -> Void
+    let onOpenProfile: (String) -> Void
     let onOpenImage: (FireCookedImage) -> Void
     let onToggleLike: (TopicPostState) -> Void
     let onSelectReaction: (TopicPostState, String) -> Void
@@ -218,42 +219,16 @@ enum FirePostAuthorMetadataDisplay {
         cleaned(post.name) ?? cleaned(post.username) ?? "Unknown"
     }
 
-    static func metadataParts(for post: TopicPostState) -> [String] {
+    static func primaryBadgeParts(for post: TopicPostState) -> [String] {
         let metadata = post.authorMetadata
-        let username = cleaned(post.username)
-        let displayName = displayName(for: post)
-
         let title = cleaned(metadata.userTitle)
         let group = cleaned(metadata.primaryGroupName)
         let flair = cleaned(metadata.flairName)
-        let statusDescription = cleaned(metadata.userStatusDescription)
-        let statusEmoji = cleaned(metadata.userStatusEmoji).map { ":\($0):" }
-        let hasMetadataBeyondUsername = title != nil
-            || group != nil
-            || flair != nil
-            || metadata.admin
-            || metadata.moderator
-            || metadata.groupModerator
-            || statusDescription != nil
-            || statusEmoji != nil
 
         var parts: [String] = []
-        if let username {
-            let showsUsername = displayName.caseInsensitiveCompare(username) != .orderedSame
-                || hasMetadataBeyondUsername
-            if showsUsername {
-                parts.append("@\(username)")
-            }
-        }
-        if let title {
-            parts.append(title)
-        }
-        if let group {
-            parts.append(group)
-        }
-        if let flair,
-           flair.caseInsensitiveCompare(group ?? "") != .orderedSame {
-            parts.append(flair)
+        if let title,
+           let trustLevel = normalizedTrustLevelLabel(from: title) {
+            parts.append(trustLevel)
         }
         if metadata.admin {
             parts.append("管理员")
@@ -264,16 +239,46 @@ enum FirePostAuthorMetadataDisplay {
         if metadata.groupModerator {
             parts.append("组版主")
         }
+        if let group {
+            parts.append(condensed(group))
+        }
+        if let flair,
+           flair.caseInsensitiveCompare(group ?? "") != .orderedSame {
+            parts.append(condensed(flair))
+        }
+        return Array(parts.prefix(4))
+    }
+
+    static func secondaryLineParts(for post: TopicPostState) -> [String] {
+        let metadata = post.authorMetadata
+        let username = cleaned(post.username)
+        let statusDescription = cleaned(metadata.userStatusDescription)
+        let statusEmoji = cleaned(metadata.userStatusEmoji).map { ":\($0):" }
+
+        var parts: [String] = []
+        if let username {
+            parts.append("@\(username)")
+        }
+        if let title = cleaned(metadata.userTitle),
+           normalizedTrustLevelLabel(from: title) == nil {
+            parts.append(condensed(title, maxCharacters: 16))
+        }
         if let statusDescription {
-            parts.append(statusDescription)
+            parts.append(condensed(statusDescription, maxCharacters: 16))
         } else if let statusEmoji {
             parts.append(statusEmoji)
         }
         return parts
     }
 
+    static func metadataParts(for post: TopicPostState) -> [String] {
+        var parts = secondaryLineParts(for: post)
+        parts.append(contentsOf: primaryBadgeParts(for: post))
+        return parts
+    }
+
     static func hasVisibleMetadata(_ post: TopicPostState) -> Bool {
-        !metadataParts(for: post).isEmpty
+        !primaryBadgeParts(for: post).isEmpty || !secondaryLineParts(for: post).isEmpty
     }
 
     static func contentToken(for post: TopicPostState) -> String {
@@ -281,7 +286,8 @@ enum FirePostAuthorMetadataDisplay {
         var parts: [String] = []
         parts.reserveCapacity(10)
         parts.append(displayName(for: post))
-        parts.append(metadataParts(for: post).joined(separator: "|"))
+        parts.append(primaryBadgeParts(for: post).joined(separator: "|"))
+        parts.append(secondaryLineParts(for: post).joined(separator: "|"))
         parts.append(metadata.userId.map(String.init) ?? "")
         parts.append(metadata.flairUrl ?? "")
         parts.append(metadata.flairBgColor ?? "")
@@ -291,6 +297,26 @@ enum FirePostAuthorMetadataDisplay {
         parts.append(String(metadata.moderator))
         parts.append(String(metadata.groupModerator))
         return parts.joined(separator: "\u{1F}")
+    }
+
+    private static func normalizedTrustLevelLabel(from value: String) -> String? {
+        let lowercased = value.lowercased()
+        let hasTrustLevelHint = lowercased.contains("trust")
+            || lowercased.contains("level")
+            || lowercased.contains("tl")
+            || value.contains("等级")
+        guard hasTrustLevelHint,
+              let digit = value.first(where: { $0.isNumber }) else {
+            return nil
+        }
+        return "Lv.\(digit)"
+    }
+
+    private static func condensed(_ value: String, maxCharacters: Int = 10) -> String {
+        guard value.count > maxCharacters, maxCharacters > 3 else {
+            return value
+        }
+        return "\(value.prefix(maxCharacters - 3))..."
     }
 
     private static func cleaned(_ value: String?) -> String? {

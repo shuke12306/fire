@@ -32,6 +32,7 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
     private val avatar: ImageView = itemView.findViewById(R.id.post_avatar)
     private val usernameText: TextView = itemView.findViewById(R.id.post_username)
+    private val authorChips: LinearLayout = itemView.findViewById(R.id.post_author_chips)
     private val authorMetadataText: TextView = itemView.findViewById(R.id.post_author_metadata)
     private val metaText: TextView = itemView.findViewById(R.id.post_meta)
     private val floorText: TextView = itemView.findViewById(R.id.post_floor)
@@ -65,16 +66,25 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             it.marginStart = depthIndent
         }
 
+        val normalizedUsername = post.username.trim().takeIf { it.isNotEmpty() }
+        usernameText.isClickable = normalizedUsername != null
+        avatar.isClickable = normalizedUsername != null
+        usernameText.setOnClickListener {
+            normalizedUsername?.let(callbacks.onAuthorClick)
+        }
+        avatar.setOnClickListener {
+            normalizedUsername?.let(callbacks.onAuthorClick)
+        }
         usernameText.text = displayName(post)
-        usernameText.setOnClickListener { callbacks.onAuthorClick(post.username) }
-        avatar.setOnClickListener { callbacks.onAuthorClick(post.username) }
-        val authorMetadata = authorMetadataParts(post)
-        if (authorMetadata.isEmpty()) {
+        bindAuthorChips(primaryMetadataParts(post))
+
+        val secondaryMetadata = secondaryMetadataParts(post)
+        if (secondaryMetadata.isEmpty()) {
             authorMetadataText.visibility = View.GONE
             authorMetadataText.text = null
         } else {
             authorMetadataText.visibility = View.VISIBLE
-            authorMetadataText.text = authorMetadata.joinToString(" · ")
+            authorMetadataText.text = secondaryMetadata.joinToString(" · ")
         }
 
         val meta = buildList {
@@ -82,7 +92,7 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         }.joinToString(" · ")
         metaText.text = meta
 
-        floorText.text = "#${post.postNumber}"
+        floorText.text = "#${post.postNumber}楼"
 
         // Reply context
         val replyToNumber = post.replyToPostNumber
@@ -414,50 +424,88 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val height = boostBarrageContainer.height
         if (width <= 0 || height <= 0) return
 
-        val laneCount = boostBarrageContainer.childCount.coerceIn(1, MAX_BARRAGE_LANES)
-        val laneHeight = (dp(28)).coerceAtMost((height / laneCount).coerceAtLeast(dp(24)))
-        val maxChipWidth = (width * 0.86f).toInt().coerceAtLeast(1)
+        val childCount = boostBarrageContainer.childCount
+        val laneCount = childCount.coerceIn(1, MAX_BARRAGE_LANES)
+        val laneHeight = dp(BARRAGE_LANE_HEIGHT_DP)
+        val verticalStride = if (laneCount <= 1) {
+            0
+        } else {
+            ((height - dp(BARRAGE_CHIP_HEIGHT_DP)).coerceAtLeast(0) / laneCount)
+                .coerceAtLeast(laneHeight)
+        }
+        val maxChipWidth = (width * 0.72f).toInt().coerceAtLeast(1)
         val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
 
-        for (index in 0 until boostBarrageContainer.childCount) {
+        for (index in 0 until childCount) {
             val child = boostBarrageContainer.getChildAt(index) as? TextView ?: continue
             child.animate().cancel()
             child.measure(
                 View.MeasureSpec.makeMeasureSpec(maxChipWidth, View.MeasureSpec.AT_MOST),
-                View.MeasureSpec.makeMeasureSpec(dp(24), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(dp(BARRAGE_CHIP_HEIGHT_DP), View.MeasureSpec.EXACTLY),
             )
             val chipWidth = child.measuredWidth.coerceIn(dp(48), maxChipWidth)
             val lane = index % laneCount
-            val y = (lane * laneHeight).coerceAtMost((height - dp(24)).coerceAtLeast(0))
+            val y = (lane * verticalStride).coerceAtMost((height - dp(BARRAGE_CHIP_HEIGHT_DP)).coerceAtLeast(0))
             val params = child.layoutParams as FrameLayout.LayoutParams
             params.width = chipWidth
-            params.height = dp(24)
+            params.height = dp(BARRAGE_CHIP_HEIGHT_DP)
             child.layoutParams = params
             child.translationY = y.toFloat()
-            child.alpha = 0.92f
+            child.alpha = BARRAGE_START_ALPHA
 
             if (!animationsEnabled) {
-                val slotProgress = (index + 1).toFloat() / (boostBarrageContainer.childCount + 1).toFloat()
+                val slotProgress = (index + 1).toFloat() / (childCount + 1).toFloat()
                 child.translationX = ((width - chipWidth).coerceAtLeast(0) * slotProgress)
                 continue
             }
 
-            val startX = width.toFloat() + index * dp(28)
+            val round = index / laneCount
+            val laneStagger = lane * BARRAGE_LANE_STAGGER_MS
+            val roundStagger = round * BARRAGE_ROUND_STAGGER_MS
+            val startX = width.toFloat() + lane * dp(18)
             child.translationX = startX
             val endX = -chipWidth.toFloat() - dp(16)
             val animator = ValueAnimator.ofFloat(startX, endX).apply {
-                duration = 7_500L + (index % MAX_BARRAGE_LANES) * 800L
-                startDelay = index * 350L
+                duration = BARRAGE_BASE_DURATION_MS + lane * BARRAGE_LANE_DURATION_STEP_MS
+                startDelay = laneStagger + roundStagger
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
                 interpolator = LinearInterpolator()
                 addUpdateListener { animation ->
                     child.translationX = animation.animatedValue as Float
-                    child.alpha = 0.92f - animation.animatedFraction * 0.2f
+                    child.alpha = BARRAGE_START_ALPHA - animation.animatedFraction * BARRAGE_ALPHA_DELTA
                 }
             }
             boostBarrageAnimators.add(animator)
             animator.start()
+        }
+    }
+
+    private fun bindAuthorChips(chips: List<AuthorMetadataChip>) {
+        authorChips.removeAllViews()
+        authorChips.visibility = if (chips.isEmpty()) View.GONE else View.VISIBLE
+        val context = itemView.context
+        chips.forEachIndexed { index, chip ->
+            val chipView = TextView(context).apply {
+                text = chip.label
+                setTextAppearance(androidx.appcompat.R.style.TextAppearance_AppCompat_Caption)
+                setTextColor(context.getColor(chip.textColorRes))
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                includeFontPadding = false
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(9).toFloat()
+                    setColor(context.getColor(chip.backgroundColorRes))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    if (index > 0) marginStart = dp(4)
+                }
+            }
+            authorChips.addView(chipView)
         }
     }
 
@@ -595,7 +643,15 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     companion object {
         private const val HEART_REACTION_ID = "heart"
         private const val MAX_BARRAGE_BOOSTS = 6
-        private const val MAX_BARRAGE_LANES = 3
+        private const val MAX_BARRAGE_LANES = 2
+        private const val BARRAGE_CHIP_HEIGHT_DP = 24
+        private const val BARRAGE_LANE_HEIGHT_DP = 32
+        private const val BARRAGE_BASE_DURATION_MS = 12_500L
+        private const val BARRAGE_LANE_DURATION_STEP_MS = 1_400L
+        private const val BARRAGE_LANE_STAGGER_MS = 1_500L
+        private const val BARRAGE_ROUND_STAGGER_MS = 4_600L
+        private const val BARRAGE_START_ALPHA = 0.82f
+        private const val BARRAGE_ALPHA_DELTA = 0.16f
 
         fun create(parent: ViewGroup): PostViewHolder {
             val view = LayoutInflater.from(parent.context)
@@ -609,51 +665,55 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
                 ?: "Unknown"
         }
 
-        private fun authorMetadataParts(post: TopicPostState): List<String> {
+        private fun primaryMetadataParts(post: TopicPostState): List<AuthorMetadataChip> {
             val metadata = post.authorMetadata
-            val username = cleaned(post.username)
-            val displayName = displayName(post)
             val title = cleaned(metadata.userTitle)
             val group = cleaned(metadata.primaryGroupName)
             val flair = cleaned(metadata.flairName)
-            val statusDescription = cleaned(metadata.userStatusDescription)
-            val statusEmoji = cleaned(metadata.userStatusEmoji)?.let { ":$it:" }
-            val hasMetadataBeyondUsername = title != null ||
-                group != null ||
-                flair != null ||
-                metadata.admin ||
-                metadata.moderator ||
-                metadata.groupModerator ||
-                statusDescription != null ||
-                statusEmoji != null
 
             return buildList {
-                if (
-                    username != null &&
-                    (!displayName.equals(username, ignoreCase = true) || hasMetadataBeyondUsername)
-                ) {
-                    add("@$username")
-                }
-                title?.let(::add)
-                group?.let(::add)
-                if (flair != null && !flair.equals(group, ignoreCase = true)) {
-                    add(flair)
-                }
+                trustLevelChip(title)?.let(::add)
                 if (metadata.admin) {
-                    add("管理员")
+                    add(AuthorMetadataChip("管理员", R.color.fire_error, R.color.fire_chip_error_background))
                 }
                 if (metadata.moderator) {
-                    add("版主")
+                    add(AuthorMetadataChip("版主", R.color.fire_link, R.color.fire_chip_link_background))
                 }
                 if (metadata.groupModerator) {
-                    add("组版主")
+                    add(AuthorMetadataChip("组版主", R.color.fire_warning, R.color.fire_chip_warning_background))
+                }
+                group?.let {
+                    add(AuthorMetadataChip(compactChipLabel(it), R.color.fire_success, R.color.fire_chip_success_background))
+                }
+                if (flair != null && !flair.equals(group, ignoreCase = true)) {
+                    add(AuthorMetadataChip(compactChipLabel(flair), R.color.fire_accent, R.color.fire_chip_accent_background))
+                }
+            }.take(MAX_PRIMARY_METADATA_CHIPS)
+        }
+
+        private fun secondaryMetadataParts(post: TopicPostState): List<String> {
+            val metadata = post.authorMetadata
+            val username = cleaned(post.username)
+            val title = cleaned(metadata.userTitle)
+            val statusDescription = cleaned(metadata.userStatusDescription)
+            val statusEmoji = cleaned(metadata.userStatusEmoji)?.let { ":$it:" }
+
+            return buildList {
+                username?.let { add("@$it") }
+                if (title != null && trustLevelChip(title) == null) {
+                    add(compactSecondaryLabel(title))
                 }
                 if (statusDescription != null) {
-                    add(statusDescription)
+                    add(compactSecondaryLabel(statusDescription))
                 } else {
                     statusEmoji?.let(::add)
                 }
             }
+        }
+
+        private fun trustLevelChip(title: String?): AuthorMetadataChip? {
+            val label = title?.let { TRUST_LEVEL_REGEX.find(it)?.groupValues?.getOrNull(1) } ?: return null
+            return AuthorMetadataChip("Lv.$label", R.color.fire_warning, R.color.fire_chip_warning_background)
         }
 
         private fun displayBoostLine(boost: TopicPostBoostState): String {
@@ -667,5 +727,32 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private fun cleaned(value: String?): String? {
             return value?.trim()?.takeIf { it.isNotEmpty() }
         }
+
+        private fun compactChipLabel(value: String): String {
+            return if (value.length <= MAX_CHIP_LABEL_LENGTH) {
+                value
+            } else {
+                value.take(MAX_CHIP_LABEL_LENGTH - 1) + "…"
+            }
+        }
+
+        private fun compactSecondaryLabel(value: String): String {
+            return if (value.length <= MAX_SECONDARY_LABEL_LENGTH) {
+                value
+            } else {
+                value.take(MAX_SECONDARY_LABEL_LENGTH - 1) + "…"
+            }
+        }
+
+        private const val MAX_PRIMARY_METADATA_CHIPS = 3
+        private const val MAX_CHIP_LABEL_LENGTH = 10
+        private const val MAX_SECONDARY_LABEL_LENGTH = 16
+        private val TRUST_LEVEL_REGEX = Regex("""(?i)(?:trust\s*level|tl|level|等级)\D*(\d+)""")
     }
 }
+
+private data class AuthorMetadataChip(
+    val label: String,
+    val textColorRes: Int,
+    val backgroundColorRes: Int,
+)

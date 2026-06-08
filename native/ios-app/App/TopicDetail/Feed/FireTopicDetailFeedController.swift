@@ -536,6 +536,7 @@ final class FireTopicDetailFeedController: NSObject,
     private func postCallbacks(configuration: FireTopicDetailRuntimeConfiguration) -> FirePostCellCallbacks {
         FirePostCellCallbacks(
             onLinkTapped: configuration.onLinkTapped,
+            onOpenProfile: configuration.onOpenProfile,
             onOpenImage: configuration.onOpenImage,
             onToggleLike: configuration.onToggleLike,
             onSelectReaction: configuration.onSelectReaction,

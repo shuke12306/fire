@@ -124,11 +124,14 @@ pub struct RenderBlock {
 
 平台端不再各自维护一套附件提取和去重规则。
 
-2026-06-07 起，双端 topic detail 不再把 `image_attachments` 当成“文末附件区”单独追加。平台仍从
-`RenderBlockKind::Image` 保留图片在正文中的顺序，但图片展示 URL 以 Rust 生成的
-`RenderDocument.image_attachments` 为准：lightbox / generic linked image 场景优先使用 original URL，
-正文缩略展示和点击预览因此共享同一个缓存键。平台端只负责按节点顺序切分 text/image segment、选择显示尺寸、
-展示加载/失败/重试状态，以及打开原生图片预览。
+2026-06-08 起，双端 topic detail 以 `RenderBlockKind::Image` 保留图片在正文中的顺序，但图片展示 URL
+以 Rust 生成的 `RenderDocument.image_attachments` 为准：lightbox / generic linked image 场景优先使用
+original URL，正文缩略展示和点击预览因此共享同一个缓存键。平台端只负责按节点顺序切分 text/image segment、
+选择显示尺寸、展示加载/失败/重试状态，以及打开原生图片预览。
+
+如果 Rust 已经给出 `image_attachments`，但当前 render tree 没有对应 `Image` block（例如服务端 HTML 清洗或
+block 映射遗漏导致的旧数据形状），平台可以按 Rust attachment 列表补齐尚未消费的图片 segment。这个补齐只以
+`RenderDocument.image_attachments` 为数据源并按 URL 去重，不能重新解析 `post.cooked`，也不能恢复平台侧附件提取规则。
 
 图片附件旁的上传元信息 chrome 也只在 Rust 侧过滤。匹配规则不依赖 `image` 这种固定前缀，前缀可以是文件名、
 hash 或其他服务器输出字符串；只有末尾满足“尺寸 + 文件大小”的附件说明会被剥离，普通 caption / 正文文本必须保留。

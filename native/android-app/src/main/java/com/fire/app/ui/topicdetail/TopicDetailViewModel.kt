@@ -102,6 +102,7 @@ class TopicDetailViewModel(
                     targetPostNumber = targetPostNumber,
                     forceLoad = true,
                     trackVisit = true,
+                    allowSuggestedUnreadRoot = shouldUseSuggestedUnreadRootTarget,
                 )
                 val allPosts = applyFetchedPayload(payload)
                 preloadRenderContent(allPosts)
@@ -142,12 +143,14 @@ class TopicDetailViewModel(
         targetPostNumber: UInt? = null,
         forceLoad: Boolean,
         trackVisit: Boolean,
+        allowSuggestedUnreadRoot: Boolean = false,
     ): TopicDetailPageState {
         return topicRepository.fetchTopicDetailPage(
             topicId = topicId,
             targetPostNumber = targetPostNumber,
             forceLoad = forceLoad,
             trackVisit = trackVisit,
+            allowSuggestedUnreadRoot = allowSuggestedUnreadRoot,
         )
     }
 

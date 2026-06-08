@@ -144,6 +144,7 @@ final class FireTopicDetailRuntimeInteractions {
     let onOpenPostNumber: (UInt32) -> Void
     let onOpenPostReplies: (TopicPostState) -> Void
     let onLinkTapped: (URL) -> Void
+    let onOpenProfile: (String) -> Void
     let onOpenImage: (FireCookedImage) -> Void
     let onToggleLike: (TopicPostState) -> Void
     let onSelectReaction: (TopicPostState, String) -> Void
@@ -175,6 +176,7 @@ final class FireTopicDetailRuntimeInteractions {
         onOpenPostNumber: @escaping (UInt32) -> Void,
         onOpenPostReplies: @escaping (TopicPostState) -> Void,
         onLinkTapped: @escaping (URL) -> Void,
+        onOpenProfile: @escaping (String) -> Void,
         onOpenImage: @escaping (FireCookedImage) -> Void,
         onToggleLike: @escaping (TopicPostState) -> Void,
         onSelectReaction: @escaping (TopicPostState, String) -> Void,
@@ -205,6 +207,7 @@ final class FireTopicDetailRuntimeInteractions {
         self.onOpenPostNumber = onOpenPostNumber
         self.onOpenPostReplies = onOpenPostReplies
         self.onLinkTapped = onLinkTapped
+        self.onOpenProfile = onOpenProfile
         self.onOpenImage = onOpenImage
         self.onToggleLike = onToggleLike
         self.onSelectReaction = onSelectReaction
@@ -262,6 +265,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     var onOpenPostNumber: (UInt32) -> Void { interactions.onOpenPostNumber }
     var onOpenPostReplies: (TopicPostState) -> Void { interactions.onOpenPostReplies }
     var onLinkTapped: (URL) -> Void { interactions.onLinkTapped }
+    var onOpenProfile: (String) -> Void { interactions.onOpenProfile }
     var onOpenImage: (FireCookedImage) -> Void { interactions.onOpenImage }
     var onToggleLike: (TopicPostState) -> Void { interactions.onToggleLike }
     var onSelectReaction: (TopicPostState, String) -> Void { interactions.onSelectReaction }

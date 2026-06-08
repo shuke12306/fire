@@ -464,6 +464,40 @@ final class FireTopicPresentationTests: XCTestCase {
         }
     }
 
+    func testRenderContentAppendsImageAttachmentsMissingFromRenderTree() {
+        let document = RenderDocumentState(
+            blocks: [
+                RenderBlockState(id: 1, parentId: nil, depth: 0, kind: .document),
+                RenderBlockState(id: 2, parentId: 1, depth: 1, kind: .paragraph),
+                RenderBlockState(id: 3, parentId: 2, depth: 2, kind: .text(content: "Before")),
+            ],
+            plainText: "Before\nfire",
+            imageAttachments: [
+                RenderImageAttachmentState(
+                    url: "https://linux.do/uploads/default/original/1X/fire.png",
+                    altText: "fire",
+                    width: 690,
+                    height: 388
+                ),
+            ]
+        )
+
+        let content = FireTopicPresentation.renderContent(from: document, sourceToken: "missing-image-node")
+
+        XCTAssertEqual(content.segments.count, 2)
+        if case .text(let text) = content.segments[0] {
+            XCTAssertEqual(text.string, "Before")
+        } else {
+            XCTFail("Expected leading text segment")
+        }
+        if case .image(let image) = content.segments[1] {
+            XCTAssertEqual(image.url.absoluteString, "https://linux.do/uploads/default/original/1X/fire.png")
+            XCTAssertEqual(image.altText, "fire")
+        } else {
+            XCTFail("Expected appended image segment")
+        }
+    }
+
     func testRenderContentSuppressesInlineImageMetadataText() {
         let content = fireRenderContentFixture(#"<p><a class="lightbox" href="/uploads/default/original/1X/fire-full.png"><img src="/uploads/default/optimized/1X/fire_690x388.png" width="690" height="388" alt="fire"></a> screen-shot 1080x1920 34kb</p>"#)
         let segmentText = content.segments.compactMap { segment -> String? in

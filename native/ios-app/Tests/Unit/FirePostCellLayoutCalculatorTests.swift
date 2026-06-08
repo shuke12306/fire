@@ -34,15 +34,34 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             imageSizes: [],
             trait: trait
         )
+        let traitCollection = UITraitCollection(preferredContentSizeCategory: .large)
+        let expectedMetaHeight = ceil(max(
+            UIFont.preferredFont(forTextStyle: .subheadline, compatibleWith: traitCollection).lineHeight,
+            UIFont.preferredFont(forTextStyle: .caption2, compatibleWith: traitCollection).lineHeight,
+            FirePostCellLayoutCalculator.menuButtonSize
+        ))
+        let expectedSecondaryLineHeight = ceil(UIFont.preferredFont(
+            forTextStyle: .caption2,
+            compatibleWith: traitCollection
+        ).lineHeight)
+        let expectedTextMinY = FirePostCellLayoutCalculator.contentVerticalPadding
+            + expectedMetaHeight
+            + FirePostCellLayoutCalculator.metaLineSpacing
+            + expectedSecondaryLineHeight
+            + FirePostCellLayoutCalculator.metaLineSpacing
+        let expectedTotalHeight = expectedTextMinY
+            + 40
+            + FirePostCellLayoutCalculator.contentVerticalPadding
+            + FirePostCellLayoutCalculator.dividerHeight
 
         XCTAssertEqual(layout.avatarFrame.origin.x, 16, accuracy: 0.01)
         XCTAssertEqual(layout.avatarFrame.origin.y, 0, accuracy: 0.01)
         XCTAssertEqual(layout.avatarFrame.width, 32, accuracy: 0.01)
         XCTAssertEqual(layout.metaFrame.minY, 8, accuracy: 0.01)
-        XCTAssertEqual(layout.textFrame?.minY ?? -.greatestFiniteMagnitude, 36, accuracy: 0.01)
+        XCTAssertEqual(layout.textFrame?.minY ?? -.greatestFiniteMagnitude, expectedTextMinY, accuracy: 0.01)
         XCTAssertEqual(layout.dividerFrame?.minX ?? -.greatestFiniteMagnitude, 16, accuracy: 0.01)
         XCTAssertEqual(layout.dividerFrame?.width ?? -.greatestFiniteMagnitude, 288, accuracy: 0.01)
-        XCTAssertEqual(layout.totalHeight, 84.5, accuracy: 0.01)
+        XCTAssertEqual(layout.totalHeight, expectedTotalHeight, accuracy: 0.01)
         XCTAssertEqual(layout.threadLineFrame?.minY ?? -.greatestFiniteMagnitude, 38, accuracy: 0.01)
     }
 
@@ -102,7 +121,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertEqual(availableWidth, 256, accuracy: 0.01)
     }
 
-    func testAuthorMetadataIncreasesPrecomputedHeight() {
+    func testAuthorMetadataDoesNotChangePrecomputedHeaderHeight() {
         let trait = FirePostLayoutTraitSignature(
             contentWidthPixels: 320,
             contentSizeCategory: UIContentSizeCategory.large.rawValue
@@ -157,7 +176,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             trait: trait
         )
 
-        XCTAssertGreaterThan(withMetadata.totalHeight, baseline.totalHeight)
+        XCTAssertEqual(withMetadata.totalHeight, baseline.totalHeight, accuracy: 0.01)
     }
 
     func testCollapsedTextAddsInlineExpansionTokenAndCapsHeight() {
@@ -654,6 +673,87 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertEqual(measuredLayout.size.height, calculatedLayout.totalHeight, accuracy: 2.5)
     }
 
+    func testTexturePostCellKeepsCommentImageVisibleWhenCollapsedTextDoesNotOverflow() throws {
+        let width: CGFloat = 320
+        let image = FireCookedImage(
+            url: try XCTUnwrap(URL(string: "https://linux.do/uploads/default/original/1x/comment.png")),
+            altText: nil,
+            width: 640,
+            height: 360
+        )
+        let contentWithImage = renderContent(
+            plainText: "Short reply",
+            attributedText: NSAttributedString(
+                string: "Short reply",
+                attributes: [.font: UIFont.preferredFont(forTextStyle: .subheadline)]
+            ),
+            imageAttachments: [image],
+            segments: [
+                .text(NSAttributedString(string: "Short reply")),
+                .image(image),
+            ]
+        )
+        let collapsed = FirePostTextExpansionState(isCollapsible: true, isExpanded: false)
+        let node = FirePostCellNode()
+        node.configure(
+            payload: FirePostCellRenderPayload(
+                post: makePost(id: 765, postNumber: 3, username: "tester"),
+                renderContent: contentWithImage,
+                baseURLString: "https://linux.do",
+                canWriteInteractions: true,
+                isMutating: false,
+                replyContext: nil,
+                replyTargetPostNumber: nil,
+                replyShortcutCount: nil,
+                isLoadingReplyContext: false,
+                textExpansionState: collapsed,
+                showsDivider: false,
+                layoutWidth: width
+            ),
+            callbacks: noopCallbacks(),
+            depth: 1,
+            showsThreadLine: false,
+            showsDivider: false
+        )
+
+        let measuredLayout = node.layoutThatFits(ASSizeRange(
+            min: CGSize(width: width, height: 0),
+            max: CGSize(width: width, height: .greatestFiniteMagnitude)
+        ))
+        let textOnlyNode = FirePostCellNode()
+        textOnlyNode.configure(
+            payload: FirePostCellRenderPayload(
+                post: makePost(id: 766, postNumber: 4, username: "tester"),
+                renderContent: renderContent(
+                    plainText: "Short reply",
+                    attributedText: NSAttributedString(string: "Short reply"),
+                    imageAttachments: [],
+                    segments: [.text(NSAttributedString(string: "Short reply"))]
+                ),
+                baseURLString: "https://linux.do",
+                canWriteInteractions: true,
+                isMutating: false,
+                replyContext: nil,
+                replyTargetPostNumber: nil,
+                replyShortcutCount: nil,
+                isLoadingReplyContext: false,
+                textExpansionState: collapsed,
+                showsDivider: false,
+                layoutWidth: width
+            ),
+            callbacks: noopCallbacks(),
+            depth: 1,
+            showsThreadLine: false,
+            showsDivider: false
+        )
+        let textOnlyLayout = textOnlyNode.layoutThatFits(ASSizeRange(
+            min: CGSize(width: width, height: 0),
+            max: CGSize(width: width, height: .greatestFiniteMagnitude)
+        ))
+
+        XCTAssertGreaterThan(measuredLayout.size.height, textOnlyLayout.size.height + 80)
+    }
+
     func testCommentImageRenderSizeIsScaledDownAndRootImagesRespectMaxHeight() throws {
         let image = FireCookedImage(
             url: try XCTUnwrap(URL(string: "https://linux.do/uploads/default/original/1x/sample.png")),
@@ -678,6 +778,38 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(commentSize.height, FirePostCellLayoutCalculator.commentImageMaxHeight)
     }
 
+    func testAuthorMetadataMovesBadgesToPrimaryLineAndCondensesTrustLevel() {
+        let post = makePost(
+            id: 877,
+            postNumber: 5,
+            username: "alice",
+            authorMetadata: TopicPostAuthorMetadataState(
+                userId: 7,
+                userTitle: "Trust Level 2",
+                primaryGroupName: "core-team",
+                flairUrl: nil,
+                flairName: "Maintainers",
+                flairBgColor: nil,
+                flairColor: nil,
+                flairGroupId: nil,
+                moderator: true,
+                admin: false,
+                groupModerator: false,
+                userStatusEmoji: nil,
+                userStatusDescription: "Shipping Fire"
+            )
+        )
+
+        XCTAssertEqual(
+            FirePostAuthorMetadataDisplay.primaryBadgeParts(for: post),
+            ["Lv.2", "版主", "core-team", "Maintai..."]
+        )
+        XCTAssertEqual(
+            FirePostAuthorMetadataDisplay.secondaryLineParts(for: post),
+            ["@alice", "Shipping Fire"]
+        )
+    }
+
     func testReactionDisplayPolicyKeepsOriginalPostReactionsButCapsRepliesAtThree() {
         let reactions = [
             TopicReactionState(id: "heart", kind: nil, count: 12, canUndo: true),
@@ -699,6 +831,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         id: UInt64,
         postNumber: UInt32,
         username: String,
+        authorMetadata: TopicPostAuthorMetadataState = fireEmptyPostAuthorMetadataState(),
         reactions: [TopicReactionState] = []
     ) -> TopicPostState {
         let cooked = "<p>\(username)</p>"
@@ -707,7 +840,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             username: username,
             name: nil,
             avatarTemplate: nil,
-            authorMetadata: fireEmptyPostAuthorMetadataState(),
+            authorMetadata: authorMetadata,
             cooked: cooked,
             renderDocument: fireRenderDocumentFixture(cooked),
             raw: username,
@@ -781,6 +914,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
     private func noopCallbacks() -> FirePostCellCallbacks {
         FirePostCellCallbacks(
             onLinkTapped: { _ in },
+            onOpenProfile: { _ in },
             onOpenImage: { _ in },
             onToggleLike: { _ in },
             onSelectReaction: { _, _ in },
