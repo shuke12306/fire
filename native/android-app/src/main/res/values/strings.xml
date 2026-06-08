@@ -118,6 +118,17 @@
     <string name="feed_bookmark_post_number">Bookmarked #%1$s</string>
     <string name="feed_bookmark_name">Bookmark: %1$s</string>
     <string name="feed_bookmark_reminder">Reminder: %1$s</string>
+    <string name="feed_drafts">Drafts</string>
+    <string name="feed_drafts_empty">No drafts available.</string>
+    <string name="feed_drafts_untitled">Untitled draft</string>
+    <string name="feed_drafts_type_topic">New topic</string>
+    <string name="feed_drafts_type_reply">Reply draft</string>
+    <string name="feed_drafts_type_private_message">Message draft</string>
+    <string name="feed_drafts_type_unknown">Draft</string>
+    <string name="feed_drafts_delete_title">Delete draft</string>
+    <string name="feed_drafts_delete_message">Delete this draft permanently?</string>
+    <string name="feed_drafts_delete_confirm">Delete</string>
+    <string name="feed_drafts_resume_unavailable">This draft cannot be resumed on Android yet.</string>
     <string name="feed_read_history">Read History</string>
     <string name="feed_read_history_empty">No read history available.</string>
     <string name="feed_read_history_last_read">Last read #%1$s</string>

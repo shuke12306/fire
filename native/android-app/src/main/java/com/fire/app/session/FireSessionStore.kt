@@ -36,6 +36,7 @@ import uniffi.fire_uniffi_session.PlatformCookieState
 import uniffi.fire_uniffi_session.RefreshTriggerState
 import uniffi.fire_uniffi_session.SessionState
 import uniffi.fire_uniffi_types.DraftDataState
+import uniffi.fire_uniffi_types.DraftListResponseState
 import uniffi.fire_uniffi_types.DraftState
 import uniffi.fire_uniffi_topics.PollState
 import uniffi.fire_uniffi_topics.PostActionTypeState
@@ -256,6 +257,11 @@ class FireSessionStore(
     suspend fun fetchReadHistory(page: UInt? = null): TopicListState =
         withContext(Dispatchers.IO) {
             core.notifications().fetchReadHistory(page)
+        }
+
+    suspend fun fetchDrafts(offset: UInt? = null, limit: UInt? = null): DraftListResponseState =
+        withContext(Dispatchers.IO) {
+            core.notifications().fetchDrafts(offset, limit)
         }
 
     suspend fun fetchDraft(draftKey: String): DraftState? = withContext(Dispatchers.IO) {

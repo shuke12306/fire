@@ -650,6 +650,8 @@ git commit -m "refactor(ios): extract FireSearchService from FireAppViewModel"
 ## Task 13: Android — 草稿列表页
 
 **Files:**
+- Modify: `native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt`
+- Create: `native/android-app/src/main/java/com/fire/app/data/paging/DraftsPagingSource.kt`
 - Create: `native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsFragment.kt`
 - Create: `native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsViewModel.kt`
 - Create: `native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsAdapter.kt`
@@ -657,249 +659,57 @@ git commit -m "refactor(ios): extract FireSearchService from FireAppViewModel"
 - Create: `native/android-app/src/main/res/layout/item_draft.xml`
 - Modify: `native/android-app/src/main/res/navigation/fire_nav_graph.xml`
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt`
+- Modify: `native/android-app/src/main/res/layout/fragment_profile.xml`
+- Modify: `native/android-app/src/main/res/values/strings.xml`
 
-- [ ] **Step 1: 创建 DraftsViewModel**
+- [x] **Step 1: Expose draft listing in Android session store**
 
-```kotlin
-package com.fire.app.ui.drafts
+`FireSessionStore.fetchDrafts(offset, limit)` now wraps `core.notifications().fetchDrafts(...)` on `Dispatchers.IO`, matching the existing `fetchDraft`, `saveDraft`, and `deleteDraft` UniFFI boundary.
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.fire.app.session.FireSessionStore
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+- [x] **Step 2: Add Paging-backed draft data flow**
 
-data class DraftPresentation(
-    val id: String,
-    val title: String,
-    val category: String?,
-    val createdAt: String?,
-    val excerpt: String?,
-)
+`DraftsPagingSource` requests drafts by offset and limit, returns `DraftState` rows directly from UniFFI, and advances `nextKey` only when `DraftListResponseState.hasMore` is true. `DraftsViewModel` owns the `Pager`, caches it in `viewModelScope`, and reports delete errors through `FireErrorReporter`.
 
-class DraftsViewModel(private val sessionStore: FireSessionStore) : ViewModel() {
+- [x] **Step 3: Add drafts list UI**
 
-    private val _drafts = MutableStateFlow<List<DraftPresentation>>(emptyList())
-    val drafts = _drafts.asStateFlow()
+`DraftsFragment` follows the existing Android list-page shape: `SwipeRefreshLayout`, `RecyclerView`, initial loading indicator, empty/error text, and lifecycle-aware Paging collection. `DraftsAdapter` renders title, excerpt, type/date/user metadata, and a delete button for each draft.
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading = _isLoading.asStateFlow()
+- [x] **Step 4: Resume and delete behavior**
 
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage = _errorMessage.asStateFlow()
+Draft taps use the authoritative composer paths:
+- `new_topic` opens `TopicComposerSheet`, which restores the fixed `new_topic` draft key.
+- `new_private_message` opens `PrivateMessageComposerSheet`, which restores the fixed `new_private_message` draft key.
+- Reply drafts open `ReplyComposerSheet` with the parsed `topic_<id>` or `topic_<id>_post_<post>` target, preferring explicit `replyToPostNumber` payload data when present.
+- Unknown draft keys show `feed_drafts_resume_unavailable` instead of adding a fallback editor path.
 
-    private var currentOffset: UInt? = null
-    private var hasMore = true
+Delete confirms with an `AlertDialog`, calls `sessionStore.deleteDraft(draft.draftKey, draft.sequence)`, then refreshes the Paging adapter.
 
-    fun loadDrafts(forceRefresh: Boolean = false) {
-        if (!forceRefresh && _drafts.value.isNotEmpty()) return
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-            try {
-                val result = sessionStore.fetchDrafts(offset = null, limit = 30)
-                val presentations = result.drafts.map { draft ->
-                    DraftPresentation(
-                        id = draft.key,
-                        title = draft.data?.title ?: "无标题草稿",
-                        category = draft.data?.category,
-                        createdAt = draft.data?.createdAt,
-                        excerpt = draft.data?.reply?.take(100),
-                    )
-                }
-                _drafts.value = presentations
-                currentOffset = if (result.drafts.size >= 30) UInt(result.drafts.size) else null
-                hasMore = currentOffset != null
-            } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "加载草稿失败"
-            }
-            _isLoading.value = false
-        }
-    }
+- [x] **Step 5: Add profile navigation entry**
 
-    fun loadMore() {
-        if (!hasMore || _isLoading.value) return
-        val offset = currentOffset ?: return
-        viewModelScope.launch {
-            try {
-                val result = sessionStore.fetchDrafts(offset = offset, limit = 30)
-                val presentations = result.drafts.map { draft ->
-                    DraftPresentation(
-                        id = draft.key,
-                        title = draft.data?.title ?: "无标题草稿",
-                        category = draft.data?.category,
-                        createdAt = draft.data?.createdAt,
-                        excerpt = draft.data?.reply?.take(100),
-                    )
-                }
-                _drafts.value = _drafts.value + presentations
-                currentOffset = if (result.drafts.size >= 30) UInt(_drafts.value.size) else null
-                hasMore = currentOffset != null
-            } catch (_: Exception) { }
-        }
-    }
+`fire_nav_graph.xml` now includes `draftsFragment` and `ProfileFragment` navigates through generated Safe Args. The profile action row was updated to three equal actions: Bookmarks, Drafts, and Private Messages.
 
-    fun deleteDraft(draftKey: String) {
-        viewModelScope.launch {
-            try {
-                sessionStore.deleteDraft(draftKey)
-                _drafts.value = _drafts.value.filter { it.id != draftKey }
-            } catch (_: Exception) { }
-        }
-    }
+- [x] **Step 6: Build verification**
 
-    companion object {
-        fun create(sessionStore: FireSessionStore): DraftsViewModel {
-            return DraftsViewModel(sessionStore)
-        }
-    }
-}
-```
+Run: `cd native/android-app && ./gradlew assembleDebug`
 
-- [ ] **Step 2: 创建 DraftsAdapter**
+Result: `BUILD SUCCESSFUL`
 
-```kotlin
-package com.fire.app.ui.drafts
-
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
-import com.fire.app.R
-
-class DraftsAdapter(
-    private val onDraftClick: (DraftPresentation) -> Unit,
-    private val onDraftDelete: (DraftPresentation) -> Unit,
-) : RecyclerView.Adapter<DraftsAdapter.ViewHolder>() {
-
-    private val items = mutableListOf<DraftPresentation>()
-
-    fun submitList(newItems: List<DraftPresentation>) {
-        items.clear()
-        items.addAll(newItems)
-        notifyDataSetChanged()
-    }
-
-    override fun getItemCount() = items.size
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_draft, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(items[position])
-    }
-
-    inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        private val titleView: TextView = view.findViewById(R.id.draft_title)
-        private val excerptView: TextView = view.findViewById(R.id.draft_excerpt)
-        private val metaView: TextView = view.findViewById(R.id.draft_meta)
-
-        fun bind(draft: DraftPresentation) {
-            titleView.text = draft.title
-            excerptView.text = draft.excerpt ?: ""
-            metaView.text = listOfNotNull(draft.category, draft.createdAt)
-                .joinToString(" · ")
-            itemView.setOnClickListener { onDraftClick(draft) }
-        }
-    }
-}
-```
-
-- [ ] **Step 3: 创建布局文件**
-
-`fragment_drafts.xml`：SwipeRefreshLayout + RecyclerView + 空状态 TextView + 加载骨架屏。
-`item_draft.xml`：标题、摘要、分类/日期元数据行。
-
-- [ ] **Step 4: 创建 DraftsFragment**
-
-```kotlin
-package com.fire.app.ui.drafts
-
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.Lifecycle
-import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.LinearLayoutManager
-import com.fire.app.R
-import com.fire.app.session.FireSessionStore
-import com.fire.app.session.FireSessionStoreRepository
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-
-class DraftsFragment : Fragment() {
-
-    private var viewModel: DraftsViewModel? = null
-    private lateinit var adapter: DraftsAdapter
-
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
-    ): View = inflater.inflate(R.layout.fragment_drafts, container, false)
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        val recyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.draft_list)
-        val emptyView = view.findViewById<android.widget.TextView>(R.id.empty_view)
-
-        lifecycleScope.launch {
-            val sessionStore = FireSessionStoreRepository.get(requireContext())
-            viewModel = DraftsViewModel.create(sessionStore)
-
-            adapter = DraftsAdapter(
-                onDraftClick = { draft -> /* navigate to resume draft */ },
-                onDraftDelete = { draft -> viewModel?.deleteDraft(draft.id) },
-            )
-            recyclerView.layoutManager = LinearLayoutManager(requireContext())
-            recyclerView.adapter = adapter
-
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    viewModel?.drafts?.collectLatest { drafts ->
-                        adapter.submitList(drafts)
-                        emptyView.visibility = if (drafts.isEmpty()) View.VISIBLE else View.GONE
-                    }
-                }
-            }
-
-            viewModel?.loadDrafts()
-        }
-    }
-}
-```
-
-- [ ] **Step 5: 添加导航目标**
-
-在 `fire_nav_graph.xml` 中添加：
-
-```xml
-<fragment
-    android:id="@+id/draftsFragment"
-    android:name="com.fire.app.ui.drafts.DraftsFragment"
-    android:label="@string/feed_drafts" />
-```
-
-在 `ProfileFragment` 中添加导航入口（草稿按钮 → `R.id.draftsFragment`）。
-
-- [ ] **Step 6: 构建验证**
-
-Run: `cd native/android-app && ./gradlew assembleDebug 2>&1 | tail -5`
-Expected: `BUILD SUCCESSFUL`
-
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
-git add native/android-app/src/main/java/com/fire/app/ui/drafts/ native/android-app/src/main/res/layout/fragment_drafts.xml native/android-app/src/main/res/layout/item_draft.xml native/android-app/src/main/res/navigation/fire_nav_graph.xml native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt
-git commit -m "feat(android): add drafts list screen with paging and swipe-to-delete"
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md \
+  native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt \
+  native/android-app/src/main/java/com/fire/app/data/paging/DraftsPagingSource.kt \
+  native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsViewModel.kt \
+  native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsAdapter.kt \
+  native/android-app/src/main/java/com/fire/app/ui/drafts/DraftsFragment.kt \
+  native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt \
+  native/android-app/src/main/res/layout/fragment_drafts.xml \
+  native/android-app/src/main/res/layout/item_draft.xml \
+  native/android-app/src/main/res/layout/fragment_profile.xml \
+  native/android-app/src/main/res/navigation/fire_nav_graph.xml \
+  native/android-app/src/main/res/values/strings.xml
+git commit -m "feat(android): add drafts list screen"
 ```
 
 ---

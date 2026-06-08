@@ -71,6 +71,9 @@
             android:id="@+id/action_profile_to_bookmarks"
             app:destination="@id/bookmarksFragment" />
         <action
+            android:id="@+id/action_profile_to_drafts"
+            app:destination="@id/draftsFragment" />
+        <action
             android:id="@+id/action_profile_to_privateMessages"
             app:destination="@id/privateMessagesFragment" />
         <deepLink
@@ -91,6 +94,11 @@
         android:id="@+id/bookmarksFragment"
         android:name="com.fire.app.ui.bookmarks.BookmarksFragment"
         android:label="@string/feed_bookmarks" />
+
+    <fragment
+        android:id="@+id/draftsFragment"
+        android:name="com.fire.app.ui.drafts.DraftsFragment"
+        android:label="@string/feed_drafts" />
 
     <fragment
         android:id="@+id/privateMessagesFragment"

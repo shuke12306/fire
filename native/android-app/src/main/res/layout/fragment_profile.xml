@@ -25,6 +25,18 @@
             android:textColor="@color/fire_accent" />
 
         <TextView
+            android:id="@+id/drafts_button"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="@string/feed_drafts"
+            android:textAppearance="@style/TextAppearance.AppCompat.Button"
+            android:textColor="@color/fire_accent" />
+
+        <TextView
             android:id="@+id/private_messages_button"
             android:layout_width="0dp"
             android:layout_height="40dp"
