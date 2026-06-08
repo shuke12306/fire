@@ -1,9 +1,5 @@
 # 投票 API
 
-> 对应 FluxDO 源文档第 12 节
-
----
-
 ## 12.1 投票
 
 ```
@@ -17,7 +13,16 @@ Content-Type: application/x-www-form-urlencoded
 |------|------|------|------|
 | `post_id` | int | 是 | 帖子 ID |
 | `poll_name` | string | 是 | 投票名称 |
-| `options[]` | string | 是 | 选项值（可多个） |
+| `options[]` | string[] | 是 | 选项值；多选投票使用重复键 |
+
+Example encoding:
+
+```text
+post_id=1001&poll_name=poll&options[]=choice_a&options[]=choice_b
+```
+
+Clients must use an array-capable form encoder. Do not collapse multiple
+`options[]` values into one map entry.
 
 **Response (200)：**
 

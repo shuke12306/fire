@@ -27,8 +27,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -68,8 +66,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -100,8 +96,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -141,8 +135,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -187,8 +179,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -269,8 +259,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -342,8 +330,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash
@@ -411,8 +397,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify Xcode 26 App Store toolchain
         shell: bash
@@ -485,8 +469,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Verify required submodules are initialized and clean
         shell: bash

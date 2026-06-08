@@ -77,7 +77,6 @@ prepare_uniffi_artifacts() {
 }
 
 pushd "$ROOT_DIR" >/dev/null
-git submodule update --init --recursive
 ./scripts/check_clean_submodules.sh
 popd >/dev/null
 

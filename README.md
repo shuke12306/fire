@@ -8,15 +8,15 @@ Fire 是一个全新的原生客户端工作区，目标栈为 `Swift + Kotlin +
 
 - `rust/`: 共享 Rust 核心、模型与 UniFFI 边界
 - `native/`: iOS / Android 原生宿主工程占位
-- `docs/backend-api*`: 供新客户端开发使用的后端协议文档
+- `docs/knowledge/`: 供不同客户端和技术栈复刻使用的后端协议知识库
 - `third_party/`: `openwire` 与 `xlog-rs` 两个 Rust 依赖子模块
-- `references/fluxdo`: 旧 `fluxdo` Flutter 工程参考子模块
+- `references/fluxdo`: `fluxdo` 参考子模块，只用于协议行为核对
 
 ## 定位
 
 - Fire 与旧 `fluxdo` 项目已经解耦。
-- `references/fluxdo` 仅作为行为参考和逆向资料来源，不再是当前项目本体。
-- 当前主线开发方向是原生平台登录 + Rust 共享核心，而不是继续扩展旧 Flutter 架构。
+- `references/fluxdo` 仅作为行为参考和逆向资料来源，不再是当前项目本体；初始化时不要递归拉取它自己的内部 submodule。
+- 当前主线开发方向是原生平台登录 + Rust 共享核心，而不是继续扩展旧参考项目架构。
 
 ## 功能预览
 
@@ -74,8 +74,7 @@ Fire 是一个全新的原生客户端工作区，目标栈为 `Swift + Kotlin +
 ```text
 fire/
   docs/
-    backend-api.md
-    backend-api/
+    knowledge/
     architecture/
       fire-native-workspace.md
   native/
@@ -116,5 +115,6 @@ ANDROID_HOME=$HOME/Library/Android/sdk ANDROID_SDK_ROOT=$HOME/Library/Android/sd
 ## 说明
 
 - `references/fluxdo` 是历史参考，不是 Fire 的运行时依赖。
+- 如需初始化参考项目，只执行 `git submodule update --init references/fluxdo`；不要对 `references/fluxdo` 使用 `--recursive`，Fire 不编译也不依赖它的内部 submodule。
 - Fire 的主仓库地址为 `https://github.com/peterich-rs/fire`。
 - 根目录许可证当前仍沿用现有仓库的 `GPL-3.0`，如果 Fire 后续采用其他协议，需要单独重置。

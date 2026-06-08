@@ -1,10 +1,6 @@
 # Presence、分类与标签、书签、草稿 API
 
-> 对应 FluxDO 源文档第 13-16 节
-
----
-
-# 第 13 节：Presence API
+## 13. Presence API
 
 ---
 
@@ -29,8 +25,8 @@ Discourse-Background: true
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `topic_id` | int | 是 | 话题 ID |
-| `topic_time` | int | 是 | 总阅读时间（毫秒） |
-| `timings[{postNumber}]` | int | 是 | 各帖子阅读时间（毫秒），如 `timings[1]=5000&timings[2]=3000` |
+| `topic_time` | int | 是 | 话题累计阅读时间计数 |
+| `timings[{postNumber}]` | int | 是 | 各楼层阅读时间计数，如 `timings[1]=5&timings[2]=3` |
 
 ---
 
@@ -42,13 +38,41 @@ GET /presence/get
 
 **场景**：查看话题详情页时获取其他正在查看/回复的用户。
 
-> Fire 说明：Presence 是话题详情页的 sidecar capability，不参与主详情 source snapshot 或树状 presentation 的首屏数据 shape。
-
 **Query Parameters：**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `channels[]` | string | 是 | 频道名，如 `/discourse-presence/reply/{topicId}` |
+
+**Response (200)：**
+
+```json
+{
+  "/discourse-presence/reply/123": {
+    "users": [
+      {
+        "id": 1,
+        "username": "example",
+        "name": "Example",
+        "avatar_template": "/user_avatar/..."
+      }
+    ],
+    "message_id": 456
+  }
+}
+```
+
+The response is keyed by each requested presence channel. To continue receiving
+presence updates over MessageBus, subscribe to the corresponding MessageBus
+channel by prefixing `/presence`, for example:
+
+```text
+/discourse-presence/reply/123
+=> /presence/discourse-presence/reply/123
+```
+
+Use the returned `message_id` as the initial last-message id for that
+subscription.
 
 ---
 
@@ -60,8 +84,6 @@ Content-Type: application/x-www-form-urlencoded
 ```
 
 **场景**：用户进入/离开话题详情页时更新在线状态（静默请求）。
-
-> Fire 说明：host 只负责页面生命周期触发；请求组织、静默写策略与错误处理由 Rust 统一负责。`429` 或临时失败不应转成主详情页错误。
 
 **Request Headers（额外）：**
 
@@ -80,7 +102,7 @@ Discourse-Background: true
 
 ---
 
-# 第 14 节：分类与标签 API
+## 14. 分类与标签 API
 
 ---
 
@@ -104,6 +126,11 @@ GET /site.json
   ...
 }
 ```
+
+Useful companion data can also come from bootstrap `site` and `siteSettings`.
+Clients commonly need category data, `top_tags`, `can_tag_topics`,
+`post_action_types`, group/flair metadata, composer length settings, and
+reaction/plugin flags before opening a composer.
 
 ---
 
@@ -134,7 +161,7 @@ GET /bookmarks.json
 
 ---
 
-# 第 15 节：书签 API
+## 15. 书签 API
 
 ---
 
@@ -217,7 +244,7 @@ DELETE /bookmarks/{bookmarkId}.json
 
 ---
 
-# 第 16 节：草稿 API
+## 16. 草稿 API
 
 ---
 

@@ -10,8 +10,7 @@ for path in "${required_submodules[@]}"; do
   full_path="${repo_root}/${path}"
   if ! git -C "${full_path}" rev-parse --git-dir >/dev/null 2>&1; then
     echo "required submodule is not initialized: ${path}" >&2
-    echo "run: git submodule update --init --recursive ${path}" >&2
-    exit 1
+    git -C "${repo_root}" submodule update --init "${path}"
   fi
 
   if [[ -n "$(git -C "${full_path}" status --short --untracked-files=no)" ]]; then

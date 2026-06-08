@@ -1,9 +1,5 @@
 # 通知 API
 
-> 对应 FluxDO 源文档第 10 节
-
----
-
 ## 10.1 获取最近通知
 
 ```
@@ -20,6 +16,25 @@ GET /notifications
 | `limit` | int | 是 | 固定值 `30` |
 | `bump_last_seen_reviewable` | bool | 是 | 固定值 `true` |
 
+**Response (200)：**
+
+```json
+{
+  "notifications": [
+    {
+      "id": 123,
+      "notification_type": 1,
+      "read": false,
+      "created_at": "2024-01-01T00:00:00.000Z",
+      "data": {}
+    }
+  ],
+  "total_rows_notifications": 30,
+  "seen_notification_id": 120,
+  "load_more_notifications": null
+}
+```
+
 ---
 
 ## 10.2 获取通知列表（分页）
@@ -34,6 +49,10 @@ GET /notifications
 |------|------|------|------|
 | `limit` | int | 是 | 固定值 `60` |
 | `offset` | int | 否 | 分页偏移 |
+
+**Response (200)：** same envelope as recent notifications. `load_more_notifications`
+may contain a server-provided URL/path for the next page; clients can also use
+`offset` with `total_rows_notifications` for pagination.
 
 ---
 

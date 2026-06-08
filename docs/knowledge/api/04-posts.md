@@ -1,9 +1,5 @@
 # 帖子 API
 
-> 对应 FluxDO 源文档第 7 节
-
----
-
 ## 7.1 创建回复
 
 ```
@@ -21,7 +17,53 @@ Content-Type: application/x-www-form-urlencoded
 | `raw` | string | 是 | 回复内容（Markdown） |
 | `reply_to_post_number` | int | 否 | 回复的目标楼层号 |
 
-**Response：** 同创建话题，可能返回 `enqueued`。
+**Response variants：**
+
+Nested post envelope:
+
+```json
+{
+  "post": {
+    "id": 1002,
+    "topic_id": 123,
+    "post_number": 2,
+    "raw": "Markdown",
+    "cooked": "<p>HTML</p>"
+  }
+}
+```
+
+Bare post object:
+
+```json
+{
+  "id": 1002,
+  "topic_id": 123,
+  "post_number": 2,
+  "raw": "Markdown",
+  "cooked": "<p>HTML</p>"
+}
+```
+
+Queued for moderation:
+
+```json
+{
+  "action": "enqueued",
+  "pending_count": 1
+}
+```
+
+Validation failure:
+
+```json
+{
+  "success": false,
+  "errors": ["Body is too short"]
+}
+```
+
+Clients should accept both nested and bare success objects.
 
 ---
 

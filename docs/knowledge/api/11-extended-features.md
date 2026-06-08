@@ -1,10 +1,6 @@
 # 模板、嵌套视图、Policy、Emoji、Boost API
 
-> 对应 FluxDO 源文档第 17-21 节
-
----
-
-# 第 17 节：模板 API
+## 17. 模板 API
 
 ---
 
@@ -41,7 +37,7 @@ POST /discourse_templates/{templateId}/use
 
 ---
 
-# 第 18 节：嵌套视图 API
+## 18. 嵌套视图 API
 
 ---
 
@@ -81,7 +77,7 @@ GET /n/topic/{topicId}/children/{postNumber}.json
 
 ---
 
-# 第 19 节：Policy API
+## 19. Policy API
 
 ---
 
@@ -136,7 +132,7 @@ GET /policy/not-accepted
 
 ---
 
-# 第 20 节：Emoji 与表情回应 API
+## 20. Emoji 与表情回应 API
 
 ---
 
@@ -167,7 +163,7 @@ GET /emojis.json
 
 ---
 
-# 第 21 节：Boost API
+## 21. Boost API
 
 ---
 
