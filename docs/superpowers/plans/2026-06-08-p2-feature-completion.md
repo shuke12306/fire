@@ -159,73 +159,58 @@ git commit -m "feat(core): implement LDC Credit and CDK OAuth flows"
 
 **Files:**
 - Create: `rust/crates/fire-uniffi-ldc/` (新 crate)
+- Modify: `Cargo.toml`
+- Modify: `rust/crates/fire-uniffi/Cargo.toml`
 - Modify: `rust/crates/fire-uniffi/src/lib.rs`
-- Modify: `rust/crates/fire-uniffi-types/` (新增 LDC state types)
+- Modify: `native/ios-app/project.yml`
 
-- [ ] **Step 1: 创建 fire-uniffi-ldc crate**
+- [x] **Step 1: 创建 fire-uniffi-ldc crate**
 
-遵循现有 handle crate 模式（如 `fire-uniffi-search`），创建：
+Implemented in `rust/crates/fire-uniffi-ldc/` following the existing handle crate pattern.
 
 - `rust/crates/fire-uniffi-ldc/Cargo.toml`
 - `rust/crates/fire-uniffi-ldc/src/lib.rs`
+- `rust/crates/fire-uniffi-ldc/src/records.rs`
 
-```rust
-use fire_core::FireCore;
-use fire_uniffi_types::FireUniFfiError;
+Implementation notes:
 
-#[derive(uniffi::Object)]
-pub struct FireLdcHandle {
-    core: std::sync::Arc<FireCore>,
-}
+- `FireLdcHandle` stores `Arc<SharedFireCore>` and uses `run_on_ffi_runtime`, matching the existing `fire-uniffi-search`/`fire-uniffi-user` pattern.
+- One handle exposes both service flows because LDC and CDK share the same OAuth approval mechanics.
+- LDC methods: `ldc_authorization_url`, `ldc_approval_link`, `ldc_approve`, `ldc_callback`, `ldc_user_info`, `ldc_logout`, and `ldc_reward`.
+- CDK methods: `cdk_authorization_url`, `cdk_approval_link`, `cdk_approve`, `cdk_callback`, `cdk_user_info`, and `cdk_logout`.
+- `LdcApprovalStatusState` is a record with a simple `LdcApprovalStatusKindState` plus optional `code`/`state`, which keeps payload-carrying OAuth approval data easy for Swift/Kotlin to consume.
+- LDC/CDK state records live in the feature crate instead of `fire-uniffi-types`, because they are not shared by other handles.
+- `ldc_reward` takes client credentials per call and does not persist them in Rust; platform keychain/keystore ownership remains unchanged.
 
-#[uniffi::export]
-impl FireLdcHandle {
-    pub async fn authorization_url(&self) -> Result<String, FireUniFfiError> {
-        let result = self.core.ldc_authorization_url().await?;
-        Ok(result.url)
-    }
+- [x] **Step 2: 在 FireAppCore 中暴露 handle**
 
-    pub async fn approval_link(&self, authorization_url: String) -> Result<String, FireUniFfiError> {
-        self.core.ldc_approval_link(&authorization_url).await.map_err(Into::into)
-    }
+`rust/crates/fire-uniffi/src/lib.rs` adds an `ldc` handle field, initializes it from the shared core, and exposes `FireAppCore::ldc()`.
 
-    pub async fn approve(&self, approve_path: String) -> Result<LdcApprovalStatusState, FireUniFfiError> {
-        let status = self.core.ldc_approve(&approve_path).await?;
-        Ok(LdcApprovalStatusState::from(status))
-    }
+`Cargo.toml` registers `fire-uniffi-ldc` as a workspace member and `rust/crates/fire-uniffi/Cargo.toml` depends on it.
 
-    pub async fn callback(&self, code: String, state: String) -> Result<(), FireUniFfiError> {
-        self.core.ldc_callback(&code, &state).await?;
-        Ok(())
-    }
+`native/ios-app/project.yml` lists `Generated/FireUniFfi/fire_uniffi_ldc.swift` as a UniFFI prebuild output. Android bindgen copies generated namespaces wholesale, so no Android source-list change is needed.
 
-    pub async fn user_info(&self) -> Result<LdcUserInfoState, FireUniFfiError> {
-        let info = self.core.ldc_user_info().await?;
-        Ok(LdcUserInfoState::from(info))
-    }
+- [x] **Step 3: 构建验证**
 
-    pub async fn logout(&self) -> Result<(), FireUniFfiError> {
-        self.core.ldc_logout().await?;
-        Ok(())
-    }
-}
-```
+Run: `cargo fmt --all --check`
+Result: passed.
 
-State types（`LdcUserInfoState`, `CdkUserInfoState`, `LdcApprovalStatusState`, reward request/result states）使用 `#[derive(uniffi::Record)]` 或合适的 UniFFI enum/object 形态。CDK handle should expose the symmetric authorization URL, approval link, approve, callback, user-info, and logout methods. LDC reward can be exposed from the same handle after deciding where client credentials are stored.
+Run: `cargo check -p fire-uniffi-ldc`
+Result: passed.
 
-- [ ] **Step 2: 在 FireAppCore 中暴露 handle**
+Run: `cargo test -p fire-uniffi-ldc`
+Result: passed.
 
-在 `fire-uniffi/src/lib.rs` 的 `FireAppCore` 中添加 `ldc` handle。
+Run: `cargo check -p fire-uniffi`
+Result: passed after clearing stale package build artifacts with `cargo clean -p fire-models -p fire-core -p fire-uniffi -p fire-uniffi-ldc`.
 
-- [ ] **Step 3: 构建验证**
-
-Run: `cd rust && cargo check -p fire-uniffi 2>&1 | tail -5`
-Expected: `Finished` without errors
+Run: temporary UniFFI bindgen for Swift and Kotlin against `rust/target/debug/libfire_uniffi.dylib`
+Result: generated `fire_uniffi_ldc.swift`, `uniffi/fire_uniffi_ldc/fire_uniffi_ldc.kt`, and `FireAppCore.ldc()`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add rust/crates/fire-uniffi-ldc/ rust/crates/fire-uniffi/src/lib.rs rust/crates/fire-uniffi-types/
+git add Cargo.toml Cargo.lock rust/crates/fire-uniffi-ldc/ rust/crates/fire-uniffi/Cargo.toml rust/crates/fire-uniffi/src/lib.rs native/ios-app/project.yml docs/superpowers/plans/2026-06-08-p2-feature-completion.md
 git commit -m "feat(uniffi): add LDC/CDK handle and FFI bridge"
 ```
 

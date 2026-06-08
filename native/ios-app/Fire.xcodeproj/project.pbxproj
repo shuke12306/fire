@@ -86,6 +86,7 @@
 		78009659A664B236D8AD3434 /* FireBadgeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF5B6841F5556D86C606379F /* FireBadgeDetailView.swift */; };
 		7848D667BF692B25B4194E57 /* FirePostCellLayoutCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E7CCCA8B867D5E6B0CE198 /* FirePostCellLayoutCalculator.swift */; };
 		790B44E436B0CF137B1FD8A7 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E69013450F80AEC210D5512D /* Security.framework */; };
+		79B77A4E828C4862BE1BAA53 /* fire_uniffi_ldc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A680E7A822BDD20CE84C04EE /* fire_uniffi_ldc.swift */; };
 		7A1883792B3FD63EAEAA8336 /* SessionState+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC109FBAA1787EF49336258 /* SessionState+Helpers.swift */; };
 		7C8E2507194A4B1C79F2BF4B /* fire_uniffi_session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A7EA25CD5ADF94676BE48E /* fire_uniffi_session.swift */; };
 		800930BED241B0CF61E5FD0A /* fire_uniffi_types.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F09DBDDAC9BA75DCC865D23 /* fire_uniffi_types.swift */; };
@@ -300,6 +301,7 @@
 		A283C548CFC6BEDC0D406679 /* FireTopicDetailVisibilityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireTopicDetailVisibilityCoordinator.swift; sourceTree = "<group>"; };
 		A5264103A412DF3C9798D470 /* FireAPMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireAPMModels.swift; sourceTree = "<group>"; };
 		A67A6C835A2196246871D5FD /* FireComposerValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireComposerValidationTests.swift; sourceTree = "<group>"; };
+		A680E7A822BDD20CE84C04EE /* fire_uniffi_ldc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = fire_uniffi_ldc.swift; sourceTree = "<group>"; };
 		AA736A1F443337C34A6E33D6 /* Fire.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Fire.entitlements; sourceTree = "<group>"; };
 		ABA36C072D3004B0CFDF73D3 /* FireCloudflareChallengeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireCloudflareChallengeCoordinator.swift; sourceTree = "<group>"; };
 		B17BF0CB4137B71949AACC0C /* FireSearchStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireSearchStoreTests.swift; sourceTree = "<group>"; };
@@ -858,6 +860,7 @@
 			isa = PBXGroup;
 			children = (
 				1800DA0F94ED3D7B3099DB89 /* fire_uniffi_diagnostics.swift */,
+				A680E7A822BDD20CE84C04EE /* fire_uniffi_ldc.swift */,
 				E5B34317DAE5858951DCD928 /* fire_uniffi_messagebus.swift */,
 				FF89DCFCD77D9F81CD8DB801 /* fire_uniffi_notifications.swift */,
 				C37B06D0B580C355652E1934 /* fire_uniffi_search.swift */,
@@ -991,6 +994,7 @@
 			outputPaths = (
 				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi.swift",
 				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi_diagnostics.swift",
+				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi_ldc.swift",
 				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi_messagebus.swift",
 				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi_notifications.swift",
 				"$(SRCROOT)/Generated/FireUniFfi/fire_uniffi_search.swift",
@@ -1165,6 +1169,7 @@
 				7A1883792B3FD63EAEAA8336 /* SessionState+Helpers.swift in Sources */,
 				4F762CD9E7B43DB0534791C8 /* fire_uniffi.swift in Sources */,
 				F53E86700CE39C9DD948CFF6 /* fire_uniffi_diagnostics.swift in Sources */,
+				79B77A4E828C4862BE1BAA53 /* fire_uniffi_ldc.swift in Sources */,
 				974A21358F0BAA6942E6FDFC /* fire_uniffi_messagebus.swift in Sources */,
 				A37D27214981E5D36E7DFD2C /* fire_uniffi_notifications.swift in Sources */,
 				BD294B1545CC5167CAB3620E /* fire_uniffi_search.swift in Sources */,

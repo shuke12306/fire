@@ -57,6 +57,7 @@ rust/
     fire-uniffi-search/     # Search FFI handle
     fire-uniffi-messagebus/ # MessageBus FFI handle
     fire-uniffi-notifications/ # Notifications FFI handle
+    fire-uniffi-ldc/      # LDC/CDK OAuth FFI handle
     fire-uniffi-image/      # Image FFI handle                             (NEW)
     fire-uniffi-diagnostics/ # Diagnostics FFI handle
     fire-uniffi/            # Top-level FFI aggregation
@@ -787,6 +788,7 @@ FireAppCore
   ├── .search()        → FireSearchHandle
   ├── .messagebus()    → FireMessageBusHandle
   ├── .notifications() → FireNotificationsHandle
+  ├── .ldc()           → FireLdcHandle
   ├── .image()         → FireImageHandle              ← NEW
   └── .diagnostics()   → FireDiagnosticsHandle
 ```

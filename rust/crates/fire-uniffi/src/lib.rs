@@ -11,6 +11,7 @@ use fire_core::{
 };
 use fire_models::{CookedHtmlDocument, CookedHtmlNode, CookedHtmlNodeKind};
 use fire_uniffi_diagnostics::FireDiagnosticsHandle;
+use fire_uniffi_ldc::FireLdcHandle;
 use fire_uniffi_messagebus::FireMessageBusHandle;
 use fire_uniffi_notifications::{FireNotificationsHandle, NotificationCenterState};
 use fire_uniffi_search::FireSearchHandle;
@@ -204,6 +205,7 @@ pub trait StateObserver: Send + Sync {
 pub struct FireAppCore {
     shared: Arc<SharedFireCore>,
     diagnostics: Arc<FireDiagnosticsHandle>,
+    ldc: Arc<FireLdcHandle>,
     messagebus: Arc<FireMessageBusHandle>,
     notifications: Arc<FireNotificationsHandle>,
     search: Arc<FireSearchHandle>,
@@ -223,6 +225,7 @@ impl FireAppCore {
         Ok(Arc::new(Self {
             shared: shared.clone(),
             diagnostics: FireDiagnosticsHandle::from_shared(shared.clone()),
+            ldc: FireLdcHandle::from_shared(shared.clone()),
             messagebus: FireMessageBusHandle::from_shared(shared.clone()),
             notifications: FireNotificationsHandle::from_shared(shared.clone()),
             search: FireSearchHandle::from_shared(shared.clone()),
@@ -234,6 +237,10 @@ impl FireAppCore {
 
     pub fn diagnostics(&self) -> Arc<FireDiagnosticsHandle> {
         self.diagnostics.clone()
+    }
+
+    pub fn ldc(&self) -> Arc<FireLdcHandle> {
+        self.ldc.clone()
     }
 
     pub fn messagebus(&self) -> Arc<FireMessageBusHandle> {
