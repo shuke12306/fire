@@ -188,7 +188,7 @@ git commit -m "fix(ios): unify feed kind titles to Chinese"
 - Modify: `native/ios-app/App/Views/FireTopicRow.swift`
 - Modify: `native/ios-app/App/Views/FireHomeView.swift`
 
-- [ ] **Step 1: FireTopicRow Accessibility**
+- [x] **Step 1: FireTopicRow Accessibility**
 
 为 `FireTopicRow` 添加 accessibility 标注：
 
@@ -198,7 +198,7 @@ git commit -m "fix(ios): unify feed kind titles to Chinese"
 .accessibilityHint("双击查看话题详情")
 ```
 
-- [ ] **Step 2: FireHomeView 按钮标注**
+- [x] **Step 2: FireHomeView 按钮标注**
 
 为图标按钮添加 `accessibilityLabel`：
 
@@ -210,19 +210,19 @@ git commit -m "fix(ios): unify feed kind titles to Chinese"
 .accessibilityLabel("创建新话题")
 ```
 
-- [ ] **Step 3: Skeleton 视图隐藏**
+- [x] **Step 3: Skeleton 视图隐藏**
 
 所有骨架屏视图添加 `.accessibilityHidden(true)`。
 
-- [ ] **Step 4: 构建验证**
+- [x] **Step 4: 构建验证**
 
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Expected: `** BUILD SUCCEEDED **`
+Verified:
+- `cd native/ios-app && xcodebuild build -scheme Fire -destination 'id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF' -quiet`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add native/ios-app/App/Views/FireTopicRow.swift native/ios-app/App/Views/FireHomeView.swift
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md native/ios-app/App/Core/FireComponents.swift native/ios-app/App/ListKit/Home/FireHomeCollectionView.swift native/ios-app/App/Views/Home/FireTopicRow.swift native/ios-app/App/Views/Home/FireHomeView.swift
 git commit -m "a11y(ios): add accessibility labels to topic rows and home buttons"
 ```
 

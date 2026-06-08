@@ -475,6 +475,7 @@ struct FireTopicSkeletonList: View {
                 }
             }
         }
+        .accessibilityHidden(true)
     }
 }
 

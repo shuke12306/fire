@@ -76,12 +76,14 @@ struct FireHomeView: View {
                         } label: {
                             Image(systemName: "square.and.pencil")
                         }
+                        .accessibilityLabel("创建新话题")
 
                         NavigationLink {
                             FireSearchView(appViewModel: viewModel, searchStore: searchStore)
                         } label: {
                             Image(systemName: "magnifyingglass")
                         }
+                        .accessibilityLabel("搜索")
                     }
                 }
             }

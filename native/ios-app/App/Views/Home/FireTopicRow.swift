@@ -87,6 +87,9 @@ struct FireTopicRow: View {
             }
         }
         .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint("双击查看话题详情")
     }
 
     private var displayUsername: String {
@@ -99,6 +102,39 @@ struct FireTopicRow: View {
 
     private var avatarTemplate: String? {
         row.originalPosterAvatarTemplate
+    }
+
+    private var accessibilitySummary: String {
+        var parts = [row.topic.title]
+
+        if let category {
+            parts.append(category.displayName)
+        }
+
+        if !displayUsername.isEmpty, displayUsername != "?" {
+            parts.append(displayUsername)
+        }
+
+        parts.append("\(row.topic.replyCount) 回复")
+        parts.append("\(row.topic.views) 浏览")
+
+        if row.topic.likeCount > 0 {
+            parts.append("\(row.topic.likeCount) 赞")
+        }
+
+        if row.isPinned {
+            parts.append("置顶")
+        }
+
+        if row.hasAcceptedAnswer {
+            parts.append("已有采纳答案")
+        }
+
+        if row.hasUnreadPosts {
+            parts.append("有未读回复")
+        }
+
+        return parts.joined(separator: "，")
     }
 
     private var fallbackPresentationUsername: String? {

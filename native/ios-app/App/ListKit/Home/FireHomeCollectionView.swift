@@ -427,6 +427,7 @@ struct FireHomeCollectionView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 16)
         .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
     }
 
     private var emptyStateRow: some View {
