@@ -381,7 +381,7 @@ struct FireNotificationsView: View {
                     }
                 }
                 .padding(.vertical, 10)
-                .redacted(reason: .placeholder)
+                .fireShimmer()
                 .accessibilityHidden(true)
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -408,25 +408,14 @@ struct FireNotificationsView: View {
                 )
             }
 
-            Image(systemName: "bell.slash")
-                .accessibilityHidden(true)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(FireTheme.tertiaryInk)
-
-            Text("暂无通知")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Text("当有人回复、提及或点赞你的帖子时，通知会出现在这里。")
-                .font(.subheadline)
-                .foregroundStyle(FireTheme.tertiaryInk)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button("刷新") {
+            FireEmptyFeedState(
+                systemImage: "bell.slash",
+                title: "暂无通知",
+                message: "当有人回复、提及或点赞你的帖子时，通知会出现在这里。",
+                actionTitle: "刷新"
+            ) {
                 retryRecentLoad()
             }
-            .buttonStyle(FireSecondaryButtonStyle())
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

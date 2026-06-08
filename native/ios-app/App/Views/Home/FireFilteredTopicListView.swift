@@ -411,27 +411,22 @@ struct FireFilteredTopicListView: View {
                     }
                 }
                 .padding(.vertical, 6)
-                .redacted(reason: .placeholder)
+                .fireShimmer()
+                .accessibilityHidden(true)
             }
         }
     }
 
     private var emptySection: some View {
         Section {
-            VStack(spacing: 12) {
-                Image(systemName: "tray")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
-                Text("暂无话题")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button("刷新") {
-                    Task { await listViewModel.refresh() }
-                }
-                .buttonStyle(.bordered)
-                .tint(FireTheme.accent)
+            FireEmptyFeedState(
+                systemImage: "tray",
+                title: "暂无话题",
+                message: "当前筛选条件下还没有话题。",
+                actionTitle: "刷新"
+            ) {
+                Task { await listViewModel.refresh() }
             }
-            .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         }
         .listRowSeparator(.hidden)

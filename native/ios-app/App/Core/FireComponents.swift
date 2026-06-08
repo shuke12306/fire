@@ -415,15 +415,39 @@ struct FireBlockingErrorState: View {
 // MARK: - Empty Feed State
 
 struct FireEmptyFeedState: View {
+    let systemImage: String
+    let title: String?
     let message: String
-    let actionTitle: String
-    let action: () -> Void
+    let actionTitle: String?
+    let action: (() -> Void)?
+
+    init(
+        systemImage: String = "text.bubble",
+        title: String? = nil,
+        message: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "text.bubble")
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
                 .font(.title2)
                 .foregroundStyle(FireTheme.accent)
+
+            if let title {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
 
             Text(message)
                 .font(.subheadline)
@@ -431,8 +455,10 @@ struct FireEmptyFeedState: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(actionTitle, action: action)
-                .buttonStyle(FireSecondaryButtonStyle())
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(FireSecondaryButtonStyle())
+            }
         }
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
@@ -467,7 +493,7 @@ struct FireTopicSkeletonList: View {
                         .frame(width: 28, height: 20)
                 }
                 .padding(.vertical, 12)
-                .redacted(reason: .placeholder)
+                .fireShimmer()
 
                 if index != 5 {
                     Divider()

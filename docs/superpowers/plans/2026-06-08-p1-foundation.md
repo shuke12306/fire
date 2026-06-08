@@ -399,77 +399,46 @@ git commit -m "refactor(ios): extract generic FirePaginatedStore base class"
 **Files:**
 - Modify: `native/ios-app/App/Core/FireComponents.swift`
 - Create: `native/ios-app/App/Core/FireShimmerModifier.swift`
+- Modify: `native/ios-app/App/ListKit/Home/FireHomeCollectionView.swift`
+- Modify: `native/ios-app/App/Views/Home/FireFilteredTopicListView.swift`
+- Modify: `native/ios-app/App/Views/Notifications/FireNotificationsView.swift`
+- Modify: `native/ios-app/App/Views/Notifications/FireNotificationHistoryView.swift`
+- Modify: `native/ios-app/Fire.xcodeproj/project.pbxproj`
 
-- [ ] **Step 1: 创建 Shimmer 修饰器**
+- [x] **Step 1: 创建 Shimmer 修饰器**
 
-```swift
-import SwiftUI
+`FireShimmerModifier` now provides `View.fireShimmer()` with FireTheme colors, geometry-relative animation, hit-testing disabled, clipping, and reduce-motion support.
 
-struct FireShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = -1
-    let duration: Double = 1.5
+- [x] **Step 2: 确认 FireEmptyFeedState 已存在**
 
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                LinearGradient(
-                    colors: [
-                        FireTheme.softSurface.opacity(0),
-                        FireTheme.softSurface.opacity(0.4),
-                        FireTheme.softSurface.opacity(0),
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .offset(x: phase * 400)
-            )
-            .clipped()
-            .onAppear {
-                withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
-    }
-}
+`FireEmptyFeedState` now supports reusable icon, optional title, message, and optional action button parameters while preserving the existing message/action initializer shape.
 
-extension View {
-    func fireShimmer() -> some View {
-        modifier(FireShimmerModifier())
-    }
-}
-```
+- [x] **Step 3: 在视图列表中应用 Shimmer 和空状态**
 
-- [ ] **Step 2: 确认 FireEmptyFeedState 已存在**
+Applied `.fireShimmer()` to the existing SwiftUI skeletons:
+- `FireTopicSkeletonList`
+- `FireHomeCollectionView.loadingRow`
+- `FireFilteredTopicListView.loadingSection`
+- `FireNotificationsView.loadingSkeleton`
 
-读取 `FireComponents.swift` 中的 `FireEmptyFeedState`。确保它支持 3 种状态：
-- 空数据（图标 + "暂无内容"）
-- 加载失败（图标 + 错误信息 + 重试按钮）
-- 无搜索结果（图标 + "未找到相关内容"）
+Reused `FireEmptyFeedState` in:
+- `FireFilteredTopicListView.emptySection`
+- `FireNotificationsView.emptyState`
+- `FireNotificationHistoryView.emptyState`
 
-如果不完整，补充缺失的状态。
+Checked search, bookmarks, drafts, private messages, and read history; they did not have `.redacted(reason: .placeholder)` skeletons to replace.
 
-- [ ] **Step 3: 在视图列表中应用 Shimmer 和空状态**
+- [x] **Step 4: 构建验证**
 
-逐个检查以下视图，替换 `.redacted(reason: .placeholder)` 为 `.fireShimmer()`，并确保使用 `FireEmptyFeedState`：
+Verified:
+- `rg -n "redacted\\(reason: \\.placeholder\\)|fireShimmer\\(|FireEmptyFeedState\\(" native/ios-app/App -g '*.swift'`
+- `cd native/ios-app && xcodebuild build -scheme Fire -destination 'id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF' -quiet`
 
-- `FireHomeView` (home skeleton)
-- `FireNotificationsView` (notification skeleton)
-- `FireSearchView` (search result skeleton)
-- `FireBookmarksView` (bookmark skeleton)
-- `FireDraftsView` (draft skeleton)
-- `FirePrivateMessagesView` (PM skeleton)
-- `FireReadHistoryView` (history skeleton)
-
-- [ ] **Step 4: 构建验证**
-
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Expected: `** BUILD SUCCEEDED **`
-
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add native/ios-app/App/Core/FireShimmerModifier.swift native/ios-app/App/Core/FireComponents.swift native/ios-app/App/Views/
-git commit -m "feat(ios): add shimmer animation and unify empty state component usage"
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md native/ios-app/App/Core/FireShimmerModifier.swift native/ios-app/App/Core/FireComponents.swift native/ios-app/App/ListKit/Home/FireHomeCollectionView.swift native/ios-app/App/Views/Home/FireFilteredTopicListView.swift native/ios-app/App/Views/Notifications/FireNotificationsView.swift native/ios-app/App/Views/Notifications/FireNotificationHistoryView.swift native/ios-app/Fire.xcodeproj/project.pbxproj
+git commit -m "feat(ios): add shimmer animation and reuse empty states"
 ```
 
 ---

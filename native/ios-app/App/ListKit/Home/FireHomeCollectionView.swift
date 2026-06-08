@@ -426,7 +426,7 @@ struct FireHomeCollectionView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 16)
-        .redacted(reason: .placeholder)
+        .fireShimmer()
         .accessibilityHidden(true)
     }
 

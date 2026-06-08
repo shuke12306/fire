@@ -166,19 +166,14 @@ struct FireNotificationHistoryView: View {
                 )
             }
 
-            Image(systemName: "bell.slash")
-                .accessibilityHidden(true)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(FireTheme.tertiaryInk)
-
-            Text("暂无通知")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Button("刷新") {
+            FireEmptyFeedState(
+                systemImage: "bell.slash",
+                title: "暂无通知",
+                message: "完整通知历史为空。",
+                actionTitle: "刷新"
+            ) {
                 retryFullLoad()
             }
-            .buttonStyle(FireSecondaryButtonStyle())
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
