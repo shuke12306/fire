@@ -267,7 +267,7 @@ struct FireMetricTile: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                 .fill(backgroundColor)
         )
     }
@@ -355,10 +355,10 @@ struct FireErrorBanner: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                 .fill(FireTheme.softSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                         .strokeBorder(FireTheme.warning.opacity(0.28), lineWidth: 1)
                 )
         )

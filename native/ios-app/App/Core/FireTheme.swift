@@ -75,6 +75,9 @@ enum FireTheme {
 
     // MARK: - Surfaces
 
+    static let canvas = canvasMid
+    static let surface = Color(uiColor: .secondarySystemBackground)
+    static let surfaceSecondary = Color(uiColor: .tertiarySystemFill)
     static let panel = adaptive(
         UIColor(red: 0.14, green: 0.13, blue: 0.13, alpha: 1),
         UIColor(red: 0.12, green: 0.12, blue: 0.13, alpha: 1)
@@ -187,7 +190,8 @@ enum FireTheme {
 
 extension FireTheme {
     static let cornerRadius: CGFloat = 20
-    static let smallCornerRadius: CGFloat = 14
+    static let mediumCornerRadius: CGFloat = 14
+    static let smallCornerRadius: CGFloat = 10
     static let chipCornerRadius: CGFloat = 100
     static let panelShadowRadius: CGFloat = 16
     static let panelShadowY: CGFloat = 8

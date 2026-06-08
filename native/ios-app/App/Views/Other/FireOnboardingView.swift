@@ -62,7 +62,7 @@ struct FireOnboardingView: View {
                         }
                         .padding(12)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
                                 .fill(Color(.tertiarySystemFill))
                         )
                     }
@@ -99,7 +99,7 @@ struct FireOnboardingView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                                     .fill(FireTheme.accent)
                             )
                         }

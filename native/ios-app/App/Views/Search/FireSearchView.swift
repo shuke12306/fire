@@ -117,9 +117,9 @@ struct FireSearchView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .background(FireTheme.softSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
                     .strokeBorder(FireTheme.divider, lineWidth: 0.5)
             )
 

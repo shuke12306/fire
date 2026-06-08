@@ -548,7 +548,7 @@ struct FireComposerView: View {
             .padding(.top, 16)
             .padding(.bottom, 120)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(FireTheme.canvas)
         .navigationTitle(route.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -657,8 +657,8 @@ struct FireComposerView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 12)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
+                        RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
+                            .fill(FireTheme.surface)
                     )
                 }
                 .buttonStyle(.plain)
@@ -723,8 +723,8 @@ struct FireComposerView: View {
                             }
                         }
                         .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(.secondarySystemBackground))
+                            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
+                                .fill(FireTheme.surface)
                         )
                     }
 
@@ -782,8 +782,8 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -826,8 +826,8 @@ struct FireComposerView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -879,11 +879,11 @@ struct FireComposerView: View {
             )
             .frame(minHeight: 260)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                    .fill(FireTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                     .strokeBorder(FireTheme.divider, lineWidth: 1)
             )
 
@@ -961,7 +961,7 @@ struct FireComposerView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .clipShape(
-                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                                         )
                                 case .failure:
                                     previewImageFallback(label: image.altText ?? image.urlString)
@@ -979,8 +979,8 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -1052,7 +1052,7 @@ struct FireComposerView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                 .fill(tint.opacity(0.12))
         )
     }
@@ -1173,8 +1173,8 @@ struct FireComposerView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -1190,7 +1190,7 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                 .fill(Color(.tertiarySystemFill))
         )
     }

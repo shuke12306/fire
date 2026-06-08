@@ -51,10 +51,14 @@
 
 **Files:**
 - Modify: `native/ios-app/App/Core/FireTheme.swift`
+- Modify: `native/ios-app/App/Core/FireComponents.swift`
+- Modify: `native/ios-app/App/Views/Composer/FireComposerView.swift`
+- Modify: `native/ios-app/App/Views/Other/FireOnboardingView.swift`
+- Modify: `native/ios-app/App/Views/Search/FireSearchView.swift`
 
-- [ ] **Step 1: 新增 corner radius Token 和 surface Token**
+- [x] **Step 1: 新增 corner radius Token 和 surface Token**
 
-在 `FireTheme` extension constants 中替换现有 Token 并新增：
+`FireTheme` now defines:
 
 ```swift
 extension FireTheme {
@@ -67,7 +71,9 @@ extension FireTheme {
 }
 ```
 
-- [ ] **Step 2: 全局搜索并替换硬编码圆角值**
+It also exposes semantic `canvas`, `surface`, and `surfaceSecondary` colors for SwiftUI surfaces.
+
+- [x] **Step 2: 全局搜索并替换硬编码圆角值**
 
 搜索模式及替换目标：
 
@@ -85,7 +91,9 @@ extension FireTheme {
 - `App/Views/FireSearchView.swift`
 - `App/Views/FireTopicRow.swift`
 
-- [ ] **Step 3: 替换背景色硬编码**
+Verified scoped search over `FireTheme.swift`, `FireComponents.swift`, `FireComposerView.swift`, `FireOnboardingView.swift`, `FireSearchView.swift`, and `FireTopicRow.swift` no longer finds the listed hardcoded radius patterns.
+
+- [x] **Step 3: 替换背景色硬编码**
 
 | 搜索模式 | 替换为 |
 |----------|--------|
@@ -94,15 +102,23 @@ extension FireTheme {
 | `Color.black.opacity(0.06)` | `FireTheme.divider` |
 | `Color.black.opacity(0.` 任何描边 | `FireTheme.divider` |
 
-- [ ] **Step 4: 构建验证**
+`FireComposerView` now uses `FireTheme.canvas` for the page background and `FireTheme.surface` for composer panels. The scoped search no longer finds `Color(.systemGroupedBackground)` or `Color(.secondarySystemBackground)` in the planned files.
 
-Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
-Expected: `** BUILD SUCCEEDED **`
+- [x] **Step 4: 构建验证**
 
-- [ ] **Step 5: Commit**
+Run: `cd native/ios-app && xcodebuild build -scheme Fire -destination 'id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF' -quiet`
+
+Result: build succeeded. Existing warnings remain from `UITextItemInteraction`, no-op `await`, Swift 6 capture diagnostics, and related pre-existing code.
+
+- [x] **Step 5: Commit**
 
 ```bash
-git add native/ios-app/App/Core/FireTheme.swift native/ios-app/App/Core/FireComponents.swift native/ios-app/App/Views/
+git add docs/superpowers/plans/2026-06-08-p1-foundation.md \
+  native/ios-app/App/Core/FireTheme.swift \
+  native/ios-app/App/Core/FireComponents.swift \
+  native/ios-app/App/Views/Composer/FireComposerView.swift \
+  native/ios-app/App/Views/Other/FireOnboardingView.swift \
+  native/ios-app/App/Views/Search/FireSearchView.swift
 git commit -m "refactor(ios): unify corner radius and background tokens across FireTheme"
 ```
 
