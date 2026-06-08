@@ -187,6 +187,25 @@ final class FireTopicListMessageBusRefreshTests: XCTestCase {
         ))
     }
 
+    @MainActor
+    func testHomeTopicCountPatchClearsUnreadStateWhenReadPositionReachesHighestPost() {
+        var row = makeTopicRow(id: 42, activityTimestampUnixMs: 100)
+        row.topic.unreadPosts = 2
+        row.topic.newPosts = 1
+        row.topic.lastReadPostNumber = 7
+        row.topic.highestPostNumber = 9
+        row.hasUnreadPosts = true
+        let detail = makeTopicDetail(id: 42, postsCount: 9, replyCount: 9, views: 321)
+
+        let patched = FireHomeFeedStore.patchedTopicRow(row, from: detail)
+
+        XCTAssertEqual(patched?.topic.lastReadPostNumber, 9)
+        XCTAssertEqual(patched?.topic.highestPostNumber, 9)
+        XCTAssertEqual(patched?.topic.unreadPosts, 0)
+        XCTAssertEqual(patched?.topic.newPosts, 0)
+        XCTAssertEqual(patched?.hasUnreadPosts, false)
+    }
+
     private func makeLatestEvent(
         topicID: UInt64?,
         messageType: String? = "latest"
