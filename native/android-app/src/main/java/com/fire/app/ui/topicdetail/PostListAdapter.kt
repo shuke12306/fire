@@ -30,6 +30,7 @@ data class PostRowCallbacks(
     val reactionIds: () -> List<String> = { emptyList() },
     val onPostClick: (TopicPostState) -> Unit = {},
     val onReplyClick: (TopicPostState) -> Unit = {},
+    val onQuoteClick: (TopicPostState) -> Unit = {},
     val onHeartClick: (TopicPostState) -> Unit = {},
     val onReactClick: (TopicPostState) -> Unit = {},
     val onBookmarkClick: (TopicPostState) -> Unit = {},

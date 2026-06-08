@@ -25,7 +25,8 @@ the shared Rust core at build time.
   creation opens the native topic detail screen. Topic compose supports Rust-backed tag
   suggestions, `@mention` suggestions, image upload insertion, selection-aware
   Markdown formatting, shared Rust draft restore/autosave/delete, and local
-  Markdown preview with upload-image preview. Empty initial Paging loads render
+  Markdown preview with upload-image preview. Reply compose also accepts quote
+  prefill from topic detail while preserving restored drafts. Empty initial Paging loads render
   topic-row skeletons in the list area instead of a separate blocking spinner.
 - `SearchFragment` is a Navigation destination reachable from Home. It calls
   Rust search APIs for all/topic/post/user scopes, renders labeled result
@@ -104,6 +105,9 @@ Current topic-detail interactions:
   shared Rust draft restore/autosave/delete, and local Markdown preview with
   upload-image preview
 - per-post reply from the post row
+- per-post quote reply from the post row, using Rust-provided
+  `RenderDocumentState.plainText` for the quoted body instead of parsing cooked
+  HTML on Android
 - per-post heart like/unlike through shared Rust interaction APIs
 - per-post custom reaction selection from Rust bootstrap-enabled reactions
 - topic and per-post bookmark create/update/delete through shared Rust

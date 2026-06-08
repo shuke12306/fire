@@ -473,33 +473,50 @@ git commit -m "feat(composer): add Markdown formatting toolbar for iOS and Andro
 ## Task 9: 编辑器增强 — 引用插入
 
 **Files:**
-- Modify: `native/ios-app/App/Views/FireComposerView.swift`
+- Modify: `native/ios-app/App/Views/Composer/FireComposerView.swift`
 - Modify: `native/ios-app/App/TopicDetail/` (post action callbacks)
 - Modify: Android 对应文件
 
-- [ ] **Step 1: iOS 引用插入实现**
+- [x] **Step 1: iOS 引用插入实现**
 
-在话题详情的帖子操作菜单中添加「引用回复」选项。
+iOS topic-detail native post cells now expose 「引用回复」 from the existing
+post operation menu. The action builds Discourse quote Markdown through
+`FireQuoteMarkdown`, using Rust-provided `post.renderDocument?.plainText`
+rather than parsing `post.cooked` on the platform. Empty render text surfaces a
+notice instead of inventing a fallback body.
 
-当用户选择引用时：
-1. 提取选中帖子的 `cooked` 内容
-2. 在编辑器中插入 `[quote="username, post:{number}, topic:{id}"]\n{plain_text}\n[/quote]\n\n`
-3. 打开编辑器并将光标定位到引用之后
+Selecting quote opens the full-screen advanced reply composer with:
 
-```swift
-func insertQuote(username: String, postNumber: UInt32, topicId: UInt64, text: String) {
-    let quote = "[quote=\"\(username), post:\(postNumber), topic:\(topicId)\"]\n\(text)\n[/quote]\n\n"
-    composerTextView.insertTextAtCursor(quote)
-}
+- `replyToPostNumber` / `replyToUsername` set to the quoted post
+- `[quote="username, post:{number}, topic:{id}"]\n{plain_text}\n[/quote]\n\n`
+  inserted as `initialBody`
+- cursor positioned after the quote block
+- restored drafts preserved by prepending the quote once if a matching draft
+  already exists
+
+- [x] **Step 2: Android 引用插入**
+
+Android post rows now show a Quote action beside Reply. `QuoteMarkdown` builds
+the same Discourse `[quote]` block from `post.renderDocument?.plainText`, and
+`ReplyComposerSheet` accepts an `initialBody` argument. Existing restored draft
+content is kept and the quote is inserted once at the beginning.
+
+- [x] **Step 3: 构建验证**
+
+Focused verification passed:
+
+```bash
+cd native/android-app
+./gradlew testDebugUnitTest --tests com.fire.app.ui.composer.MarkdownInsertionTest
+./gradlew assembleDebug
+
+cd native/ios-app
+xcodebuild test -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -only-testing:FireTests/FireComposerValidationTests -quiet
+xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.3.1' -quiet
 ```
 
-- [ ] **Step 2: Android 引用插入**
-
-同样的 `[quote]` 格式，在 `ReplyComposerSheet` 中添加引用插入方法。
-
-- [ ] **Step 3: 构建验证**
-
-Run: Both platforms build successfully
+iOS still emits the existing deprecation / Swift 6 migration warnings noted in
+earlier tasks, but the build and focused test target pass.
 
 - [ ] **Step 4: Commit**
 

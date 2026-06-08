@@ -167,4 +167,64 @@ final class FireComposerValidationTests: XCTestCase {
         XCTAssertEqual(result.text, "[text](url)")
         XCTAssertEqual(result.selectedRange, NSRange(location: 1, length: 4))
     }
+
+    func testQuoteMarkdownBuildsDiscourseQuoteBlockFromPlainText() {
+        let quote = FireQuoteMarkdown.build(
+            username: " alice \"fire\"\r\nnative ",
+            postNumber: 7,
+            topicID: 42,
+            plainText: "\nHello Fire\n\n"
+        )
+
+        XCTAssertEqual(
+            quote,
+            "[quote=\"alice 'fire' native, post:7, topic:42\"]\nHello Fire\n[/quote]\n\n"
+        )
+    }
+
+    func testQuoteMarkdownReturnsNilForBlankPlainText() {
+        let quote = FireQuoteMarkdown.build(
+            username: "alice",
+            postNumber: 7,
+            topicID: 42,
+            plainText: " \n "
+        )
+
+        XCTAssertNil(quote)
+    }
+
+    func testComposerInitialBodyPrependsInitialBodyToRestoredDraft() {
+        let initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\n"
+        let result = FireComposerInitialBody.merge(
+            initialBody: initial,
+            currentBody: "Existing draft"
+        )
+
+        XCTAssertEqual(result.text, initial + "Existing draft")
+        XCTAssertEqual(result.selectedRange, NSRange(location: (initial as NSString).length, length: 0))
+    }
+
+    func testComposerInitialBodyDoesNotDuplicateExistingInitialBody() {
+        let initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\n"
+        let result = FireComposerInitialBody.merge(
+            initialBody: initial,
+            currentBody: initial + "Existing draft"
+        )
+
+        XCTAssertEqual(result.text, initial + "Existing draft")
+        XCTAssertEqual(result.selectedRange, NSRange(location: (initial as NSString).length, length: 0))
+    }
+
+    func testComposerInitialBodyUsesPreferredCursorInsideExistingInitialBody() {
+        let initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\nTyped draft"
+        let cursor = (initial as NSString).range(of: "Typed draft").location
+        let result = FireComposerInitialBody.merge(
+            initialBody: initial,
+            currentBody: initial,
+            preferredSelectionLocation: cursor
+        )
+
+        XCTAssertEqual(result.text, initial)
+        XCTAssertEqual(result.selectedRange, NSRange(location: cursor, length: 0))
+    }
 }

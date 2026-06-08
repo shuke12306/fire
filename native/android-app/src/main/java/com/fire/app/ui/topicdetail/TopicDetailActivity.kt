@@ -37,6 +37,7 @@ import com.fire.app.session.FireSessionStoreRepository
 import com.fire.app.core.image.FireAvatarUrls
 import com.fire.app.ui.composer.ComposerTagAssist
 import com.fire.app.ui.composer.PrivateMessageComposerSheet
+import com.fire.app.ui.composer.QuoteMarkdown
 import com.fire.app.ui.composer.ReplyComposerSheet
 import com.fire.app.ui.home.HomeTopicDetailPatchRepository
 import com.fire.app.ui.webview.FireInAppWebViewActivity
@@ -132,6 +133,7 @@ class TopicDetailActivity : AppCompatActivity() {
             val postCallbacks = PostRowCallbacks(
                 reactionIds = { enabledReactionIds },
                 onReplyClick = ::showReplyComposerForPost,
+                onQuoteClick = ::showQuoteReplyComposerForPost,
                 onHeartClick = { post -> viewModel?.toggleHeart(post) },
                 onReactClick = ::showReactionPicker,
                 onBookmarkClick = ::showPostBookmarkEditor,
@@ -310,6 +312,24 @@ class TopicDetailActivity : AppCompatActivity() {
         showReplyComposer(replyToPostNumber = post.postNumber.toInt())
     }
 
+    private fun showQuoteReplyComposerForPost(post: TopicPostState) {
+        val currentRoute = route ?: return
+        val quote = QuoteMarkdown.build(
+            username = post.username,
+            postNumber = post.postNumber,
+            topicId = currentRoute.topicId.toULong(),
+            plainText = post.renderDocument?.plainText.orEmpty(),
+        )
+        if (quote == null) {
+            Toast.makeText(this, R.string.topic_detail_quote_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        showReplyComposer(
+            replyToPostNumber = post.postNumber.toInt(),
+            initialBody = quote,
+        )
+    }
+
     private fun showViewModeChooser() {
         val currentMode = viewModel?.viewMode?.value ?: TopicDetailViewMode.THREADED
         val modes = arrayOf(TopicDetailViewMode.THREADED, TopicDetailViewMode.FLAT)
@@ -338,11 +358,12 @@ class TopicDetailActivity : AppCompatActivity() {
         )
     }
 
-    private fun showReplyComposer(replyToPostNumber: Int?) {
+    private fun showReplyComposer(replyToPostNumber: Int?, initialBody: String? = null) {
         val currentRoute = route ?: return
         val sheet = ReplyComposerSheet.newInstance(
             topicId = currentRoute.topicId,
             replyToPostNumber = replyToPostNumber,
+            initialBody = initialBody,
         ) {
             viewModel?.loadTopicDetail(
                 topicId = currentRoute.topicId.toULong(),

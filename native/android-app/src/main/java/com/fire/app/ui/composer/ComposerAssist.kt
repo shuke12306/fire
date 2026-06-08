@@ -455,6 +455,76 @@ data class MarkdownInsertionResult(
     val selectionEnd: Int = selectionStart,
 )
 
+object QuoteMarkdown {
+    fun build(
+        username: String,
+        postNumber: UInt,
+        topicId: ULong,
+        plainText: String,
+    ): String? {
+        val trimmedText = plainText.trim()
+        if (trimmedText.isEmpty()) return null
+
+        val author = username
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .replace('"', '\'')
+            .ifBlank { "unknown" }
+        return "[quote=\"$author, post:$postNumber, topic:$topicId\"]\n" +
+            trimmedText +
+            "\n[/quote]\n\n"
+    }
+}
+
+object ComposerInitialBody {
+    fun merge(
+        initialBody: String,
+        currentBody: String,
+        preferredSelectionStart: Int = initialBody.length,
+    ): MarkdownInsertionResult {
+        if (initialBody.isBlank()) {
+            return MarkdownInsertionResult(
+                text = currentBody,
+                selectionStart = currentBody.length,
+            )
+        }
+
+        val trimmedInitial = initialBody.trim()
+        val exactExistingIndex = currentBody.indexOf(initialBody)
+        val trimmedExistingIndex = currentBody.indexOf(trimmedInitial)
+        if (exactExistingIndex >= 0 || trimmedExistingIndex >= 0) {
+            val index = if (exactExistingIndex >= 0) exactExistingIndex else trimmedExistingIndex
+            val selectionOffset = if (exactExistingIndex >= 0) {
+                preferredSelectionStart.coerceIn(0, initialBody.length)
+            } else {
+                preferredSelectionStart.coerceIn(0, trimmedInitial.length)
+            }
+            return MarkdownInsertionResult(
+                text = currentBody,
+                selectionStart = index + selectionOffset,
+            )
+        }
+
+        if (currentBody.isBlank()) {
+            return MarkdownInsertionResult(
+                text = initialBody,
+                selectionStart = preferredSelectionStart.coerceIn(0, initialBody.length),
+            )
+        }
+
+        val separator = if (initialBody.endsWith("\n\n") || currentBody.startsWith("\n")) {
+            ""
+        } else {
+            "\n\n"
+        }
+        val nextText = initialBody + separator + currentBody
+        return MarkdownInsertionResult(
+            text = nextText,
+            selectionStart = preferredSelectionStart.coerceIn(0, initialBody.length),
+        )
+    }
+}
+
 object MarkdownInsertion {
     fun apply(
         action: MarkdownFormatAction,

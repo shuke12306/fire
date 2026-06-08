@@ -192,6 +192,17 @@
             android:textColor="@color/fire_text_secondary" />
 
         <TextView
+            android:id="@+id/action_quote"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:drawablePadding="4dp"
+            android:gravity="center_vertical"
+            android:text="@string/topic_detail_quote_post"
+            android:textAppearance="@style/TextAppearance.AppCompat.Caption"
+            android:textColor="@color/fire_text_secondary" />
+
+        <TextView
             android:id="@+id/action_bookmark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

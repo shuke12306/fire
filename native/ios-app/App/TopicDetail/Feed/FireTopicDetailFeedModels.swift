@@ -207,6 +207,7 @@ final class FireTopicDetailRuntimeInteractions {
     let onOpenImage: (FireCookedImage) -> Void
     let onToggleLike: (TopicPostState) -> Void
     let onSelectReaction: (TopicPostState, String) -> Void
+    let onQuotePost: (TopicPostState) -> Void
     let onEditPost: (TopicPostState) -> Void
     let onBookmarkPost: (TopicPostState) -> Void
     let onDeletePost: (TopicPostState) -> Void
@@ -240,6 +241,7 @@ final class FireTopicDetailRuntimeInteractions {
         onOpenImage: @escaping (FireCookedImage) -> Void,
         onToggleLike: @escaping (TopicPostState) -> Void,
         onSelectReaction: @escaping (TopicPostState, String) -> Void,
+        onQuotePost: @escaping (TopicPostState) -> Void,
         onEditPost: @escaping (TopicPostState) -> Void,
         onBookmarkPost: @escaping (TopicPostState) -> Void,
         onDeletePost: @escaping (TopicPostState) -> Void,
@@ -272,6 +274,7 @@ final class FireTopicDetailRuntimeInteractions {
         self.onOpenImage = onOpenImage
         self.onToggleLike = onToggleLike
         self.onSelectReaction = onSelectReaction
+        self.onQuotePost = onQuotePost
         self.onEditPost = onEditPost
         self.onBookmarkPost = onBookmarkPost
         self.onDeletePost = onDeletePost
@@ -332,6 +335,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     var onOpenImage: (FireCookedImage) -> Void { interactions.onOpenImage }
     var onToggleLike: (TopicPostState) -> Void { interactions.onToggleLike }
     var onSelectReaction: (TopicPostState, String) -> Void { interactions.onSelectReaction }
+    var onQuotePost: (TopicPostState) -> Void { interactions.onQuotePost }
     var onEditPost: (TopicPostState) -> Void { interactions.onEditPost }
     var onBookmarkPost: (TopicPostState) -> Void { interactions.onBookmarkPost }
     var onDeletePost: (TopicPostState) -> Void { interactions.onDeletePost }

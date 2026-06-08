@@ -119,6 +119,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         onSelectReaction: { [weak self] post, reactionID in
             self?.toggleReaction(reactionID, for: post)
         },
+        onQuotePost: { [weak self] post in
+            self?.openQuoteComposer(for: post)
+        },
         onEditPost: { [weak self] post in
             self?.presentPostEditor(post)
         },
@@ -1037,6 +1040,60 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 self.buildAndApplyChromeState()
                 Task {
                     await self.loadTopicDetail(force: true)
+                }
+            },
+            onSubmissionNotice: { [weak self] message in
+                self?.modalRouter.presentNotice(message: message)
+            }
+        )
+    }
+
+    private func openQuoteComposer(for post: TopicPostState) {
+        guard let quote = FireQuoteMarkdown.build(
+            username: post.username,
+            postNumber: post.postNumber,
+            topicID: topic.id,
+            plainText: post.renderDocument?.plainText ?? ""
+        ) else {
+            modalRouter.presentNotice(message: "该帖子暂无可引用内容。")
+            return
+        }
+
+        let quickReplyDraft = replyDraft
+        let initialBody = FireComposerInitialBody.merge(
+            initialBody: quote,
+            currentBody: quickReplyDraft
+        ).text
+        let quoteSelectionLocation = (quote as NSString).length
+        composerContext = FireReplyComposerContext(
+            topicId: topic.id,
+            postId: post.id,
+            replyToPostNumber: post.postNumber,
+            replyToUsername: post.username
+        )
+        quickReplyBarNode.resignInputFocus()
+        buildAndApplyChromeState()
+        modalRouter.presentAdvancedComposer(
+            route: FireComposerRoute(
+                kind: .advancedReply(
+                    topicID: topic.id,
+                    topicTitle: displayedTopicTitle,
+                    categoryID: displayedCategoryId,
+                    replyToPostNumber: post.postNumber,
+                    replyToUsername: post.username,
+                    isPrivateMessage: isPrivateMessageThread
+                )
+            ),
+            initialBody: initialBody,
+            initialBodySelectionLocation: quoteSelectionLocation,
+            onReplySubmitted: { [weak self] in
+                guard let self else { return }
+                self.replyDraft = ""
+                self.composerContext = nil
+                self.quickReplyError = nil
+                self.buildAndApplyChromeState()
+                Task {
+                    await self.loadTopicDetail(targetPostNumber: post.postNumber, force: true)
                 }
             },
             onSubmissionNotice: { [weak self] message in

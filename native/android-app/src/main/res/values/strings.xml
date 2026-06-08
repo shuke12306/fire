@@ -193,6 +193,8 @@
     <string name="topic_detail_reply_submit">Post Reply</string>
     <string name="topic_detail_reply_min_length">Reply must be at least %1$s characters.</string>
     <string name="topic_detail_reply_error">Unable to post reply.</string>
+    <string name="topic_detail_quote_post">Quote</string>
+    <string name="topic_detail_quote_empty">This post has no quoteable text.</string>
     <string name="topic_detail_like_post">Like (%1$s)</string>
     <string name="topic_detail_unlike_post">Unlike (%1$s)</string>
     <string name="topic_detail_like_error">Unable to update like state.</string>

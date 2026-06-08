@@ -52,6 +52,7 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     private val likeAction: TextView = itemView.findViewById(R.id.action_like)
     private val reactAction: TextView = itemView.findViewById(R.id.action_react)
     private val replyAction: TextView = itemView.findViewById(R.id.action_reply)
+    private val quoteAction: TextView = itemView.findViewById(R.id.action_quote)
     private val bookmarkAction: TextView = itemView.findViewById(R.id.action_bookmark)
     private val reactionsAction: TextView = itemView.findViewById(R.id.action_reactions)
     private val editAction: TextView = itemView.findViewById(R.id.action_edit)
@@ -197,6 +198,9 @@ class PostViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             context.getString(R.string.topic_detail_reply_post)
         }
         replyAction.setOnClickListener { callbacks.onReplyClick(post) }
+
+        quoteAction.text = context.getString(R.string.topic_detail_quote_post)
+        quoteAction.setOnClickListener { callbacks.onQuoteClick(post) }
 
         bookmarkAction.text = context.getString(
             if (post.bookmarked) {

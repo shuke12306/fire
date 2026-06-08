@@ -26,6 +26,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
 
     private var topicId: ULong = 0u
     private var replyToPostNumber: UInt? = null
+    private var initialBody: String = ""
     private var onReplySubmitted: (() -> Unit)? = null
 
     private lateinit var bodyInput: EditText
@@ -70,6 +71,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         arguments?.let { args ->
             topicId = args.getLong(ARG_TOPIC_ID).toULong()
             replyToPostNumber = args.getInt(ARG_REPLY_TO_POST_NUMBER).takeIf { it > 0 }?.toUInt()
+            initialBody = args.getString(ARG_INITIAL_BODY).orEmpty()
         }
 
         val title = if (replyToPostNumber != null) {
@@ -116,6 +118,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 ?.ifBlank { "https://linux.do" }
                 ?: "https://linux.do"
             restoreDraftIfAvailable()
+            applyInitialBodyIfNeeded()
             draftAutosave?.start()
 
             uploadButton.setOnClickListener {
@@ -220,6 +223,18 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         Toast.makeText(requireContext(), R.string.composer_draft_restored, Toast.LENGTH_SHORT).show()
     }
 
+    private fun applyInitialBodyIfNeeded() {
+        val result = ComposerInitialBody.merge(
+            initialBody = initialBody,
+            currentBody = bodyInput.text.toString(),
+        )
+        bodyInput.setText(result.text)
+        bodyInput.setSelection(
+            result.selectionStart.coerceIn(0, bodyInput.text.length),
+            result.selectionEnd.coerceIn(0, bodyInput.text.length),
+        )
+    }
+
     private suspend fun persistDraftIfNeeded() {
         if (didSubmit) return
         if (bodyInput.text.isBlank()) {
@@ -270,16 +285,19 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_TOPIC_ID = "topic_id"
         private const val ARG_REPLY_TO_POST_NUMBER = "reply_to_post_number"
+        private const val ARG_INITIAL_BODY = "initial_body"
 
         fun newInstance(
             topicId: Long,
             replyToPostNumber: Int? = null,
+            initialBody: String? = null,
             onReplySubmitted: (() -> Unit)? = null,
         ): ReplyComposerSheet {
             return ReplyComposerSheet().apply {
                 arguments = Bundle().apply {
                     putLong(ARG_TOPIC_ID, topicId)
                     replyToPostNumber?.let { putInt(ARG_REPLY_TO_POST_NUMBER, it) }
+                    initialBody?.let { putString(ARG_INITIAL_BODY, it) }
                 }
                 this.onReplySubmitted = onReplySubmitted
             }

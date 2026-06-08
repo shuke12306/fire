@@ -1240,6 +1240,9 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             })
         }
         if payload.canWriteInteractions && !post.hidden {
+            alert.addAction(UIAlertAction(title: "引用回复", style: .default) { _ in
+                callbacks.onQuotePost(post)
+            })
             alert.addAction(UIAlertAction(title: post.bookmarked ? "编辑书签" : "添加书签", style: .default) { _ in
                 callbacks.onBookmarkPost(post)
             })
@@ -1338,6 +1341,12 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
         var interactionActions: [UIAction] = []
         if canWrite && !post.hidden {
+            let quote = UIAction(title: "引用回复", image: UIImage(systemName: "text.quote")) { _ in
+                callbacks.onQuotePost(post)
+            }
+            quote.attributes = isMutating ? .disabled : []
+            interactionActions.append(quote)
+
             let bookmarkTitle = post.bookmarked ? "编辑书签" : "添加书签"
             let bookmarkIcon = post.bookmarked ? "bookmark.fill" : "bookmark"
             let bookmark = UIAction(title: bookmarkTitle, image: UIImage(systemName: bookmarkIcon)) { _ in

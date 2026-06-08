@@ -226,6 +226,7 @@ final class FireTopicDetailModalRouter {
     func presentAdvancedComposer(
         route: FireComposerRoute,
         initialBody: String,
+        initialBodySelectionLocation: Int? = nil,
         onReplySubmitted: @escaping @MainActor () -> Void,
         onSubmissionNotice: @escaping @MainActor (String) -> Void
     ) {
@@ -234,6 +235,7 @@ final class FireTopicDetailModalRouter {
                 viewModel: viewModel,
                 route: route,
                 initialBody: initialBody,
+                initialBodySelectionLocation: initialBodySelectionLocation,
                 onReplySubmitted: onReplySubmitted,
                 onSubmissionNotice: onSubmissionNotice
             )

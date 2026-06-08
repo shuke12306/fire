@@ -45,4 +45,75 @@ class MarkdownInsertionTest {
         assertEquals(1, result.selectionStart)
         assertEquals(5, result.selectionEnd)
     }
+
+    @Test
+    fun quoteMarkdown_buildsDiscourseQuoteBlockFromPlainText() {
+        val quote = QuoteMarkdown.build(
+            username = " alice \"fire\"\r\nnative ",
+            postNumber = 7u,
+            topicId = 42uL,
+            plainText = "\nHello Fire\n\n",
+        )
+
+        assertEquals(
+            "[quote=\"alice 'fire' native, post:7, topic:42\"]\nHello Fire\n[/quote]\n\n",
+            quote,
+        )
+    }
+
+    @Test
+    fun quoteMarkdown_returnsNullForBlankPlainText() {
+        val quote = QuoteMarkdown.build(
+            username = "alice",
+            postNumber = 7u,
+            topicId = 42uL,
+            plainText = " \n ",
+        )
+
+        assertEquals(null, quote)
+    }
+
+    @Test
+    fun composerInitialBody_prependsInitialBodyToExistingDraftAndPlacesCursorAfterInitialBody() {
+        val initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\n"
+        val result = ComposerInitialBody.merge(
+            initialBody = initial,
+            currentBody = "Existing draft",
+        )
+
+        assertEquals(
+            initial + "Existing draft",
+            result.text,
+        )
+        assertEquals(initial.length, result.selectionStart)
+        assertEquals(initial.length, result.selectionEnd)
+    }
+
+    @Test
+    fun composerInitialBody_doesNotDuplicateExistingInitialBody() {
+        val initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\n"
+        val result = ComposerInitialBody.merge(
+            initialBody = initial,
+            currentBody = initial + "Existing draft",
+        )
+
+        assertEquals(initial + "Existing draft", result.text)
+        assertEquals(initial.length, result.selectionStart)
+        assertEquals(initial.length, result.selectionEnd)
+    }
+
+    @Test
+    fun composerInitialBody_usesPreferredCursorInsideExistingInitialBody() {
+        val initial = "[quote=\"alice, post:7, topic:42\"]\nHello\n[/quote]\n\nTyped draft"
+        val cursor = initial.indexOf("Typed draft")
+        val result = ComposerInitialBody.merge(
+            initialBody = initial,
+            currentBody = initial,
+            preferredSelectionStart = cursor,
+        )
+
+        assertEquals(initial, result.text)
+        assertEquals(cursor, result.selectionStart)
+        assertEquals(cursor, result.selectionEnd)
+    }
 }
