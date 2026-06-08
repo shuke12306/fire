@@ -207,11 +207,11 @@ Result: passed after clearing stale package build artifacts with `cargo clean -p
 Run: temporary UniFFI bindgen for Swift and Kotlin against `rust/target/debug/libfire_uniffi.dylib`
 Result: generated `fire_uniffi_ldc.swift`, `uniffi/fire_uniffi_ldc/fire_uniffi_ldc.kt`, and `FireAppCore.ldc()`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock rust/crates/fire-uniffi-ldc/ rust/crates/fire-uniffi/Cargo.toml rust/crates/fire-uniffi/src/lib.rs native/ios-app/project.yml docs/superpowers/plans/2026-06-08-p2-feature-completion.md
-git commit -m "feat(uniffi): add LDC/CDK handle and FFI bridge"
+git commit -m "feat(uniffi): add LDC and CDK OAuth bridge"
 ```
 
 ---
@@ -272,32 +272,40 @@ git commit -m "feat(ios): add LDC Credit and CDK connection views"
 
 **Files:**
 - Create: `native/android-app/src/main/java/com/fire/app/ui/ldc/LDCFragment.kt`
-- Create: `native/android-app/src/main/java/com/fire/app/ui/ldc/LDCViewModel.kt`
+- Create: `native/android-app/src/main/java/com/fire/app/ui/ldc/CDKFragment.kt`
+- Create: `native/android-app/src/main/java/com/fire/app/ui/ldc/LdcCdkFragment.kt`
+- Create: `native/android-app/src/main/java/com/fire/app/ui/ldc/LdcCdkViewModel.kt`
 - Create: `native/android-app/src/main/res/layout/fragment_ldc.xml`
 - Modify: `native/android-app/src/main/res/navigation/fire_nav_graph.xml`
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt`
+- Modify: `native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt`
+- Modify: `native/android-app/src/main/res/layout/fragment_profile.xml`
+- Modify: `native/android-app/src/main/res/values/strings.xml`
 
-- [ ] **Step 1: 创建 LDC ViewModel 和 Fragment**
+- [x] **Step 1: 创建 LDC/CDK ViewModel 和 Fragment**
 
 遵循 Android MVVM 模式（参考 `HomeViewModel` + `HomeFragment`）：
-- `LDCViewModel`: `StateFlow<LdcUserInfoState?>`, authorization state, `loadUserInfo()`, `prepareAuthorization()`, `completeAuthorization()`, `logout()`
-- `LDCFragment`: 余额/信用指标展示 + 授权/登出操作 + 空状态/加载状态
+- `LdcCdkViewModel`: `StateFlow<LdcCdkUiState>`, user-info state, authorization state, `loadUserInfo()`, `prepareAuthorization()`, `completeAuthorization()`, `logout()`
+- `LDCFragment`: LDC 余额/信用指标展示 + 授权/登出操作 + 空状态/加载状态
+- `CDKFragment`: CDK 连接账号/积分展示 + 授权/登出操作 + 空状态/加载状态
 
-- [ ] **Step 2: 布局和导航**
+- [x] **Step 2: 布局和导航**
 
-`fragment_ldc.xml`：余额卡片、信用指标、授权/登出操作。
-导航图添加 `ldcFragment`。
-Profile 中添加入口。
+`fragment_ldc.xml` uses one fixed ViewBinding layout for both services: overview metrics, optional LDC detail rows, explicit refresh, authorization URL/link rows with copy actions, approve/callback completion, and logout.
 
-- [ ] **Step 3: 构建验证**
+Navigation graph adds `ldcFragment` and `cdkFragment`. The current-user profile action strip adds `LDC` and `CDK` entries using a horizontal scroll container so the existing Bookmarks/Drafts/Messages/Read History actions stay reachable on narrow screens.
 
-Run: `cd native/android-app && ./gradlew assembleDebug 2>&1 | tail -5`
-Expected: `BUILD SUCCESSFUL`
+`FireSessionStore.kt` wraps the generated `core.ldc()` methods and remains Android's only Rust bridge for these screens. Cookie stores, WebView login, and platform browser context remain outside the new UI.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 3: 构建验证**
+
+Run: `cd native/android-app && ./gradlew assembleDebug`
+Result: `BUILD SUCCESSFUL`
+
+- [x] **Step 4: Commit**
 
 ```bash
-git add native/android-app/src/main/java/com/fire/app/ui/ldc/ native/android-app/src/main/res/layout/fragment_ldc.xml native/android-app/src/main/res/navigation/fire_nav_graph.xml native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt
+git add native/android-app/src/main/java/com/fire/app/ui/ldc/ native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt native/android-app/src/main/java/com/fire/app/ui/profile/ProfileFragment.kt native/android-app/src/main/res/drawable/bg_ldc_*.xml native/android-app/src/main/res/layout/fragment_ldc.xml native/android-app/src/main/res/layout/fragment_profile.xml native/android-app/src/main/res/navigation/fire_nav_graph.xml native/android-app/src/main/res/values/strings.xml
 git commit -m "feat(android): add LDC Credit and CDK connection screens"
 ```
 

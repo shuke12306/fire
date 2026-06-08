@@ -11,6 +11,11 @@ import uniffi.fire_uniffi_diagnostics.LogFileSummaryState
 import uniffi.fire_uniffi_diagnostics.NetworkTraceDetailState
 import uniffi.fire_uniffi_diagnostics.NetworkTraceSummaryState
 import uniffi.fire_uniffi_diagnostics.HostLogLevelState
+import uniffi.fire_uniffi_ldc.CdkAuthorizationUrlState
+import uniffi.fire_uniffi_ldc.CdkUserInfoState
+import uniffi.fire_uniffi_ldc.LdcApprovalStatusState
+import uniffi.fire_uniffi_ldc.LdcAuthorizationUrlState
+import uniffi.fire_uniffi_ldc.LdcUserInfoState
 import uniffi.fire_uniffi_messagebus.MessageBusClientModeState
 import uniffi.fire_uniffi_messagebus.MessageBusEventHandler
 import uniffi.fire_uniffi_messagebus.MessageBusSubscriptionScopeState
@@ -350,6 +355,58 @@ class FireSessionStore(
 
     suspend fun searchUsers(query: UserMentionQueryState): UserMentionResultState = withContext(Dispatchers.IO) {
         core.search().searchUsers(query)
+    }
+
+    suspend fun ldcAuthorizationUrl(): LdcAuthorizationUrlState = withContext(Dispatchers.IO) {
+        core.ldc().ldcAuthorizationUrl()
+    }
+
+    suspend fun ldcApprovalLink(authorizationUrl: String): String = withContext(Dispatchers.IO) {
+        core.ldc().ldcApprovalLink(authorizationUrl)
+    }
+
+    suspend fun ldcApprove(approvePath: String): LdcApprovalStatusState = withContext(Dispatchers.IO) {
+        core.ldc().ldcApprove(approvePath)
+    }
+
+    suspend fun ldcCallback(code: String, state: String) = withContext(Dispatchers.IO) {
+        core.ldc().ldcCallback(code, state)
+        persistCurrentSession()
+    }
+
+    suspend fun ldcUserInfo(): LdcUserInfoState = withContext(Dispatchers.IO) {
+        core.ldc().ldcUserInfo()
+    }
+
+    suspend fun ldcLogout() = withContext(Dispatchers.IO) {
+        core.ldc().ldcLogout()
+        persistCurrentSession()
+    }
+
+    suspend fun cdkAuthorizationUrl(): CdkAuthorizationUrlState = withContext(Dispatchers.IO) {
+        core.ldc().cdkAuthorizationUrl()
+    }
+
+    suspend fun cdkApprovalLink(authorizationUrl: String): String = withContext(Dispatchers.IO) {
+        core.ldc().cdkApprovalLink(authorizationUrl)
+    }
+
+    suspend fun cdkApprove(approvePath: String): LdcApprovalStatusState = withContext(Dispatchers.IO) {
+        core.ldc().cdkApprove(approvePath)
+    }
+
+    suspend fun cdkCallback(code: String, state: String) = withContext(Dispatchers.IO) {
+        core.ldc().cdkCallback(code, state)
+        persistCurrentSession()
+    }
+
+    suspend fun cdkUserInfo(): CdkUserInfoState = withContext(Dispatchers.IO) {
+        core.ldc().cdkUserInfo()
+    }
+
+    suspend fun cdkLogout() = withContext(Dispatchers.IO) {
+        core.ldc().cdkLogout()
+        persistCurrentSession()
     }
 
     suspend fun restoreSessionJson(json: String): SessionState = withContext(Dispatchers.Default) {

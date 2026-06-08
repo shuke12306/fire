@@ -37,8 +37,13 @@ the shared Rust core at build time.
 - `ProfileFragment` renders current or public profiles, summary stats, badges,
   profile bio through the shared rich-text renderer, follow/unfollow, and top
   topic navigation. Public profiles expose a private-message composer when the
-  backend permits it; the current-user profile exposes Bookmarks and Messages
-  entry points.
+  backend permits it; the current-user profile exposes Bookmarks, Drafts, Read
+  History, Messages, LDC Credit, and CDK connection entry points.
+- `LDCFragment` and `CDKFragment` share a fixed ViewBinding screen backed by
+  `LdcCdkViewModel`. They display Rust-owned user-info records, run the
+  authorization URL -> approval link -> approve redirect -> callback sequence
+  through `FireSessionStore`, and expose logout without owning cookies or
+  WebView/browser session state.
 - `BookmarksFragment` renders the current user's Rust-backed bookmark topic
   list and opens topics at `bookmarkedPostNumber` when the backend provides a
   floor anchor.
@@ -200,6 +205,9 @@ MessageBus, and Cloudflare/login error classification.
 
 - `FireSessionStore.kt` owns `FireAppCore` and passes `filesDir/fire` as the
   shared Rust workspace root.
+- `FireSessionStore.kt` also wraps `core.ldc()` for LDC/CDK OAuth user-info,
+  authorization, callback, and logout calls. The UI layer keeps only transient
+  presentation state while Rust owns API orchestration.
 - The persisted session snapshot lives at `filesDir/fire/session.json`.
 - Shared logs and diagnostics are rooted under `filesDir/fire/logs` and
   `filesDir/fire/diagnostics`.

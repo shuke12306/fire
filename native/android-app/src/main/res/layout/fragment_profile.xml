@@ -4,71 +4,101 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <LinearLayout
+    <HorizontalScrollView
         android:id="@+id/profile_actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:fillViewport="false"
+        android:overScrollMode="never"
         android:paddingHorizontal="16dp"
         android:paddingVertical="10dp">
 
-        <TextView
-            android:id="@+id/bookmarks_button"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:text="@string/feed_bookmarks"
-            android:textAppearance="@style/TextAppearance.AppCompat.Button"
-            android:textColor="@color/fire_accent" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/drafts_button"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:text="@string/feed_drafts"
-            android:textAppearance="@style/TextAppearance.AppCompat.Button"
-            android:textColor="@color/fire_accent" />
+            <TextView
+                android:id="@+id/bookmarks_button"
+                android:layout_width="96dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/feed_bookmarks"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
 
-        <TextView
-            android:id="@+id/private_messages_button"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:text="@string/feed_private_messages_inbox"
-            android:textAppearance="@style/TextAppearance.AppCompat.Button"
-            android:textColor="@color/fire_accent" />
+            <TextView
+                android:id="@+id/drafts_button"
+                android:layout_width="88dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/feed_drafts"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
 
-        <TextView
-            android:id="@+id/read_history_button"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:text="@string/feed_read_history_short"
-            android:textAppearance="@style/TextAppearance.AppCompat.Button"
-            android:textColor="@color/fire_accent" />
+            <TextView
+                android:id="@+id/private_messages_button"
+                android:layout_width="104dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/feed_private_messages_inbox"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
 
-    </LinearLayout>
+            <TextView
+                android:id="@+id/read_history_button"
+                android:layout_width="96dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/feed_read_history_short"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
+
+            <TextView
+                android:id="@+id/ldc_button"
+                android:layout_width="96dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/ldc_short_title"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
+
+            <TextView
+                android:id="@+id/cdk_button"
+                android:layout_width="96dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:singleLine="true"
+                android:text="@string/cdk_short_title"
+                android:textAppearance="@style/TextAppearance.AppCompat.Button"
+                android:textColor="@color/fire_accent" />
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/profile_list"
