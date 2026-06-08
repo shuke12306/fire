@@ -132,7 +132,7 @@ git commit -m "refactor(ios): unify corner radius and background tokens across F
 Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
 Expected: `** BUILD SUCCEEDED **`
 
-- [x] **Step 4: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add native/ios-app/App/Views/FireFilteredTopicListView.swift
@@ -664,7 +664,7 @@ Expected: `** BUILD SUCCEEDED **`
 Run: `cd native/ios-app && xcodebuild test -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' 2>&1 | grep -E '(Test Suite|Executed|FAILED)'`
 Expected: All tests pass, 0 failures
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add native/ios-app/App/Services/FireTopicInteractionService.swift native/ios-app/App/ViewModels/FireAppViewModel.swift
@@ -711,7 +711,7 @@ let notificationService: FireNotificationService
 Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
 Expected: `** BUILD SUCCEEDED **`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add native/ios-app/App/Services/FireNotificationService.swift native/ios-app/App/ViewModels/FireAppViewModel.swift
@@ -755,7 +755,7 @@ let searchService: FireSearchService
 Run: `cd native/ios-app && xcodebuild build -scheme FireApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -5`
 Expected: `** BUILD SUCCEEDED **`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add native/ios-app/App/Services/FireSearchService.swift native/ios-app/App/ViewModels/FireAppViewModel.swift
@@ -1278,7 +1278,7 @@ Verified:
 - `cd native/android-app && ./gradlew testDebugUnitTest --tests com.fire.app.ui.topicdetail.TopicTimingTrackerTest`
 - `cd native/android-app && ./gradlew assembleDebug`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add native/android-app/src/main/java/com/fire/app/FireApplication.kt native/android-app/src/main/java/com/fire/app/session/FireSessionStore.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicTimingTracker.kt native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicTimingTrackerTest.kt docs/superpowers/plans/2026-06-08-p1-foundation.md
