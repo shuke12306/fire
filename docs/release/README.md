@@ -99,11 +99,12 @@ The verifier is expected to fail while required iOS or Android testing-track
 evidence rows are missing, duplicated, or incomplete. `Accepted` rows require
 approval/waiver context and a reason in `Notes`, for example
 `Approved by ...; reason: ...`. Evidence links must be well-formed HTTP(S) URLs
-with hostnames or safe repo-relative paths to non-empty local files; directories
-do not satisfy local evidence links. Placeholder hosts such as localhost,
-`.local`, `.test`, and `.invalid` are rejected, as are malformed hosts with empty
-labels or labels that start or end with `-`. Owner, evidence-link, and notes
-metadata must not contain fake/mock/placeholder markers.
+with fully qualified hostnames or safe repo-relative paths to non-empty local
+files; directories do not satisfy local evidence links. Single-label URL hosts,
+placeholder hosts such as localhost, `.local`, `.test`, and `.invalid`, and
+malformed hosts with empty labels or labels that start or end with `-` are
+rejected. Owner, evidence-link, and notes metadata must not contain
+fake/mock/placeholder markers.
 Dates must be real calendar dates in `YYYY-MM-DD` form. Rows with missing or
 extra Markdown table columns are rejected; keep the exact table shape and escape
 literal `|` characters in cell text.
@@ -121,12 +122,13 @@ scripts/verify-privacy-review-evidence.sh
 The verifier is expected to fail while required review rows are missing,
 duplicated, or incomplete. `Accepted` rows require approval/waiver context and a
 waiver reason in `Notes`, for example `Approved by ...; reason: ...`. Evidence
-links must be well-formed HTTP(S) URLs with hostnames or safe repo-relative paths
-to non-empty local files; directories do not satisfy local evidence links.
-Placeholder hosts such as localhost, `.local`, `.test`, and `.invalid` are
-rejected, as are malformed hosts with empty labels or labels that start or end
-with `-`. Reviewer, evidence-link, and notes metadata must not contain
-fake/mock/placeholder markers. Dates must be real calendar dates in
+links must be well-formed HTTP(S) URLs with fully qualified hostnames or safe
+repo-relative paths to non-empty local files; directories do not satisfy local
+evidence links. Single-label URL hosts, placeholder hosts such as localhost,
+`.local`, `.test`, and `.invalid`, and malformed hosts with empty labels or
+labels that start or end with `-` are rejected. Reviewer, evidence-link, and
+notes metadata must not contain fake/mock/placeholder markers. Dates must be
+real calendar dates in
 `YYYY-MM-DD` form. Rows with missing or extra Markdown table columns are
 rejected; keep the exact table shape and escape literal `|` characters in cell
 text.
@@ -184,11 +186,12 @@ The evidence verifier is expected to fail while any evidence row is still
 required gate set in `release-gate-evidence.md`. `Accepted` release-gate rows
 must also include explicit waiver/approval language and a reason in `Notes`,
 such as `Approved by ...; reason: ...`; vague status notes do not close a manual
-gate. Evidence links must be well-formed HTTP(S) URLs with hostnames or safe
-repo-relative paths to non-empty local files; directories do not satisfy local
-evidence links. Placeholder hosts such as localhost, `.local`, `.test`, and
-`.invalid` are rejected, as are malformed hosts with empty labels or labels that
-start or end with `-`. Manual evidence verifiers also reject completed or
+gate. Evidence links must be well-formed HTTP(S) URLs with fully qualified
+hostnames or safe repo-relative paths to non-empty local files; directories do
+not satisfy local evidence links. Single-label URL hosts, placeholder hosts such
+as localhost, `.local`, `.test`, and `.invalid`, and malformed hosts with empty
+labels or labels that start or end with `-` are rejected. Manual evidence
+verifiers also reject completed or
 accepted rows whose owner, reviewer, tester, device, result, evidence-link, or
 notes metadata still contain fake, mock, placeholder, dummy, synthetic, TODO/TBD,
 `example.com`, `not-real`, or `not real` markers, whose dates are impossible

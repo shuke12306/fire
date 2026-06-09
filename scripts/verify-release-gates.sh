@@ -129,6 +129,9 @@ function has_valid_http_host(value, host, label_count, labels, label_index) {
     return 0
   }
   label_count = split(host, labels, ".")
+  if (label_count < 2) {
+    return 0
+  }
   for (label_index = 1; label_index <= label_count; label_index += 1) {
     if (labels[label_index] == "" || length(labels[label_index]) > 63 || labels[label_index] ~ /^-/ || labels[label_index] ~ /-$/) {
       return 0
