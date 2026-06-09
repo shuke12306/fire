@@ -40,13 +40,17 @@ scripts/benchmark-memory-peak.sh android
 
 Use exactly the metric names from the target table. `Pass/Fail` accepts `Pass`
 for measurements inside the release threshold or `Accepted` for an explicit
-ship/no-ship decision on a threshold failure. Results must include numeric units:
-seconds or milliseconds for timing metrics, fps plus janky-frame percentage for
-scroll fluency, and MB/GB for memory metrics. `Accepted` rows must include
-approval/waiver context and a reason, risk, exception, or no-ship decision in
-`Notes`; use a clear shape such as `Approved by <owner>; reason: <decision>`.
-Simulator and emulator rows may be linked as supporting context elsewhere, but
-they do not satisfy this log.
+ship/no-ship decision on a threshold failure. Results must include metric-bound
+numeric units: seconds or milliseconds for timing metrics, `fps` plus a
+janky-frame percentage tied to `jank`/`janky` for scroll fluency, and MB/GB for
+memory metrics. If a memory result includes multiple values, label the peak
+value with `peak` (`peak 190 MB` or `190 MB peak`); otherwise the verifier
+treats the row as ambiguous. The verifier uses peak memory for threshold
+comparison.
+`Accepted` rows must include approval/waiver context and a reason, risk,
+exception, or no-ship decision in `Notes`; use a clear shape such as
+`Approved by <owner>; reason: <decision>`. Simulator and emulator rows may be
+linked as supporting context elsewhere, but they do not satisfy this log.
 
 ## Release Rule
 
@@ -60,4 +64,5 @@ scripts/verify-performance-benchmarks.sh
 
 The verifier fails until each target metric has an iOS and Android
 release-build physical-device row with date, commit, device, result, and
-`Pass` or reasoned `Accepted` disposition.
+`Pass` or reasoned `Accepted` disposition. `Pass` rows must parse to values
+inside the release targets.

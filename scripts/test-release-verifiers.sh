@@ -336,6 +336,10 @@ def write_performance(
     accepted_note=None,
     invalid_result=False,
     target_miss=False,
+    jank_first=False,
+    memory_peak_miss=False,
+    memory_unlabeled_multi_value=False,
+    memory_peak_suffix=False,
 ):
     lines = [
         "# Fire Performance Benchmarks",
@@ -356,6 +360,14 @@ def write_performance(
         note = "Measured on release candidate"
         status = "Pass"
         result = "OK" if invalid_result and index == 0 else performance_result(metric)
+        if jank_first and metric == "Home feed scroll fluency":
+            result = "1% janky frames, 59 fps"
+        if memory_peak_miss and metric == "Home feed memory":
+            result = "RSS 180 MB, peak 420 MB"
+        if memory_unlabeled_multi_value and metric == "Home feed memory":
+            result = "RSS 180 MB, 190 MB"
+        if memory_peak_suffix and metric == "Home feed memory":
+            result = "RSS 180 MB, 190 MB peak"
         if target_miss and index == 0:
             result = "3.5s"
         if index == 0 and accepted_note:
@@ -417,6 +429,13 @@ write_performance(
 write_performance(fixture / "performance-missing.md", omit_last=True)
 write_performance(fixture / "performance-invalid-result.md", invalid_result=True)
 write_performance(fixture / "performance-target-miss-pass.md", target_miss=True)
+write_performance(fixture / "performance-jank-first.md", jank_first=True)
+write_performance(fixture / "performance-memory-peak-miss.md", memory_peak_miss=True)
+write_performance(
+    fixture / "performance-memory-unlabeled-multi-value.md",
+    memory_unlabeled_multi_value=True,
+)
+write_performance(fixture / "performance-memory-peak-suffix.md", memory_peak_suffix=True)
 write_performance(fixture / "performance-not-real.md", marker="not-real")
 write_performance(fixture / "performance-not-real-space.md", marker="not real")
 write_accessibility(fixture / "accessibility.md")
@@ -604,6 +623,48 @@ expect_fail_contains "P4 release evidence suite rejects target miss marked pass"
   env \
   "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
   "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-target-miss-pass.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_pass "P4 release evidence suite accepts jank percentage before fps" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-jank-first.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects memory peak miss marked pass" \
+  "Pass status requires a measured result inside the release target" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-memory-peak-miss.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects unlabeled multi-value memory result" \
+  "result with multiple memory values must label peak memory" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-memory-unlabeled-multi-value.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_pass "P4 release evidence suite accepts peak memory suffix label" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-memory-peak-suffix.md" \
   "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
   "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
   "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \

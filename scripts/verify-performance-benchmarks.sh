@@ -62,49 +62,77 @@ function first_number(value) {
   return -1
 }
 
-function parse_duration_seconds(value, lower, number) {
+function parse_duration_seconds(value, lower, fragment, number) {
   lower = tolower(value)
-  number = first_number(value)
-  if (number < 0) {
-    return -1
-  }
-  if (lower ~ /ms|millisecond/) {
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(ms|millisecond|milliseconds)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    number = first_number(fragment)
     return number / 1000.0
   }
-  if (lower ~ /(^|[^[:alpha:]])s([^[:alpha:]]|$)|sec|second/) {
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(s|sec|secs|second|seconds)([^[:alpha:]]|$)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    number = first_number(fragment)
     return number
   }
   return -1
 }
 
-function parse_memory_mb(value, lower, number) {
+function count_memory_values(value, lower, count) {
   lower = tolower(value)
-  number = first_number(value)
-  if (number < 0) {
-    return -1
+  count = 0
+  while (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)/)) {
+    count += 1
+    lower = substr(lower, RSTART + RLENGTH)
   }
-  if (lower ~ /gb|gib/) {
+  return count
+}
+
+function memory_fragment_mb(fragment, number) {
+  number = first_number(fragment)
+  if (fragment ~ /gb|gib/) {
     return number * 1024.0
-  }
-  if (lower ~ /mb|mib/) {
-    return number
-  }
-  return -1
-}
-
-function parse_fps(value, lower, number) {
-  lower = tolower(value)
-  number = first_number(value)
-  if (number < 0 || lower !~ /fps|frame/) {
-    return -1
   }
   return number
 }
 
-function parse_percent(value, text) {
-  text = value
-  if (match(text, /[0-9]+([.][0-9]+)?[[:space:]]*%/)) {
-    return substr(text, RSTART, RLENGTH - 1) + 0
+function parse_memory_mb(value, lower, fragment) {
+  lower = tolower(value)
+  if (match(lower, /peak[^0-9]*[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return memory_fragment_mb(fragment)
+  }
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)[^0-9]*(peak)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return memory_fragment_mb(fragment)
+  }
+  if (count_memory_values(lower) > 1) {
+    return -2
+  }
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return memory_fragment_mb(fragment)
+  }
+  return -1
+}
+
+function parse_fps(value, lower, fragment) {
+  lower = tolower(value)
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(fps|frames per second)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return first_number(fragment)
+  }
+  return -1
+}
+
+function parse_jank_percent(value, lower, fragment) {
+  lower = tolower(value)
+  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*%[^,;|]*(jank|janky)/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return first_number(fragment)
+  }
+  if (match(lower, /(jank|janky)[^0-9]*[0-9]+([.][0-9]+)?[[:space:]]*%/)) {
+    fragment = substr(lower, RSTART, RLENGTH)
+    return first_number(fragment)
   }
   return -1
 }
@@ -130,6 +158,10 @@ function metric_target_passed(metric, result, duration, memory, fps, jank) {
 
   if (metric == "Home feed memory") {
     memory = parse_memory_mb(result)
+    if (memory == -2) {
+      fail(metric, "result with multiple memory values must label peak memory")
+      return 0
+    }
     if (memory < 0) {
       fail(metric, "result must include a numeric memory value in MB or GB")
       return 0
@@ -139,6 +171,10 @@ function metric_target_passed(metric, result, duration, memory, fps, jank) {
 
   if (metric == "Topic detail memory after 100 posts") {
     memory = parse_memory_mb(result)
+    if (memory == -2) {
+      fail(metric, "result with multiple memory values must label peak memory")
+      return 0
+    }
     if (memory < 0) {
       fail(metric, "result must include a numeric memory value in MB or GB")
       return 0
@@ -148,9 +184,9 @@ function metric_target_passed(metric, result, duration, memory, fps, jank) {
 
   if (metric == "Home feed scroll fluency") {
     fps = parse_fps(result)
-    jank = parse_percent(result)
+    jank = parse_jank_percent(result)
     if (fps < 0 || jank < 0) {
-      fail(metric, "result must include numeric fps and janky-frame percentage")
+      fail(metric, "result must include numeric fps and janky-frame percentage tied to jank")
       return 0
     }
     return fps >= 58.0 && jank <= 5.0

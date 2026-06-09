@@ -52,7 +52,9 @@ The verifier is expected to fail while the results log is empty, while any iOS
 or Android target metric is missing, or while threshold failures lack an
 accepted disposition with explicit approval/waiver context, such as
 `Approved by ...; reason: ...`, in `Notes`. Result values must include numeric
-units such as seconds, milliseconds, fps plus janky-frame percentage, or MB/GB.
+units such as seconds, milliseconds, fps plus janky-frame percentage, or MB/GB;
+memory rows with multiple values must label the peak value with `peak`, such as
+`peak 190 MB` or `190 MB peak`.
 
 ## Accessibility Evidence
 
@@ -137,7 +139,8 @@ pass with complete fixture evidence, that the full release-readiness wrapper can
 pass with complete fixture evidence, that both fail when lower-level fixture
 evidence is missing, that fake-evidence markers, malformed store media,
 flat PNG placeholders, non-measurement performance results, target misses marked
-`Pass`, dead local evidence paths, placeholder URL hosts, and weak
+`Pass`, ambiguous or misleading multi-value memory results, dead local evidence
+paths, placeholder URL hosts, and weak
 accepted-waiver notes are rejected, and that checked P4 roadmap acceptance is
 allowed only when the full fixture suite passes.
 
