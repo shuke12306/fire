@@ -48,6 +48,13 @@ function fail(row_label, message) {
   printf("FAIL: %s: %s\n", row_label, message) > "/dev/stderr"
 }
 
+function contains_fake_evidence_marker(value, normalized) {
+  normalized = tolower(value)
+  return normalized ~ /(^|[^[:alnum:]])(fake|mock|placeholder|dummy|synthetic)([^[:alnum:]]|$)/ ||
+    normalized ~ /(^|[^[:alnum:]])(todo|tbd)([^[:alnum:]]|$)/ ||
+    normalized ~ /example[.]com|not real/
+}
+
 function is_template_row(date, area, reviewer, status, link, notes) {
   return date == "" && area == "" && reviewer == "" && status == "" && link == "" && notes == ""
 }
@@ -103,6 +110,10 @@ in_required_evidence && /^\|/ {
 
   if (notes == "") {
     fail(row_label, "notes are required")
+  }
+
+  if ((status in allowed_status) && contains_fake_evidence_marker(link " " notes)) {
+    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers")
   }
 
   if (status == "Accepted" && notes !~ /[Aa]pprov|[Ww]aiv|[Aa]ccept/) {

@@ -108,7 +108,9 @@ scripts/verify-release-gates.sh
 
 The evidence verifier is expected to fail while any evidence row is still
 `Not started`, missing owner/link/date metadata, or out of sync with the exact
-required gate set in `release-gate-evidence.md`.
+required gate set in `release-gate-evidence.md`. Manual evidence verifiers also
+reject completed rows whose evidence links or notes still contain fake, mock,
+placeholder, dummy, synthetic, TODO/TBD, `example.com`, or not-real markers.
 
 The roadmap acceptance boxes can also be checked directly:
 
