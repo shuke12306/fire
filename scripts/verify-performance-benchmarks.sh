@@ -95,15 +95,36 @@ function memory_fragment_mb(fragment, number) {
   return number
 }
 
-function parse_memory_mb(value, lower, fragment) {
+function max_peak_memory_mb(value, lower, fragment, memory, max_memory) {
   lower = tolower(value)
-  if (match(lower, /peak[^0-9]*[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)/)) {
+  max_memory = -1
+  while (match(lower, /peak[^0-9]*[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)/)) {
     fragment = substr(lower, RSTART, RLENGTH)
-    return memory_fragment_mb(fragment)
+    memory = memory_fragment_mb(fragment)
+    if (memory > max_memory) {
+      max_memory = memory
+    }
+    lower = substr(lower, RSTART + RLENGTH)
   }
-  if (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)[^0-9]*(peak)/)) {
+
+  lower = tolower(value)
+  while (match(lower, /[0-9]+([.][0-9]+)?[[:space:]]*(mb|mib|gb|gib)[^0-9]*(peak)/)) {
     fragment = substr(lower, RSTART, RLENGTH)
-    return memory_fragment_mb(fragment)
+    memory = memory_fragment_mb(fragment)
+    if (memory > max_memory) {
+      max_memory = memory
+    }
+    lower = substr(lower, RSTART + RLENGTH)
+  }
+
+  return max_memory
+}
+
+function parse_memory_mb(value, lower, peak_memory, fragment) {
+  lower = tolower(value)
+  peak_memory = max_peak_memory_mb(lower)
+  if (peak_memory >= 0) {
+    return peak_memory
   }
   if (count_memory_values(lower) > 1) {
     return -2
@@ -311,8 +332,8 @@ in_results_log && /^\|/ {
     }
   }
 
-  if ((status == "Pass" || status == "Accepted") && contains_fake_evidence_marker(notes)) {
-    fail(row_label, "benchmark notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
+  if ((status == "Pass" || status == "Accepted") && contains_fake_evidence_marker(device " " build_type " " result " " notes)) {
+    fail(row_label, "benchmark metadata must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 
   seen[platform SUBSEP metric] = 1

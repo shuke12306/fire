@@ -207,6 +207,7 @@ def write_release_gate(
     accepted_note=None,
     missing_local_link=False,
     placeholder_url=False,
+    placeholder_owner=False,
 ):
     lines = [
         "# Release Gate Evidence",
@@ -231,8 +232,9 @@ def write_release_gate(
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{1000 + index}"
         )
+        owner = "placeholder owner" if placeholder_owner and index == 0 else "Release owner"
         lines.append(
-            f"| {gate} | Required evidence | Release owner | {status} | "
+            f"| {gate} | Required evidence | {owner} | {status} | "
             f"{link} | 2026-06-09 | {note} |"
         )
     path.write_text("\n".join(lines) + "\n")
@@ -246,6 +248,8 @@ def write_internal(
     weak_feedback_note=False,
     missing_local_link=False,
     placeholder_url=False,
+    duplicate_row=False,
+    placeholder_owner=False,
 ):
     lines = [
         "# Internal Testing Evidence",
@@ -275,10 +279,16 @@ def write_internal(
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{2000 + index}"
         )
+        owner = "TODO owner" if placeholder_owner and index == 0 else "Release owner"
         lines.append(
-            f"| 2026-06-09 | {platform} | {gate} | Release owner | {status} | "
+            f"| 2026-06-09 | {platform} | {gate} | {owner} | {status} | "
             f"{link} | {note} |"
         )
+        if duplicate_row and index == 0:
+            lines.append(
+                f"| 2026-06-09 | {platform} | {gate} | {owner} | {status} | "
+                f"{link} | {note} |"
+            )
     path.write_text("\n".join(lines) + "\n")
 
 def write_privacy(
@@ -288,6 +298,8 @@ def write_privacy(
     final_note=None,
     missing_local_link=False,
     placeholder_url=False,
+    duplicate_row=False,
+    placeholder_reviewer=False,
 ):
     lines = [
         "# Privacy Review Evidence",
@@ -314,10 +326,16 @@ def write_privacy(
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{3000 + index}"
         )
+        reviewer = "TBD reviewer" if placeholder_reviewer and index == 0 else "Reviewer"
         lines.append(
-            f"| 2026-06-09 | {area} | Reviewer | {status} | "
+            f"| 2026-06-09 | {area} | {reviewer} | {status} | "
             f"{link} | {note} |"
         )
+        if duplicate_row and index == 0:
+            lines.append(
+                f"| 2026-06-09 | {area} | {reviewer} | {status} | "
+                f"{link} | {note} |"
+            )
     path.write_text("\n".join(lines) + "\n")
 
 def performance_result(metric: str) -> str:
@@ -340,6 +358,8 @@ def write_performance(
     memory_peak_miss=False,
     memory_unlabeled_multi_value=False,
     memory_peak_suffix=False,
+    memory_double_peak_miss=False,
+    fake_device=False,
 ):
     lines = [
         "# Fire Performance Benchmarks",
@@ -359,6 +379,8 @@ def write_performance(
     for index, (platform, device, metric) in enumerate(entries):
         note = "Measured on release candidate"
         status = "Pass"
+        if fake_device and index == 0:
+            device = "Mock Phone"
         result = "OK" if invalid_result and index == 0 else performance_result(metric)
         if jank_first and metric == "Home feed scroll fluency":
             result = "1% janky frames, 59 fps"
@@ -368,6 +390,8 @@ def write_performance(
             result = "RSS 180 MB, 190 MB"
         if memory_peak_suffix and metric == "Home feed memory":
             result = "RSS 180 MB, 190 MB peak"
+        if memory_double_peak_miss and metric == "Home feed memory":
+            result = "peak 180 MB, peak 420 MB"
         if target_miss and index == 0:
             result = "3.5s"
         if index == 0 and accepted_note:
@@ -382,7 +406,7 @@ def write_performance(
         )
     path.write_text("\n".join(lines) + "\n")
 
-def write_accessibility(path: Path, marker="", accepted_note=None):
+def write_accessibility(path: Path, marker="", accepted_note=None, fake_tester=False):
     lines = [
         "# Fire Accessibility Audit Checklist",
         "",
@@ -395,6 +419,7 @@ def write_accessibility(path: Path, marker="", accepted_note=None):
     for platform in ("iOS", "Android"):
         device = "iPhone 15 Pro" if platform == "iOS" else "Pixel 8 Pro"
         for screen in screens + audits:
+            tester = "Fake Tester" if fake_tester and row_index == 0 else "Tester"
             note = "Audited on release candidate"
             result = "Pass"
             if row_index == 0 and accepted_note:
@@ -403,7 +428,7 @@ def write_accessibility(path: Path, marker="", accepted_note=None):
             if row_index == 0 and marker:
                 note += f" {marker}"
             lines.append(
-                f"| 2026-06-09 | Tester | {platform} | {device} | {screen} | "
+                f"| 2026-06-09 | {tester} | {platform} | {device} | {screen} | "
                 f"{result} | {note} |"
             )
             row_index += 1
@@ -436,6 +461,8 @@ write_performance(
     memory_unlabeled_multi_value=True,
 )
 write_performance(fixture / "performance-memory-peak-suffix.md", memory_peak_suffix=True)
+write_performance(fixture / "performance-memory-double-peak-miss.md", memory_double_peak_miss=True)
+write_performance(fixture / "performance-fake-device.md", fake_device=True)
 write_performance(fixture / "performance-not-real.md", marker="not-real")
 write_performance(fixture / "performance-not-real-space.md", marker="not real")
 write_accessibility(fixture / "accessibility.md")
@@ -449,6 +476,7 @@ write_accessibility(
 )
 write_accessibility(fixture / "accessibility-not-real.md", marker="not-real")
 write_accessibility(fixture / "accessibility-not-real-space.md", marker="not real")
+write_accessibility(fixture / "accessibility-fake-tester.md", fake_tester=True)
 write_internal(fixture / "internal.md")
 write_internal(
     fixture / "internal-accepted-valid.md",
@@ -463,6 +491,8 @@ write_internal(fixture / "internal-weak-invite.md", weak_invite_note=True)
 write_internal(fixture / "internal-weak-feedback.md", weak_feedback_note=True)
 write_internal(fixture / "internal-missing-link.md", missing_local_link=True)
 write_internal(fixture / "internal-placeholder-url.md", placeholder_url=True)
+write_internal(fixture / "internal-duplicate-row.md", duplicate_row=True)
+write_internal(fixture / "internal-placeholder-owner.md", placeholder_owner=True)
 write_internal(fixture / "internal-not-real.md", marker="not-real")
 write_internal(fixture / "internal-not-real-space.md", marker="not real")
 write_privacy(fixture / "privacy.md")
@@ -480,6 +510,8 @@ write_privacy(
 )
 write_privacy(fixture / "privacy-missing-link.md", missing_local_link=True)
 write_privacy(fixture / "privacy-placeholder-url.md", placeholder_url=True)
+write_privacy(fixture / "privacy-duplicate-row.md", duplicate_row=True)
+write_privacy(fixture / "privacy-placeholder-reviewer.md", placeholder_reviewer=True)
 write_privacy(fixture / "privacy-not-real.md", marker="not-real")
 write_privacy(fixture / "privacy-not-real-space.md", marker="not real")
 write_release_gate(fixture / "release-gates.md")
@@ -493,6 +525,7 @@ write_release_gate(
 )
 write_release_gate(fixture / "release-gates-missing-link.md", missing_local_link=True)
 write_release_gate(fixture / "release-gates-placeholder-url.md", placeholder_url=True)
+write_release_gate(fixture / "release-gates-placeholder-owner.md", placeholder_owner=True)
 write_release_gate(fixture / "release-gates-not-real.md", marker="not-real")
 write_release_gate(fixture / "release-gates-not-real-space.md", marker="not real")
 
@@ -671,6 +704,17 @@ expect_pass "P4 release evidence suite accepts peak memory suffix label" \
   "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
   scripts/verify-p4-release-evidence-suite.sh
 
+expect_fail_contains "P4 release evidence suite rejects double peak memory miss marked pass" \
+  "Pass status requires a measured result inside the release target" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance-memory-double-peak-miss.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
 marker_failure="not-real, or not real markers"
 
 expect_pass "release gates accept explicit waiver metadata" \
@@ -684,6 +728,9 @@ expect_fail_contains "release gates reject missing local evidence path" \
   scripts/verify-release-gates.sh "$fixture/release-gates-missing-link.md"
 expect_fail_contains "release gates reject placeholder evidence URL host" "$marker_failure" \
   scripts/verify-release-gates.sh "$fixture/release-gates-placeholder-url.md"
+expect_fail_contains "release gates reject placeholder owner metadata" \
+  "evidence metadata must not contain" \
+  scripts/verify-release-gates.sh "$fixture/release-gates-placeholder-owner.md"
 
 expect_fail_contains "release gates reject not-real marker" "$marker_failure" \
   scripts/verify-release-gates.sh "$fixture/release-gates-not-real.md"
@@ -714,6 +761,12 @@ expect_fail_contains "internal testing rejects missing local evidence path" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-missing-link.md"
 expect_fail_contains "internal testing rejects placeholder evidence URL host" "$marker_failure" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-placeholder-url.md"
+expect_fail_contains "internal testing rejects duplicate required row" \
+  "duplicate internal testing evidence row" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-duplicate-row.md"
+expect_fail_contains "internal testing rejects placeholder owner metadata" \
+  "evidence metadata must not contain" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-placeholder-owner.md"
 
 expect_fail_contains "privacy review rejects not-real marker" "$marker_failure" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-not-real.md"
@@ -733,11 +786,20 @@ expect_fail_contains "privacy review rejects missing local evidence path" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-missing-link.md"
 expect_fail_contains "privacy review rejects placeholder evidence URL host" "$marker_failure" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-placeholder-url.md"
+expect_fail_contains "privacy review rejects duplicate required row" \
+  "duplicate privacy review evidence row" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-duplicate-row.md"
+expect_fail_contains "privacy review rejects placeholder reviewer metadata" \
+  "evidence metadata must not contain" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-placeholder-reviewer.md"
 
 expect_fail_contains "performance rejects not-real marker" "$marker_failure" \
   scripts/verify-performance-benchmarks.sh "$fixture/performance-not-real.md"
 expect_fail_contains "performance rejects not real marker" "$marker_failure" \
   scripts/verify-performance-benchmarks.sh "$fixture/performance-not-real-space.md"
+expect_fail_contains "performance rejects fake device metadata" \
+  "benchmark metadata must not contain" \
+  scripts/verify-performance-benchmarks.sh "$fixture/performance-fake-device.md"
 
 expect_pass "performance accepts explicit waiver metadata" \
   scripts/verify-performance-benchmarks.sh "$fixture/performance-accepted-valid.md"
@@ -749,6 +811,9 @@ expect_fail_contains "accessibility rejects not-real marker" "$marker_failure" \
   scripts/verify-accessibility-audit.sh "$fixture/accessibility-not-real.md"
 expect_fail_contains "accessibility rejects not real marker" "$marker_failure" \
   scripts/verify-accessibility-audit.sh "$fixture/accessibility-not-real-space.md"
+expect_fail_contains "accessibility rejects fake tester metadata" \
+  "accessibility metadata must not contain" \
+  scripts/verify-accessibility-audit.sh "$fixture/accessibility-fake-tester.md"
 
 expect_pass "accessibility accepts explicit waiver metadata" \
   scripts/verify-accessibility-audit.sh "$fixture/accessibility-accepted-valid.md"

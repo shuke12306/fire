@@ -139,6 +139,11 @@ in_required_evidence && /^\|/ {
 
   if (!(area in required)) {
     fail(row_label, "review area is not one of the required rows")
+  } else {
+    if (seen[area] > 0) {
+      fail(row_label, "duplicate privacy review evidence row")
+    }
+    seen[area] += 1
   }
 
   if (reviewer == "") {
@@ -155,8 +160,8 @@ in_required_evidence && /^\|/ {
     fail(row_label, "notes are required")
   }
 
-  if ((status in allowed_status) && contains_fake_evidence_marker(link " " notes)) {
-    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
+  if ((status in allowed_status) && contains_fake_evidence_marker(reviewer " " link " " notes)) {
+    fail(row_label, "evidence metadata must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 
   if (status == "Accepted" && !contains_accepted_waiver_metadata(notes)) {
@@ -167,7 +172,6 @@ in_required_evidence && /^\|/ {
     fail(row_label, "final publication approval notes must mention approval to publish, release, or submit")
   }
 
-  seen[area] = 1
 }
 
 END {

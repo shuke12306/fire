@@ -26,9 +26,13 @@ Record one row for each review area below:
 
 ## Evidence Rules
 
+- Record each required review area exactly once; duplicate rows are rejected so
+  the release evidence remains unambiguous.
 - `Status` must be `Complete` or `Accepted`.
 - `Reviewer` must identify the maintainer, legal reviewer, or explicit
-  approver for the row.
+  approver for the row. Reviewer, evidence-link, and notes metadata must not
+  contain fake, mock, placeholder, dummy, synthetic, TODO/TBD, `example.com`,
+  `not-real`, or `not real` markers.
 - `Evidence Link` may point to signed review notes, issue approvals, checklist
   exports, generated inventories, or repository files with reviewer comments.
   Use a plain HTTP(S) URL or a safe repo-relative path to a non-empty local file;

@@ -45,12 +45,14 @@ numeric units: seconds or milliseconds for timing metrics, `fps` plus a
 janky-frame percentage tied to `jank`/`janky` for scroll fluency, and MB/GB for
 memory metrics. If a memory result includes multiple values, label the peak
 value with `peak` (`peak 190 MB` or `190 MB peak`); otherwise the verifier
-treats the row as ambiguous. The verifier uses peak memory for threshold
-comparison.
+treats the row as ambiguous. The verifier uses the highest labelled peak memory
+value for threshold comparison.
 `Accepted` rows must include approval/waiver context and a reason, risk,
 exception, or no-ship decision in `Notes`; use a clear shape such as
 `Approved by <owner>; reason: <decision>`. Simulator and emulator rows may be
-linked as supporting context elsewhere, but they do not satisfy this log.
+linked as supporting context elsewhere, but they do not satisfy this log. Device,
+build type, result, and notes metadata must not contain fake/mock/placeholder
+markers.
 
 ## Release Rule
 

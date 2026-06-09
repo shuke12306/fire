@@ -158,8 +158,8 @@ in_required_evidence && /^\|/ {
       fail(row_label, "accepted waivers require approver and reason in notes")
     }
   }
-  if ((status in allowed) && contains_fake_evidence_marker(link " " notes)) {
-    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
+  if ((status in allowed) && contains_fake_evidence_marker(owner " " link " " notes)) {
+    fail(row_label, "evidence metadata must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 }
 

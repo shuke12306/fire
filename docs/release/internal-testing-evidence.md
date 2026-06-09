@@ -26,7 +26,12 @@ Record one row for each gate below:
 
 ## Evidence Rules
 
+- Record each required platform/gate pair exactly once; duplicate rows are
+  rejected so the release evidence remains unambiguous.
 - `Status` must be `Complete` or `Accepted`.
+- `Owner`, `Evidence Link`, and `Notes` must identify real release evidence;
+  fake, mock, placeholder, dummy, synthetic, TODO/TBD, `example.com`,
+  `not-real`, or `not real` markers are rejected.
 - `Evidence Link` may point to store-console exports, screenshots, build
   metadata, tester group records, or feedback triage notes. Use a plain HTTP(S)
   URL or a safe repo-relative path to a non-empty local file; placeholder hosts

@@ -54,7 +54,9 @@ accepted disposition with explicit approval/waiver context, such as
 `Approved by ...; reason: ...`, in `Notes`. Result values must include numeric
 units such as seconds, milliseconds, fps plus janky-frame percentage, or MB/GB;
 memory rows with multiple values must label the peak value with `peak`, such as
-`peak 190 MB` or `190 MB peak`.
+`peak 190 MB` or `190 MB peak`; if multiple peak values are labelled, the
+verifier compares the highest labelled peak. Device, build type, result, and
+notes metadata must not contain fake/mock/placeholder markers.
 
 ## Accessibility Evidence
 
@@ -82,11 +84,12 @@ scripts/verify-internal-testing-evidence.sh
 ```
 
 The verifier is expected to fail while required iOS or Android testing-track
-evidence rows are missing or incomplete. `Accepted` rows require
+evidence rows are missing, duplicated, or incomplete. `Accepted` rows require
 approval/waiver context and a reason in `Notes`, for example
 `Approved by ...; reason: ...`. Evidence links must be plain HTTP(S) URLs or
 safe repo-relative paths to non-empty local files; placeholder hosts such as
-localhost, `.local`, `.test`, and `.invalid` are rejected.
+localhost, `.local`, `.test`, and `.invalid` are rejected. Owner, evidence-link,
+and notes metadata must not contain fake/mock/placeholder markers.
 
 ## Privacy Review Evidence
 
@@ -98,12 +101,13 @@ diagnostic redaction, privacy manifests, and license inventory is complete, run:
 scripts/verify-privacy-review-evidence.sh
 ```
 
-The verifier is expected to fail while required review rows are missing or
-incomplete. `Accepted` rows require approval/waiver context and a waiver reason
-in `Notes`, for example `Approved by ...; reason: ...`. Evidence links must be
-plain HTTP(S) URLs or safe repo-relative paths to non-empty local files;
-placeholder hosts such as localhost, `.local`, `.test`, and `.invalid` are
-rejected.
+The verifier is expected to fail while required review rows are missing,
+duplicated, or incomplete. `Accepted` rows require approval/waiver context and a
+waiver reason in `Notes`, for example `Approved by ...; reason: ...`. Evidence
+links must be plain HTTP(S) URLs or safe repo-relative paths to non-empty local
+files; placeholder hosts such as localhost, `.local`, `.test`, and `.invalid`
+are rejected. Reviewer, evidence-link, and notes metadata must not contain
+fake/mock/placeholder markers.
 
 ## Manual Release Inputs
 
@@ -139,10 +143,10 @@ pass with complete fixture evidence, that the full release-readiness wrapper can
 pass with complete fixture evidence, that both fail when lower-level fixture
 evidence is missing, that fake-evidence markers, malformed store media,
 flat PNG placeholders, non-measurement performance results, target misses marked
-`Pass`, ambiguous or misleading multi-value memory results, dead local evidence
-paths, placeholder URL hosts, and weak
-accepted-waiver notes are rejected, and that checked P4 roadmap acceptance is
-allowed only when the full fixture suite passes.
+`Pass`, ambiguous or misleading multi-value memory results, duplicate manual
+evidence rows, placeholder metadata fields, dead local evidence paths,
+placeholder URL hosts, and weak accepted-waiver notes are rejected, and that
+checked P4 roadmap acceptance is allowed only when the full fixture suite passes.
 
 The final evidence register can also be checked directly:
 
@@ -157,10 +161,10 @@ must also include explicit waiver/approval language and a reason in `Notes`,
 such as `Approved by ...; reason: ...`; vague status notes do not close a manual
 gate. Evidence links must be plain HTTP(S) URLs or safe repo-relative paths to
 non-empty local files; placeholder hosts such as localhost, `.local`, `.test`,
-and `.invalid` are rejected. Manual evidence verifiers also reject
-completed or accepted rows whose evidence links or notes still contain fake, mock,
-placeholder, dummy, synthetic, TODO/TBD, `example.com`, `not-real`, or
-`not real` markers.
+and `.invalid` are rejected. Manual evidence verifiers also reject completed or
+accepted rows whose owner, reviewer, tester, device, result, evidence-link, or
+notes metadata still contain fake, mock, placeholder, dummy, synthetic, TODO/TBD,
+`example.com`, `not-real`, or `not real` markers.
 
 The roadmap acceptance boxes can also be checked directly:
 

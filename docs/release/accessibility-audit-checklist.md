@@ -67,7 +67,8 @@ accepts `Pass` for completed release-candidate coverage or `Accepted` for an
 explicit waiver with approval/waiver context and a reason, risk, or exception in
 `Notes`; use a clear shape such as `Approved by <owner>; reason: <decision>`.
 Simulator and emulator rows may be linked as supporting context elsewhere, but
-they do not satisfy this log.
+they do not satisfy this log. Tester, device, and notes metadata must not contain
+fake/mock/placeholder markers.
 
 ## Release Rule
 

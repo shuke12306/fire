@@ -164,8 +164,8 @@ in_results_log && /^\|/ {
     }
   }
 
-  if ((result == "Pass" || result == "Accepted") && contains_fake_evidence_marker(notes)) {
-    fail(row_label, "accessibility notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
+  if ((result == "Pass" || result == "Accepted") && contains_fake_evidence_marker(tester " " device " " notes)) {
+    fail(row_label, "accessibility metadata must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 
   if (screen in required_screen) {
