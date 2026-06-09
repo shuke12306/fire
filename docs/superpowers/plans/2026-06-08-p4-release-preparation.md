@@ -18,6 +18,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-performance-benchmarks.sh` -- release benchmark evidence verifier for physical-device iOS and Android result rows.
 - `scripts/verify-accessibility-audit.sh` -- release accessibility evidence verifier for physical-device iOS and Android screen/audit rows.
 - `scripts/verify-internal-testing-evidence.sh` -- internal testing evidence verifier for store records, uploaded builds, tester invites, and feedback triage.
+- `scripts/verify-privacy-review-evidence.sh` -- maintainer/legal privacy review evidence verifier.
 - `scripts/verify-release-readiness.sh` -- composite P4 release-readiness verifier that runs every release guard.
 - `scripts/verify-release-gates.sh` -- release-gate evidence verifier.
 - `scripts/benchmark-*.sh` -- benchmark workflows for cold start, scroll fluency, topic load, and memory.
@@ -46,7 +47,8 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 9. **Make benchmark evidence complete by metric and platform.** `scripts/verify-performance-benchmarks.sh` checks `performance-benchmarks.md` for iOS and Android release-build physical-device rows for every target metric, and fails until threshold failures are fixed or explicitly accepted with notes.
 10. **Make accessibility evidence complete by screen and audit area.** `scripts/verify-accessibility-audit.sh` checks `accessibility-audit-checklist.md` for iOS and Android physical-device rows covering every listed screen and audit category, and fails until blocking failures are fixed or explicitly accepted with notes.
 11. **Make testing-track evidence explicit.** `docs/release/internal-testing-evidence.md` records App Store Connect / Play Console records, release-candidate uploads, tester invites, and feedback triage. `scripts/verify-internal-testing-evidence.sh` fails until all required platform rows are complete.
-12. **Make final readiness one command.** `scripts/verify-release-readiness.sh` runs the marketing, performance, accessibility, internal-testing, and evidence-register verifiers together. It does not replace any underlying gate; it fails until every lower-level verifier passes.
+12. **Make privacy review evidence explicit.** `docs/release/privacy-review-evidence.md` records maintainer/legal review of the privacy policy, store answers, backup behavior, diagnostic redaction, privacy manifests, license inventory, and final publication approval. `scripts/verify-privacy-review-evidence.sh` fails until all required review rows are complete.
+13. **Make final readiness one command.** `scripts/verify-release-readiness.sh` runs the marketing, performance, accessibility, internal-testing, privacy-review, and evidence-register verifiers together. It does not replace any underlying gate; it fails until every lower-level verifier passes.
 
 ## Phased Implementation
 
@@ -83,7 +85,9 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `docs/release/app-store-data-collection.md`
 - `docs/release/play-store-data-safety.md`
 - `docs/release/third-party-licenses.md`
+- `docs/release/privacy-review-evidence.md`
 - `scripts/collect-licenses.sh`
+- `scripts/verify-privacy-review-evidence.sh`
 - `native/android-app/src/main/AndroidManifest.xml`
 - `native/android-app/src/main/res/xml/backup_rules.xml`
 - `native/android-app/src/main/res/xml/data_extraction_rules.xml`
@@ -101,6 +105,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - [x] Generate current third-party dependency inventory.
 - [x] Generate Rust crate license names from `cargo metadata --locked`.
 - [x] Verify Android transitive license metadata with Gradle tooling.
+- [x] Add a maintainer/legal privacy review evidence log and verifier.
 - [ ] Complete maintainer/legal privacy review.
 - [x] Decide Android `allowBackup` release behavior and update docs/store answers.
 - [x] Add iOS app and widget privacy manifests with required-reason API declarations.
@@ -175,6 +180,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-performance-benchmarks.sh` is expected to fail while benchmark results are absent; it is a precondition for performance evidence closure, not a substitute for release-build physical-device measurement.
 - `scripts/verify-accessibility-audit.sh` is expected to fail while accessibility results are absent; it is a precondition for accessibility evidence closure, not a substitute for a release-candidate assistive-technology audit.
 - `scripts/verify-internal-testing-evidence.sh` is expected to fail while store records, uploaded builds, tester invites, or feedback triage rows are absent; it is a precondition for internal-testing evidence closure, not a substitute for store-console access.
+- `scripts/verify-privacy-review-evidence.sh` is expected to fail while maintainer/legal review evidence is absent; it is a precondition for privacy evidence closure, not a substitute for legal approval.
 - `scripts/verify-release-readiness.sh` is expected to fail while any lower-level P4 verifier fails; it is the final repo-owned readiness command before changing roadmap P4 acceptance.
 - `scripts/verify-release-gates.sh` is expected to fail until the manual P4 evidence rows are populated; this is a release guard, not a development-test failure.
 - Roadmap P4 acceptance remains unchecked until manual evidence exists.
@@ -191,6 +197,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `docs/release/play-store-description.md` -- Play Store listing draft.
 - `docs/release/play-store-testing-setup.md` -- Play Store testing guide.
 - `docs/release/privacy-policy.md` -- privacy policy draft aligned to current code.
+- `docs/release/privacy-review-evidence.md` -- maintainer/legal privacy review evidence log.
 - `docs/release/release-gate-evidence.md` -- manual P4 gate evidence register.
 - `docs/release/test-feedback-template.md` -- beta feedback template.
 - `docs/release/testflight-setup.md` -- TestFlight setup guide.
@@ -220,6 +227,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-internal-testing-evidence.sh` -- verifies internal testing evidence rows across iOS and Android store/test-track gates.
 - `scripts/verify-marketing-assets.sh` -- validates final store screenshot files, optional App Preview placement, and Play feature-graphic dimensions.
 - `scripts/verify-performance-benchmarks.sh` -- verifies release benchmark result rows across iOS and Android target metrics.
+- `scripts/verify-privacy-review-evidence.sh` -- verifies maintainer/legal privacy review evidence rows.
 - `scripts/verify-release-readiness.sh` -- runs all P4 release-readiness verifiers as one final command.
 - `scripts/verify-release-gates.sh` -- release-gate evidence verifier.
 - `rust/crates/fire-core/src/core/persistence.rs` -- writes redacted session exports through the redacted envelope.

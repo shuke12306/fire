@@ -34,3 +34,5 @@ Users can delete local Fire data by logging out, clearing app storage, or uninst
 ## Release Blockers
 
 - Revisit this document if FCM token backend registration, analytics, cloud diagnostics, or server-side Fire services are added.
+- Record final review in `privacy-review-evidence.md` and verify it with
+  `scripts/verify-privacy-review-evidence.sh`.

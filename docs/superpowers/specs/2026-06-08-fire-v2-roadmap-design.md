@@ -411,7 +411,7 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - Google Play 数据安全声明
 - 第三方库许可证归集
 
-当前已有隐私/数据安全草稿、iOS app/widget privacy manifest、第三方许可证归集脚本和 Android transitive license metadata 校验；最终 maintainer/legal review 仍未完成。
+当前已有隐私/数据安全草稿、iOS app/widget privacy manifest、第三方许可证归集脚本、Android transitive license metadata 校验、`docs/release/privacy-review-evidence.md` 和 `scripts/verify-privacy-review-evidence.sh`；最终 maintainer/legal review 仍未完成。
 
 ### 5.3 TestFlight / 内部测试轨道
 
@@ -520,4 +520,4 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - [ ] 话题详情首屏 < 2s
 - [ ] VoiceOver / TalkBack 全流程可操作
 
-P4 repository scaffolding 已完成一部分，并已有 store media / internal testing / performance / accessibility / release gate 校验脚本以及 `scripts/verify-release-readiness.sh` 总入口；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。
+P4 repository scaffolding 已完成一部分，并已有 store media / internal testing / privacy review / performance / accessibility / release gate 校验脚本以及 `scripts/verify-release-readiness.sh` 总入口；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。

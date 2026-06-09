@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+evidence_file="${1:-docs/release/privacy-review-evidence.md}"
+
+if [[ ! -f "$evidence_file" ]]; then
+  echo "privacy review evidence file not found: $evidence_file" >&2
+  exit 2
+fi
+
+awk -F'|' '
+BEGIN {
+  required["Privacy policy"] = 1
+  required["App Store privacy questionnaire"] = 1
+  required["Play Store Data Safety"] = 1
+  required["Android backup behavior"] = 1
+  required["Diagnostic export redaction"] = 1
+  required["iOS privacy manifests"] = 1
+  required["Third-party licenses"] = 1
+  required["Final publication approval"] = 1
+
+  allowed_status["Complete"] = 1
+  allowed_status["Accepted"] = 1
+
+  row_count = 0
+  failure_count = 0
+  in_required_evidence = 0
+}
+
+function trim(value) {
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+  return value
+}
+
+function normalize_status(value) {
+  value = trim(value)
+  if (tolower(value) == "complete") {
+    return "Complete"
+  }
+  if (tolower(value) == "accepted") {
+    return "Accepted"
+  }
+  return value
+}
+
+function fail(row_label, message) {
+  failure_count += 1
+  printf("FAIL: %s: %s\n", row_label, message) > "/dev/stderr"
+}
+
+function is_template_row(date, area, reviewer, status, link, notes) {
+  return date == "" && area == "" && reviewer == "" && status == "" && link == "" && notes == ""
+}
+
+/^## Required Evidence[[:space:]]*$/ {
+  in_required_evidence = 1
+  next
+}
+
+in_required_evidence && /^## / {
+  in_required_evidence = 0
+  next
+}
+
+in_required_evidence && /^\|/ {
+  if ($2 ~ /^[[:space:]]*Date[[:space:]]*$/ || $2 ~ /^[[:space:]]*---[[:space:]]*$/) {
+    next
+  }
+
+  date = trim($2)
+  area = trim($3)
+  reviewer = trim($4)
+  status = normalize_status($5)
+  link = trim($6)
+  notes = trim($7)
+  row_label = area
+
+  if (is_template_row(date, area, reviewer, status, link, notes)) {
+    next
+  }
+
+  row_count += 1
+
+  if (date !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) {
+    fail(row_label, "date must use YYYY-MM-DD")
+  }
+
+  if (!(area in required)) {
+    fail(row_label, "review area is not one of the required rows")
+  }
+
+  if (reviewer == "") {
+    fail(row_label, "reviewer is required")
+  }
+
+  if (!(status in allowed_status)) {
+    fail(row_label, "status must be Complete or Accepted, found " status)
+  }
+
+  if (link == "") {
+    fail(row_label, "evidence link is required")
+  }
+
+  if (notes == "") {
+    fail(row_label, "notes are required")
+  }
+
+  if (status == "Accepted" && notes !~ /[Aa]pprov|[Ww]aiv|[Aa]ccept/) {
+    fail(row_label, "accepted rows require approver and waiver reason in notes")
+  }
+
+  if (area == "Final publication approval" && notes !~ /[Pp]ublish|[Rr]elease|[Ss]ubmi/) {
+    fail(row_label, "final publication approval notes must mention publish, release, or submission approval")
+  }
+
+  seen[area] = 1
+}
+
+END {
+  for (area in required) {
+    if (!(area in seen)) {
+      fail(area, "missing required privacy review evidence row")
+    }
+  }
+
+  if (row_count == 0) {
+    fail("Required Evidence", "no privacy review evidence rows found")
+  }
+
+  if (failure_count > 0) {
+    printf("Privacy review evidence verification failed: %d row(s), %d failure(s)\n", row_count, failure_count) > "/dev/stderr"
+    exit 1
+  }
+
+  printf("Privacy review evidence verification passed: %d row(s)\n", row_count)
+}
+' "$evidence_file"

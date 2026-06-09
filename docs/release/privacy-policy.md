@@ -58,6 +58,8 @@ Users can remove local Fire data by logging out, clearing app data in system set
 ## Important Release Blockers
 
 - Complete legal/privacy review before using this draft as a public privacy policy.
+- Record approval in `privacy-review-evidence.md` and verify it with
+  `scripts/verify-privacy-review-evidence.sh`.
 
 ## Contact
 

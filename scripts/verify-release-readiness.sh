@@ -9,6 +9,7 @@ checks=(
   "Performance benchmarks|scripts/verify-performance-benchmarks.sh"
   "Accessibility audit|scripts/verify-accessibility-audit.sh"
   "Internal testing evidence|scripts/verify-internal-testing-evidence.sh"
+  "Privacy review evidence|scripts/verify-privacy-review-evidence.sh"
   "Release gate evidence|scripts/verify-release-gates.sh"
 )
 
