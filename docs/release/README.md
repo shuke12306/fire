@@ -31,6 +31,11 @@ scripts/verify-marketing-assets.sh
 The verifier is expected to fail while those folders contain only placeholders.
 Passing validation is required before marking the store-media evidence rows
 complete, but it is not a substitute for release-candidate capture and review.
+Final asset filenames must not contain fake, mock, placeholder, dummy,
+synthetic, TODO/TBD, `example.com`, or not-real markers. Screenshot dimensions
+must decode cleanly and be at least 320px on each side; the Play feature graphic
+must be PNG content with exact `1024x500` dimensions. If an App Preview is
+included, `app-preview.mp4` must contain MP4 `ftyp` content.
 
 ## Performance Evidence
 

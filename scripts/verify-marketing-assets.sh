@@ -27,6 +27,29 @@ lowercase() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+contains_fake_asset_marker() {
+  local value
+  value="$(lowercase "$1")"
+
+  [[ "$value" =~ (^|[^[:alnum:]])(fake|mock|placeholder|dummy|synthetic)([^[:alnum:]]|$) ]] ||
+    [[ "$value" =~ (^|[^[:alnum:]])(todo|tbd)([^[:alnum:]]|$) ]] ||
+    [[ "$value" == *example.com* ]] ||
+    [[ "$value" == *not-real* ]] ||
+    [[ "$value" == *"not real"* ]]
+}
+
+validate_asset_filename() {
+  local label="$1"
+  local asset_file="$2"
+  local filename
+
+  filename="$(basename "$asset_file")"
+  if contains_fake_asset_marker "$filename"; then
+    fail "$label: asset filename must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers: $asset_file"
+    return 1
+  fi
+}
+
 image_dimensions() {
   local image_file="$1"
 
@@ -37,11 +60,34 @@ from pathlib import Path
 
 data = Path(sys.argv[1]).read_bytes()
 
-if len(data) >= 24 and data[:8] == b"\x89PNG\r\n\x1a\n":
-    width = int.from_bytes(data[16:20], "big")
-    height = int.from_bytes(data[20:24], "big")
-    print(f"{width}x{height}")
-    sys.exit(0)
+if data[:8] == b"\x89PNG\r\n\x1a\n":
+    index = 8
+    width = None
+    height = None
+    seen_idat = False
+    seen_iend = False
+    while index + 12 <= len(data):
+        length = int.from_bytes(data[index:index + 4], "big")
+        chunk_type = data[index + 4:index + 8]
+        chunk_end = index + 12 + length
+        if chunk_end > len(data):
+            break
+        if chunk_type == b"IHDR":
+            if length != 13 or width is not None:
+                break
+            width = int.from_bytes(data[index + 8:index + 12], "big")
+            height = int.from_bytes(data[index + 12:index + 16], "big")
+        elif chunk_type == b"IDAT":
+            seen_idat = True
+        elif chunk_type == b"IEND":
+            seen_iend = True
+            break
+        index = chunk_end
+
+    if width is not None and height is not None and seen_idat and seen_iend:
+        print(f"{width}x{height}")
+        sys.exit(0)
+    sys.exit(1)
 
 if len(data) >= 4 and data[:2] == b"\xff\xd8":
     index = 2
@@ -111,11 +157,14 @@ validate_image_file() {
   local label="$1"
   local image_file="$2"
   local expected_dimensions="${3:-}"
+  local minimum_dimension="${4:-0}"
   local filename
   local extension
 
   filename="$(basename "$image_file")"
   extension="$(lowercase "${filename##*.}")"
+
+  validate_asset_filename "$label" "$image_file" || return 1
 
   case "$extension" in
     png|jpg|jpeg)
@@ -150,18 +199,31 @@ validate_image_file() {
       return 1
     fi
 
+    if [[ "$minimum_dimension" =~ ^[0-9]+$ ]] &&
+       (( minimum_dimension > 0 )) &&
+       (( width < minimum_dimension || height < minimum_dimension )); then
+      fail "$label: expected dimensions of at least ${minimum_dimension}px on each side, found $dimensions for $image_file"
+      return 1
+    fi
+
     info "$label: valid image $image_file ($dimensions)"
     return 0
   else
     local dimension_status=$?
-    if [[ "$dimension_status" -eq 2 && -z "$expected_dimensions" ]]; then
+    if [[ "$dimension_status" -eq 2 &&
+          -z "$expected_dimensions" &&
+          ( ! "$minimum_dimension" =~ ^[0-9]+$ || "$minimum_dimension" -eq 0 ) ]]; then
       warn_once_dimension_tool
       info "$label: accepted $image_file by extension and non-empty size only"
       return 0
     fi
 
     if [[ "$dimension_status" -eq 2 ]]; then
-      fail "$label: cannot verify required $expected_dimensions dimensions for $image_file because neither python3 nor sips is available"
+      if [[ -n "$expected_dimensions" ]]; then
+        fail "$label: cannot verify required $expected_dimensions dimensions for $image_file because neither python3 nor sips is available"
+      else
+        fail "$label: cannot verify minimum ${minimum_dimension}px dimensions for $image_file because neither python3 nor sips is available"
+      fi
     else
       fail "$label: could not read PNG or JPEG dimensions for $image_file"
     fi
@@ -183,7 +245,7 @@ validate_screenshot_directory() {
 
   while IFS= read -r image_file; do
     asset_count=$((asset_count + 1))
-    if validate_image_file "$label" "$image_file"; then
+    if validate_image_file "$label" "$image_file" "" 320; then
       valid_count=$((valid_count + 1))
     fi
   done < <(find "$directory" -maxdepth 1 -type f ! -name '.gitkeep' ! -name '.*' | sort)
@@ -195,6 +257,52 @@ validate_screenshot_directory() {
 
   if [[ "$valid_count" -eq 0 ]]; then
     fail "$label: no valid screenshots found in $directory"
+  fi
+}
+
+validate_mp4_file() {
+  local label="$1"
+  local video_file="$2"
+  local extension
+
+  extension="$(lowercase "${video_file##*.}")"
+  if [[ "$extension" != "mp4" ]]; then
+    fail "$label: unsupported video extension for $video_file; use .mp4"
+    return 1
+  fi
+
+  validate_asset_filename "$label" "$video_file" || return 1
+
+  if command -v python3 >/dev/null 2>&1; then
+    if python3 - "$video_file" <<'PY'
+import sys
+from pathlib import Path
+
+data = Path(sys.argv[1]).read_bytes()
+if len(data) >= 12 and data[4:8] == b"ftyp":
+    sys.exit(0)
+sys.exit(1)
+PY
+    then
+      return 0
+    fi
+    fail "$label: MP4 file must contain an ftyp box near the start: $video_file"
+    return 1
+  fi
+
+  if ! command -v od >/dev/null 2>&1; then
+    fail "$label: cannot verify MP4 signature because neither python3 nor od is available"
+    return 1
+  fi
+
+  local signature_text
+  if ! signature_text="$(LC_ALL=C od -An -j4 -N4 -tc "$video_file" 2>/dev/null | tr -d ' \n')"; then
+    fail "$label: cannot read MP4 signature for $video_file"
+    return 1
+  fi
+  if [[ "$signature_text" != "ftyp" ]]; then
+    fail "$label: MP4 file must contain an ftyp box near the start: $video_file"
+    return 1
   fi
 }
 
@@ -227,6 +335,7 @@ validate_optional_preview_video() {
     fail "iOS App Preview video: video file is empty: $video_file"
     return
   fi
+  validate_mp4_file "iOS App Preview video" "$video_file" || return
 
   info "iOS App Preview video: found optional $video_file"
 }
@@ -244,6 +353,7 @@ validate_required_feature_graphic() {
     fail "Play Store feature graphic: image file is empty: $graphic_file"
     return
   fi
+  validate_asset_filename "Play Store feature graphic" "$graphic_file" || return
 
   if ! command -v od >/dev/null 2>&1; then
     fail "Play Store feature graphic: cannot verify PNG signature because od is unavailable"
