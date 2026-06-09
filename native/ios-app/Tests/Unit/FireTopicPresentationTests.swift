@@ -464,6 +464,40 @@ final class FireTopicPresentationTests: XCTestCase {
         }
     }
 
+    func testRenderContentAppendsImageAttachmentsMissingFromRenderTree() {
+        let document = RenderDocumentState(
+            blocks: [
+                RenderBlockState(id: 1, parentId: nil, depth: 0, kind: .document),
+                RenderBlockState(id: 2, parentId: 1, depth: 1, kind: .paragraph),
+                RenderBlockState(id: 3, parentId: 2, depth: 2, kind: .text(content: "Before")),
+            ],
+            plainText: "Before\nfire",
+            imageAttachments: [
+                RenderImageAttachmentState(
+                    url: "https://linux.do/uploads/default/original/1X/fire.png",
+                    altText: "fire",
+                    width: 690,
+                    height: 388
+                ),
+            ]
+        )
+
+        let content = FireTopicPresentation.renderContent(from: document, sourceToken: "missing-image-node")
+
+        XCTAssertEqual(content.segments.count, 2)
+        if case .text(let text) = content.segments[0] {
+            XCTAssertEqual(text.string, "Before")
+        } else {
+            XCTFail("Expected leading text segment")
+        }
+        if case .image(let image) = content.segments[1] {
+            XCTAssertEqual(image.url.absoluteString, "https://linux.do/uploads/default/original/1X/fire.png")
+            XCTAssertEqual(image.altText, "fire")
+        } else {
+            XCTFail("Expected appended image segment")
+        }
+    }
+
     func testRenderContentSuppressesInlineImageMetadataText() {
         let content = fireRenderContentFixture(#"<p><a class="lightbox" href="/uploads/default/original/1X/fire-full.png"><img src="/uploads/default/optimized/1X/fire_690x388.png" width="690" height="388" alt="fire"></a> screen-shot 1080x1920 34kb</p>"#)
         let segmentText = content.segments.compactMap { segment -> String? in
@@ -530,7 +564,7 @@ final class FireTopicPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(attachment.remoteURL.absoluteString, "https://linux.do/images/emoji/twitter/smile.png?v=12")
-        XCTAssertEqual(attachment.fallbackText, "smile")
+        XCTAssertEqual(attachment.fallbackText, ":smile:")
         XCTAssertTrue(content.imageAttachments.isEmpty)
     }
 
@@ -1055,6 +1089,7 @@ final class FireTopicPresentationTests: XCTestCase {
             username: username,
             name: nil,
             avatarTemplate: nil,
+            authorMetadata: fireEmptyPostAuthorMetadataState(),
             cooked: cooked,
             renderDocument: renderDocument,
             raw: nil,
@@ -1072,6 +1107,8 @@ final class FireTopicPresentationTests: XCTestCase {
             bookmarkReminderAt: nil,
             reactions: reactions,
             currentUserReaction: nil,
+            boosts: [],
+            canBoost: false,
             polls: [],
             acceptedAnswer: false,
             canAcceptAnswer: false,
@@ -1093,11 +1130,13 @@ final class FireTopicPresentationTests: XCTestCase {
             title: "Fire Native",
             slug: "fire-native",
             postsCount: UInt32(max(stream.count, posts.count)),
+            replyCount: UInt32(max(max(stream.count, posts.count) - 1, 0)),
             categoryId: 7,
             tags: [],
             views: 128,
             likeCount: 9,
             createdAt: "2026-03-28T10:00:00Z",
+            highestPostNumber: UInt32(max(stream.count, posts.count)),
             lastReadPostNumber: nil,
             bookmarks: [],
             bookmarked: false,
@@ -1173,6 +1212,7 @@ final class FireTopicPresentationTests: XCTestCase {
                 views: 128,
                 likeCount: 9,
                 createdAt: "2026-03-28T10:00:00Z",
+                highestPostNumber: UInt32(replyRows.count + 1),
                 lastReadPostNumber: nil,
                 bookmarks: [],
                 bookmarked: false,
@@ -1221,6 +1261,7 @@ final class FireTopicPresentationTests: XCTestCase {
             replyRows: replyRows,
             totalLoadedPostCount: UInt32(replyRows.count + 1),
             visibleRootPostNumbers: Array(Set(replyRows.map(\.rootPostNumber))).sorted(),
+            firstUnreadRootPostNumber: nil,
             gainedNewRootProgress: !replyRows.isEmpty
         )
     }

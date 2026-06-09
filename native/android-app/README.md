@@ -18,9 +18,11 @@ the shared Rust core at build time.
   the same screen with a retry action. `OnboardingFragment` is only the explicit
   login entry, and `LoginWebViewFragment` owns interactive login.
 - `HomeFragment` renders the Rust-backed topic feed with feed-kind, category,
-  tag filtering, pull refresh, MessageBus refresh, and visible Search/New Topic
-  actions. New Topic opens `TopicComposerSheet`; successful creation opens the
-  native topic detail screen. Topic compose supports Rust-backed tag
+  tag filtering, pull refresh, and debounced MessageBus-triggered Paging
+  refresh. Topic-scoped latest events are coalesced for rate limiting, but the
+  Android host still refreshes the active Paging source rather than merging
+  `topic_ids` rows in place. New Topic opens `TopicComposerSheet`; successful
+  creation opens the native topic detail screen. Topic compose supports Rust-backed tag
   suggestions, `@mention` suggestions, image upload insertion, and shared Rust
   draft restore/autosave/delete, and local Markdown preview with upload-image
   preview. Empty initial Paging loads render topic-row skeletons in the list area
@@ -54,10 +56,35 @@ the shared Rust core at build time.
 `TopicDetailActivity` now loads Rust-owned `TopicDetailPageState` from the
 combined topic-detail page path, where the source snapshot carries the full
 posts and the slim tree presentation carries only post id / number plus
-hierarchy metadata. It renders a `ConcatAdapter` made of the topic header,
-original post, reply rows, and a loading footer. Load-more is driven only by the
-Rust source cursor over raw `post_stream.stream`, not by host-managed row
-windows.
+hierarchy metadata plus the optional first-unread-root suggestion. It renders a
+`ConcatAdapter` made of the topic header, original post, reply rows, and a
+loading footer. Load-more is driven only by the Rust source cursor over raw
+`post_stream.stream`, not by host-managed row windows.
+
+When Rust returns `firstUnreadRootPostNumber`, Android consumes it only for the
+initial topic-detail load with no explicit notification/search/bookmark/share
+target. Android only enables the Rust unread-root suggestion query for that
+first-open path. Explicit target post numbers keep priority, and refresh or
+MessageBus updates never trigger unread-root scrolling or unread-root auto-batch
+requests.
+
+Post rows consume Rust-owned `TopicPostAuthorMetadata` for display name,
+username, title, group/flair name, staff markers, and status text. Android only
+renders this metadata in the native RecyclerView row; it does not reconstruct
+author badges from profile fetches or parsed cooked HTML.
+
+Post row avatars and usernames route directly to the native user-info sheet when
+the row has a non-empty username. Author metadata is split into compact colored
+badges on the username line (`Lv.N`, staff/group/flair) and a shorter secondary
+line (`@username`, title/status), with the timestamp trailing the first line and
+`#N楼` trailing the second line.
+
+Topic-detail rich text consumes Rust `RenderDocument` blocks plus
+`imageAttachments`. Android keeps inline image ordering from render blocks,
+uses Rust attachment URLs for linked/original image selection, normalizes
+relative LinuxDo image URLs before Coil load/preview, and appends attachment
+images that were not represented by render-tree image blocks instead of parsing
+`post.cooked`.
 
 Current topic-detail interactions:
 
@@ -78,6 +105,12 @@ Current topic-detail interactions:
   compact loading/error placeholders, manual retry, and a full-screen ZoomImage
   + Coil preview that supports pinch/pan gestures and reuses the shared image
   cache for the same URL
+- notification, search, profile, user-sheet, and topic-detail avatars all use
+  the shared `FireImageLoader` Coil pipeline with memory and disk caching.
+  `FireAvatarUrls` resolves common avatar surfaces to a canonical 384px
+  request URL so detail rows, notifications, search results, profiles, and
+  compact user sheets reuse the same cache entry instead of downloading the
+  same avatar at per-surface `{size}` URLs.
 - Rust filters attachment metadata text whose prefix may be a filename/hash but
   whose suffix is dimensions plus file size, and quote chrome/avatar content
   before Android maps blocks to `Spannable` / image views
@@ -93,6 +126,16 @@ Current topic-detail interactions:
 - post poll display and regular/multiple poll vote submission/removal
 - poll option titles from Rust-provided plain text, without HTML parsing in the
   row binding path
+- original-post body, poll, Boost, and action surfaces use the same content
+  width as the topic title instead of inheriting the reply avatar-column inset
+- Boost short replies render from Rust-owned `TopicPostBoostState.displayText`
+  and `renderDocument` as a body overlay/barrage for original posts with
+  visible body text, and as a fixed-height two-row manual horizontal chip
+  scroller for replies or posts without a body text target, without
+  Android-side Boost HTML parsing; overlay mode caps visible boosts to five
+  display lines, uses at most five lanes, and pauses/resumes animation timing
+  around active RecyclerView scrolling to avoid overlap and broad body-text
+  occlusion, while reply/comment Boost chips move only through user swipes
 - reaction-user lookup from the rendered post reaction summary
 - topic notification-level selection for non-private-message topics
 - reply-context lookup from the rendered reply target, showing source and
@@ -100,7 +143,8 @@ Current topic-detail interactions:
 - post delete/recover actions when the backend exposes those permissions
 - post report flow using Rust-provided post action types with moderator-message
   prompts when required
-- target post scrolling for notification/search deep links
+- target post scrolling for notification/search deep links, with Rust's
+  first-unread-root suggestion used only when no explicit target was supplied
 - topic/reaction/poll MessageBus subscriptions with debounced detail refresh
 - MessageBus-driven detail refresh now waits until RecyclerView scrolling returns
   to idle before applying the latest refreshed source snapshot + tree presentation,
@@ -130,6 +174,16 @@ Android now keeps request-failure handling single-path:
   request once.
 - Background or silent `CloudflareChallenge` work does not steal focus; the
   platform returns an incomplete challenge result and Rust surfaces the error.
+- Rust marks the user-opened notification history request as foreground-capable
+  so notification-tab refreshes align with home, topic detail, search, and other
+  visible reads; recent notification cache refreshes remain background.
+- Topic detail publishes loaded header counters back to the visible home list
+  through a stateful `HomeTopicDetailPatchRepository`, letting already-loaded rows update
+  `postsCount`, `replyCount`, `views`, `lastReadPostNumber`, and
+  `highestPostNumber` immediately even if Home was stopped while detail was
+  visible. The patch also recomputes unread/new state from the patched read
+  position while the next Paging load remains the authoritative Rust-backed
+  refresh.
 - Home, topic detail, notifications, search, bookmarks, private messages, and
   composer flows all surface those failures through the same error-display path
   used for any other request failure.

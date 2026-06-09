@@ -416,6 +416,20 @@ final class FireTopicDetailStore: ObservableObject {
         }
     }
 
+    private func setPostReplyContextError(
+        _ message: String?,
+        topicId: UInt64,
+        postId: UInt64
+    ) {
+        let normalized = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextValue = normalized?.isEmpty == false ? normalized : nil
+        guard postReplyContextErrorsByPostID[postId] != nextValue else {
+            return
+        }
+        postReplyContextErrorsByPostID[postId] = nextValue
+        bumpTopicInteractionRevision(topicId: topicId)
+    }
+
     private func setTopicPresenceUsers(
         _ users: [TopicPresenceUserState],
         topicId: UInt64
@@ -606,6 +620,7 @@ final class FireTopicDetailStore: ObservableObject {
         }
 
         var currentForce = force
+        let allowsSuggestedUnreadRootScrollTarget = targetPostNumber == nil && topicDetails[topicId] == nil
         while true {
             if !currentForce,
                topicSourceSnapshots[topicId] != nil,
@@ -627,13 +642,15 @@ final class FireTopicDetailStore: ObservableObject {
                     targetPostNumber: targetPostNumber,
                     trackVisit: true,
                     forceLoad: currentForce || force,
+                    allowsSuggestedUnreadRootScrollTarget: allowsSuggestedUnreadRootScrollTarget,
                     sessionStore: sessionStore,
                     tracksInitialLoadAPM: true
                 )
                 await applyTopicDetailPagePayload(
                     payload,
                     detailNotice: nil,
-                    topicId: topicId
+                    topicId: topicId,
+                    allowsSuggestedUnreadRootScrollTarget: allowsSuggestedUnreadRootScrollTarget
                 )
                 appViewModel.topicDetailLogger()?.debug(
                     "loaded topic detail source topic_id=\(topicId) loaded_posts=\(payload.sourceSnapshot.loadedPosts.count) reply_rows=\(payload.treePresentation.replyRows.count) source_cursor_present=\(payload.sourceSnapshot.sourceCursor != nil)"
@@ -675,6 +692,7 @@ final class FireTopicDetailStore: ObservableObject {
         targetPostNumber: UInt32?,
         trackVisit: Bool,
         forceLoad: Bool,
+        allowsSuggestedUnreadRootScrollTarget: Bool = false,
         sessionStore: FireSessionStore,
         tracksInitialLoadAPM: Bool
     ) async throws -> FireTopicDetailPagePayload {
@@ -691,6 +709,7 @@ final class FireTopicDetailStore: ObservableObject {
                         query: TopicDetailSourceQueryState(
                             topicId: topicId,
                             targetPostNumber: targetPostNumber,
+                            allowSuggestedUnreadRoot: allowsSuggestedUnreadRootScrollTarget,
                             trackVisit: trackVisit,
                             forceLoad: forceLoad,
                             initialBatchSize: Self.topicDetailInitialBatchSize,
@@ -776,11 +795,13 @@ final class FireTopicDetailStore: ObservableObject {
             title: sourceSnapshot.header.title,
             slug: sourceSnapshot.header.slug,
             postsCount: sourceSnapshot.header.postsCount,
+            replyCount: sourceSnapshot.header.replyCount,
             categoryId: sourceSnapshot.header.categoryId,
             tags: sourceSnapshot.header.tags,
             views: sourceSnapshot.header.views,
             likeCount: sourceSnapshot.header.likeCount,
             createdAt: sourceSnapshot.header.createdAt,
+            highestPostNumber: sourceSnapshot.header.highestPostNumber,
             lastReadPostNumber: sourceSnapshot.header.lastReadPostNumber,
             bookmarks: sourceSnapshot.header.bookmarks,
             bookmarked: sourceSnapshot.header.bookmarked,
@@ -807,13 +828,20 @@ final class FireTopicDetailStore: ObservableObject {
     private func applyTopicDetailPagePayload(
         _ payload: FireTopicDetailPagePayload,
         detailNotice: FireTopicDetailStatusMessage?,
-        topicId: UInt64
+        topicId: UInt64,
+        allowsSuggestedUnreadRootScrollTarget: Bool = false
     ) async {
         let applyStartedAt = Date()
         var treePresentation = payload.treePresentation
         treePresentation.replyRows = FireTopicPresentation
             .uniqueTreeRowsPreservingOrder(treePresentation.replyRows)
             .filter { $0.postId != payload.sourceSnapshot.body.post.id }
+        if allowsSuggestedUnreadRootScrollTarget,
+           let suggestedTarget = treePresentation.firstUnreadRootPostNumber,
+           suggestedTarget > 1,
+           topicDetailTargetPostNumbers[topicId] == nil {
+            setPendingScrollTarget(suggestedTarget, topicId: topicId)
+        }
         rememberTopicRecoverySlug(payload.sourceSnapshot.header.slug, topicId: topicId)
         updateTopicDetailNotice(detailNotice, topicId: topicId)
         topicSourceSnapshots[topicId] = payload.sourceSnapshot
@@ -833,6 +861,7 @@ final class FireTopicDetailStore: ObservableObject {
             "topic detail page main apply topic_id=\(topicId) main_apply_ms=\(Self.elapsedMilliseconds(since: applyStartedAt)) source_loaded_posts=\(payload.sourceSnapshot.loadedPosts.count) body_post_included=true tree_total_loaded_post_count=\(treePresentation.totalLoadedPostCount) reply_rows=\(treePresentation.replyRows.count) cooked_byte_count=\(Self.cookedByteCount(sourceSnapshot: payload.sourceSnapshot))"
         )
         _ = await buildTopicDetailRenderUpdate(detail: detail, topicId: topicId)
+        appViewModel.patchHomeTopicCounts(from: detail)
         loadTopicAiSummaryIfNeeded(topicId: topicId, detail: detail)
     }
 
@@ -1428,7 +1457,7 @@ final class FireTopicDetailStore: ObservableObject {
             return
         }
         setLoadingPostReplyContext(true, topicId: topicID, postId: post.id)
-        postReplyContextErrorsByPostID[post.id] = nil
+        setPostReplyContextError(nil, topicId: topicID, postId: post.id)
         defer { setLoadingPostReplyContext(false, topicId: topicID, postId: post.id) }
 
         guard let sessionStore = try? await appViewModel.sessionStoreValue() else {
@@ -1486,7 +1515,7 @@ final class FireTopicDetailStore: ObservableObject {
             if await appViewModel.handleRecoverableSessionErrorIfNeeded(error) {
                 return
             }
-            postReplyContextErrorsByPostID[post.id] = error.localizedDescription
+            setPostReplyContextError(error.localizedDescription, topicId: topicID, postId: post.id)
         }
     }
 
@@ -2508,7 +2537,13 @@ final class FireTopicDetailStore: ObservableObject {
                 detail.postsCount + 1,
                 UInt32(detail.postStream.stream.count)
             )
+            detail.replyCount = max(
+                detail.replyCount + 1,
+                detail.postsCount > 0 ? detail.postsCount - 1 : 0
+            )
         }
+        detail.highestPostNumber = max(detail.highestPostNumber, reply.postNumber)
+        detail.lastReadPostNumber = max(detail.lastReadPostNumber ?? 0, reply.postNumber)
 
         let previousStreamCount = detail.postStream.stream.count
         detail = cacheTopicDetail(detail, topicId: topicId)
@@ -2526,6 +2561,7 @@ final class FireTopicDetailStore: ObservableObject {
             requestedRange: requestedRange,
             pendingScrollTarget: topicWindowStates[topicId]?.pendingScrollTarget
         )
+        appViewModel.patchHomeTopicCounts(from: detail)
     }
 
     private func expandRequestedRangeIfNeeded(

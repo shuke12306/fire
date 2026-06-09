@@ -82,7 +82,20 @@ GET /session/current.json
 
 ---
 
-## 3. 登出
+## 3. 请求错误展示边界
+
+普通请求返回 `LoginRequired`、普通 `403`、`invalid_access`、`BAD CSRF` 或
+Cloudflare challenge 时，平台层不得自行清除登录态或自动打开登录页。平台只展示该请求的失败状态；是否进入 onboarding/login 由 Rust session snapshot 的
+权威状态变更驱动。
+
+Cloudflare challenge 由 Rust 依据响应状态、Cloudflare header 和 HTML/body
+特征分类。前台用户操作可以调用平台拥有的 WebView challenge handler；平台完成验证后只把新的 `cf_clearance`、相关 Cookie 和浏览器 UA 回灌给 Rust，由 Rust
+重试原请求一次。后台、静默或 MessageBus 类请求不抢占前台 UI，直接返回
+`CloudflareChallenge` 请求失败或等待后续用户操作。
+
+---
+
+## 4. 登出
 
 ```
 DELETE /session/{username}
@@ -108,9 +121,9 @@ DELETE /session/{username}
 
 ---
 
-## 4. CSRF Token
+## 5. CSRF Token
 
-### 4.1 获取 CSRF Token
+### 5.1 获取 CSRF Token
 
 ```
 GET /session/csrf
@@ -121,7 +134,7 @@ GET /session/csrf
 #### Request Headers
 
 ```
-（使用独立的 Dio 实例，带 Cookie 管理但无并发限制）
+（使用 Rust/openwire 请求路径，带 Cookie 管理但跳过 CSRF/auth 前置检查）
 skipCsrf: true
 skipAuthCheck: true
 isSilent: true
@@ -136,7 +149,7 @@ skipScheduler: true
 }
 ```
 
-### 4.2 CSRF 策略
+### 5.2 CSRF 策略
 
 | 规则 | 说明 |
 |------|------|

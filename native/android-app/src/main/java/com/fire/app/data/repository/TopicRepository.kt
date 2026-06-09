@@ -50,6 +50,7 @@ class TopicRepository(private val sessionStore: FireSessionStore) {
         targetPostNumber: UInt? = null,
         forceLoad: Boolean = true,
         trackVisit: Boolean = true,
+        allowSuggestedUnreadRoot: Boolean = false,
         initialBatchSize: UShort = 40u,
         loadMoreBatchSize: UShort = 40u,
         maxAutoBatchesPerGesture: UByte = 3u,
@@ -59,6 +60,7 @@ class TopicRepository(private val sessionStore: FireSessionStore) {
             TopicDetailSourceQueryState(
                 topicId = topicId,
                 targetPostNumber = targetPostNumber,
+                allowSuggestedUnreadRoot = allowSuggestedUnreadRoot,
                 trackVisit = trackVisit,
                 forceLoad = forceLoad,
                 initialBatchSize = initialBatchSize,
@@ -74,6 +76,7 @@ class TopicRepository(private val sessionStore: FireSessionStore) {
         targetPostNumber: UInt? = null,
         forceLoad: Boolean = true,
         trackVisit: Boolean = true,
+        allowSuggestedUnreadRoot: Boolean = false,
         initialBatchSize: UShort = 40u,
         loadMoreBatchSize: UShort = 40u,
         maxAutoBatchesPerGesture: UByte = 3u,
@@ -83,6 +86,7 @@ class TopicRepository(private val sessionStore: FireSessionStore) {
             TopicDetailSourceQueryState(
                 topicId = topicId,
                 targetPostNumber = targetPostNumber,
+                allowSuggestedUnreadRoot = allowSuggestedUnreadRoot,
                 trackVisit = trackVisit,
                 forceLoad = forceLoad,
                 initialBatchSize = initialBatchSize,

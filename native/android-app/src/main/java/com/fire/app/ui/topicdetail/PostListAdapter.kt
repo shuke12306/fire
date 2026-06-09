@@ -23,6 +23,7 @@ data class PostRow(
     val depth: Int = 0,
     val parentPostNumber: UInt? = null,
     val hasChildren: Boolean = false,
+    val usesTitleWidthBody: Boolean = false,
 )
 
 data class PostRowCallbacks(
@@ -48,13 +49,37 @@ data class PostRowCallbacks(
 class PostListAdapter(
     private val callbacks: PostRowCallbacks,
 ) : ListAdapter<PostRow, PostViewHolder>(PostDiffCallback) {
+    private val attachedHolders = mutableSetOf<PostViewHolder>()
+    private var boostAnimationsEnabled = true
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PostViewHolder {
         return PostViewHolder.create(parent)
     }
 
     override fun onBindViewHolder(holder: PostViewHolder, position: Int) {
+        holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
         holder.bind(getItem(position), callbacks)
+    }
+
+    override fun onViewAttachedToWindow(holder: PostViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        attachedHolders += holder
+        holder.onAttachedToWindow()
+        holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
+    }
+
+    override fun onViewDetachedFromWindow(holder: PostViewHolder) {
+        attachedHolders -= holder
+        holder.onDetachedFromWindow()
+        super.onViewDetachedFromWindow(holder)
+    }
+
+    fun setBoostAnimationsEnabled(enabled: Boolean) {
+        if (boostAnimationsEnabled == enabled) return
+        boostAnimationsEnabled = enabled
+        attachedHolders.forEach { holder ->
+            holder.setBoostAnimationsEnabled(enabled)
+        }
     }
 
     fun refreshRows() {
@@ -79,6 +104,8 @@ class HeaderAdapter(
     private val onTopicBookmarkClick: (TopicDetailState) -> Unit,
     private val onTopicNotificationClick: (TopicDetailState) -> Unit,
 ) : RecyclerView.Adapter<HeaderAdapter.HeaderViewHolder>() {
+    private val attachedHolders = mutableSetOf<HeaderViewHolder>()
+    private var boostAnimationsEnabled = true
 
     var detail: TopicDetailState? = null
         set(value) {
@@ -132,7 +159,21 @@ class HeaderAdapter(
     }
 
     override fun onBindViewHolder(holder: HeaderViewHolder, position: Int) {
+        holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
         detail?.let { holder.bind(it, aiSummary, isAiSummaryLoading, aiSummaryError) }
+    }
+
+    override fun onViewAttachedToWindow(holder: HeaderViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        attachedHolders += holder
+        holder.onAttachedToWindow()
+        holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
+    }
+
+    override fun onViewDetachedFromWindow(holder: HeaderViewHolder) {
+        attachedHolders -= holder
+        holder.onDetachedFromWindow()
+        super.onViewDetachedFromWindow(holder)
     }
 
     override fun getItemCount(): Int = if (detail != null) 1 else 0
@@ -142,6 +183,8 @@ class HeaderAdapter(
             tags == other.tags &&
             categoryId == other.categoryId &&
             postsCount == other.postsCount &&
+            replyCount == other.replyCount &&
+            highestPostNumber == other.highestPostNumber &&
             views == other.views &&
             likeCount == other.likeCount &&
             bookmarked == other.bookmarked &&
@@ -165,6 +208,14 @@ class HeaderAdapter(
 
     fun refreshRows() {
         notifyHeaderChanged()
+    }
+
+    fun setBoostAnimationsEnabled(enabled: Boolean) {
+        if (boostAnimationsEnabled == enabled) return
+        boostAnimationsEnabled = enabled
+        attachedHolders.forEach { holder ->
+            holder.setBoostAnimationsEnabled(enabled)
+        }
     }
 
     private fun TopicDetailState.originalPost(): TopicPostState? {
@@ -201,6 +252,18 @@ class HeaderAdapter(
         private val topicVoteButton: TextView = itemView.findViewById(R.id.topic_vote_button)
         private val originalPostContainer: View = itemView.findViewById(R.id.original_post_container)
         private val originalPostHolder = PostViewHolder(originalPostContainer)
+
+        fun onAttachedToWindow() {
+            originalPostHolder.onAttachedToWindow()
+        }
+
+        fun onDetachedFromWindow() {
+            originalPostHolder.onDetachedFromWindow()
+        }
+
+        fun setBoostAnimationsEnabled(enabled: Boolean) {
+            originalPostHolder.setBoostAnimationsEnabled(enabled)
+        }
 
         fun bind(
             detail: TopicDetailState,
@@ -240,7 +303,7 @@ class HeaderAdapter(
             bindTopicEdit(detail)
             bindTopicBookmark(detail)
             bindAiSummary(aiSummary, isAiSummaryLoading, aiSummaryError)
-            statReplies.text = "${maxOf(detail.postsCount, 1u) - 1u}"
+            statReplies.text = "${detail.replyCount}"
             statViews.text = "${detail.views}"
             statLikes.text = "${detail.likeCount}"
             bindTopicVote(detail)
@@ -255,7 +318,7 @@ class HeaderAdapter(
                     originalPostContainer.paddingBottom,
                 )
                 originalPostHolder.bind(
-                    PostRow(post = originalPost, depth = 0),
+                    PostRow(post = originalPost, depth = 0, usesTitleWidthBody = true),
                     callbacks,
                 )
             } else {

@@ -5,9 +5,10 @@ use fire_models::{
     ResolvedUploadUrl, TopicAiSummary, TopicBody, TopicCreateRequest, TopicDetail,
     TopicDetailCreatedBy, TopicDetailMeta, TopicDetailPage, TopicDetailSourceQuery,
     TopicDetailSourceSnapshot, TopicHeader, TopicListQuery, TopicLoadMoreOutcome,
-    TopicLoadMoreStopReason, TopicLoadedRange, TopicPost, TopicPostStream, TopicReaction,
-    TopicReplyRequest, TopicReplyToUser, TopicSourceCursor, TopicTimingEntry, TopicTimingsRequest,
-    TopicTreePresentation, TopicTreeRow, TopicUpdateRequest, UploadResult, VoteResponse, VotedUser,
+    TopicLoadMoreStopReason, TopicLoadedRange, TopicPost, TopicPostAuthorMetadata, TopicPostBoost,
+    TopicPostBoostUser, TopicPostStream, TopicReaction, TopicReplyRequest, TopicReplyToUser,
+    TopicSourceCursor, TopicTimingEntry, TopicTimingsRequest, TopicTreePresentation, TopicTreeRow,
+    TopicUpdateRequest, UploadResult, VoteResponse, VotedUser,
 };
 
 use fire_uniffi_types::{
@@ -121,6 +122,7 @@ impl From<TopicSourceCursorState> for TopicSourceCursor {
 pub struct TopicDetailSourceQueryState {
     pub topic_id: u64,
     pub target_post_number: Option<u32>,
+    pub allow_suggested_unread_root: bool,
     pub track_visit: bool,
     pub force_load: bool,
     pub initial_batch_size: u16,
@@ -134,6 +136,7 @@ impl From<TopicDetailSourceQueryState> for TopicDetailSourceQuery {
         Self {
             topic_id: value.topic_id,
             target_post_number: value.target_post_number,
+            allow_suggested_unread_root: value.allow_suggested_unread_root,
             track_visit: value.track_visit,
             force_load: value.force_load,
             initial_batch_size: value.initial_batch_size,
@@ -581,11 +584,148 @@ impl From<TopicReplyToUser> for TopicReplyToUserState {
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
+pub struct TopicPostAuthorMetadataState {
+    pub user_id: Option<u64>,
+    pub user_title: Option<String>,
+    pub primary_group_name: Option<String>,
+    pub flair_url: Option<String>,
+    pub flair_name: Option<String>,
+    pub flair_bg_color: Option<String>,
+    pub flair_color: Option<String>,
+    pub flair_group_id: Option<u64>,
+    pub moderator: bool,
+    pub admin: bool,
+    pub group_moderator: bool,
+    pub user_status_emoji: Option<String>,
+    pub user_status_description: Option<String>,
+}
+
+impl From<TopicPostAuthorMetadata> for TopicPostAuthorMetadataState {
+    fn from(value: TopicPostAuthorMetadata) -> Self {
+        Self {
+            user_id: value.user_id,
+            user_title: value.user_title,
+            primary_group_name: value.primary_group_name,
+            flair_url: value.flair_url,
+            flair_name: value.flair_name,
+            flair_bg_color: value.flair_bg_color,
+            flair_color: value.flair_color,
+            flair_group_id: value.flair_group_id,
+            moderator: value.moderator,
+            admin: value.admin,
+            group_moderator: value.group_moderator,
+            user_status_emoji: value.user_status_emoji,
+            user_status_description: value.user_status_description,
+        }
+    }
+}
+
+impl From<TopicPostAuthorMetadataState> for TopicPostAuthorMetadata {
+    fn from(value: TopicPostAuthorMetadataState) -> Self {
+        Self {
+            user_id: value.user_id,
+            user_title: value.user_title,
+            primary_group_name: value.primary_group_name,
+            flair_url: value.flair_url,
+            flair_name: value.flair_name,
+            flair_bg_color: value.flair_bg_color,
+            flair_color: value.flair_color,
+            flair_group_id: value.flair_group_id,
+            moderator: value.moderator,
+            admin: value.admin,
+            group_moderator: value.group_moderator,
+            user_status_emoji: value.user_status_emoji,
+            user_status_description: value.user_status_description,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct TopicPostBoostUserState {
+    pub id: u64,
+    pub username: String,
+    pub name: Option<String>,
+    pub avatar_template: Option<String>,
+}
+
+impl From<TopicPostBoostUser> for TopicPostBoostUserState {
+    fn from(value: TopicPostBoostUser) -> Self {
+        Self {
+            id: value.id,
+            username: value.username,
+            name: value.name,
+            avatar_template: value.avatar_template,
+        }
+    }
+}
+
+impl From<TopicPostBoostUserState> for TopicPostBoostUser {
+    fn from(value: TopicPostBoostUserState) -> Self {
+        Self {
+            id: value.id,
+            username: value.username,
+            name: value.name,
+            avatar_template: value.avatar_template,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct TopicPostBoostState {
+    pub id: u64,
+    pub cooked: String,
+    pub render_document: Option<RenderDocumentState>,
+    pub display_text: String,
+    pub user: TopicPostBoostUserState,
+    pub can_delete: bool,
+    pub can_flag: bool,
+    pub user_flag_status: Option<i32>,
+    pub available_flags: Vec<String>,
+}
+
+impl From<TopicPostBoost> for TopicPostBoostState {
+    fn from(value: TopicPostBoost) -> Self {
+        topic_post_boost_state_from_model(value, "https://linux.do")
+    }
+}
+
+fn topic_post_boost_state_from_model(value: TopicPostBoost, base_url: &str) -> TopicPostBoostState {
+    let render_document = render_document_state_from_cooked(&value.cooked, base_url);
+    TopicPostBoostState {
+        id: value.id,
+        cooked: value.cooked,
+        render_document,
+        display_text: value.display_text,
+        user: value.user.into(),
+        can_delete: value.can_delete,
+        can_flag: value.can_flag,
+        user_flag_status: value.user_flag_status,
+        available_flags: value.available_flags,
+    }
+}
+
+impl From<TopicPostBoostState> for TopicPostBoost {
+    fn from(value: TopicPostBoostState) -> Self {
+        Self {
+            id: value.id,
+            cooked: value.cooked,
+            display_text: value.display_text,
+            user: value.user.into(),
+            can_delete: value.can_delete,
+            can_flag: value.can_flag,
+            user_flag_status: value.user_flag_status,
+            available_flags: value.available_flags,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
 pub struct TopicPostState {
     pub id: u64,
     pub username: String,
     pub name: Option<String>,
     pub avatar_template: Option<String>,
+    pub author_metadata: TopicPostAuthorMetadataState,
     pub cooked: String,
     pub render_document: Option<RenderDocumentState>,
     pub raw: Option<String>,
@@ -603,6 +743,8 @@ pub struct TopicPostState {
     pub bookmark_reminder_at: Option<String>,
     pub reactions: Vec<TopicReactionState>,
     pub current_user_reaction: Option<TopicReactionState>,
+    pub boosts: Vec<TopicPostBoostState>,
+    pub can_boost: bool,
     pub polls: Vec<PollState>,
     pub accepted_answer: bool,
     pub can_accept_answer: bool,
@@ -629,6 +771,7 @@ pub(crate) fn topic_post_state_from_model(value: TopicPost, base_url: &str) -> T
         username: value.username,
         name: value.name,
         avatar_template: value.avatar_template,
+        author_metadata: value.author_metadata.into(),
         cooked: value.cooked,
         render_document,
         raw: value.raw,
@@ -646,6 +789,12 @@ pub(crate) fn topic_post_state_from_model(value: TopicPost, base_url: &str) -> T
         bookmark_reminder_at: value.bookmark_reminder_at,
         reactions: value.reactions.into_iter().map(Into::into).collect(),
         current_user_reaction: value.current_user_reaction.map(Into::into),
+        boosts: value
+            .boosts
+            .into_iter()
+            .map(|boost| topic_post_boost_state_from_model(boost, base_url))
+            .collect(),
+        can_boost: value.can_boost,
         polls: value.polls.into_iter().map(Into::into).collect(),
         accepted_answer: value.accepted_answer,
         can_accept_answer: value.can_accept_answer,
@@ -674,6 +823,7 @@ impl From<TopicPostState> for TopicPost {
             username: value.username,
             name: value.name,
             avatar_template: value.avatar_template,
+            author_metadata: value.author_metadata.into(),
             cooked: value.cooked,
             raw: value.raw,
             post_number: value.post_number,
@@ -690,6 +840,8 @@ impl From<TopicPostState> for TopicPost {
             bookmark_reminder_at: value.bookmark_reminder_at,
             reactions: value.reactions.into_iter().map(Into::into).collect(),
             current_user_reaction: value.current_user_reaction.map(Into::into),
+            boosts: value.boosts.into_iter().map(Into::into).collect(),
+            can_boost: value.can_boost,
             polls: value.polls.into_iter().map(Into::into).collect(),
             accepted_answer: value.accepted_answer,
             can_accept_answer: value.can_accept_answer,
@@ -771,6 +923,7 @@ pub struct TopicHeaderState {
     pub views: u32,
     pub like_count: u32,
     pub created_at: Option<String>,
+    pub highest_post_number: u32,
     pub last_read_post_number: Option<u32>,
     pub bookmarks: Vec<u64>,
     pub bookmarked: bool,
@@ -803,6 +956,7 @@ impl From<TopicHeader> for TopicHeaderState {
             views: value.views,
             like_count: value.like_count,
             created_at: value.created_at,
+            highest_post_number: value.highest_post_number,
             last_read_post_number: value.last_read_post_number,
             bookmarks: value.bookmarks,
             bookmarked: value.bookmarked,
@@ -870,6 +1024,7 @@ pub struct TopicTreePresentationState {
     pub reply_rows: Vec<TopicTreeRowState>,
     pub total_loaded_post_count: u32,
     pub visible_root_post_numbers: Vec<u32>,
+    pub first_unread_root_post_number: Option<u32>,
     pub gained_new_root_progress: bool,
 }
 
@@ -886,6 +1041,7 @@ pub(crate) fn topic_tree_presentation_state_from_model(
             .collect(),
         total_loaded_post_count: value.total_loaded_post_count,
         visible_root_post_numbers: value.visible_root_post_numbers,
+        first_unread_root_post_number: value.first_unread_root_post_number,
         gained_new_root_progress: value.gained_new_root_progress,
     }
 }
@@ -982,11 +1138,13 @@ pub struct TopicDetailState {
     pub title: String,
     pub slug: String,
     pub posts_count: u32,
+    pub reply_count: u32,
     pub category_id: Option<u64>,
     pub tags: Vec<TopicTagState>,
     pub views: u32,
     pub like_count: u32,
     pub created_at: Option<String>,
+    pub highest_post_number: u32,
     pub last_read_post_number: Option<u32>,
     pub bookmarks: Vec<u64>,
     pub bookmarked: bool,
@@ -1007,17 +1165,20 @@ pub struct TopicDetailState {
 }
 
 pub fn topic_detail_state_from_model(value: TopicDetail, base_url: &str) -> TopicDetailState {
+    let reply_count = value.reply_count();
     TopicDetailState {
         id: value.id,
         message_bus_last_id: value.message_bus_last_id,
         title: value.title,
         slug: value.slug,
         posts_count: value.posts_count,
+        reply_count,
         category_id: value.category_id,
         tags: value.tags.into_iter().map(Into::into).collect(),
         views: value.views,
         like_count: value.like_count,
         created_at: value.created_at,
+        highest_post_number: value.highest_post_number,
         last_read_post_number: value.last_read_post_number,
         bookmarks: value.bookmarks,
         bookmarked: value.bookmarked,

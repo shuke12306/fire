@@ -135,6 +135,11 @@ class HomeFragment : Fragment() {
                         }
                     }
                     launch {
+                        HomeTopicDetailPatchRepository.patches.collect { patches ->
+                            adapter.applyDetailPatches(patches)
+                        }
+                    }
+                    launch {
                         vm.selectedKind.collectLatest { kind ->
                             feedKindAdapter.updateSelectedKind(kind)
                         }

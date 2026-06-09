@@ -12,10 +12,20 @@ enum FirePostCellLayoutCalculator {
     static let avatarSpacingNested: CGFloat = 6
     static let avatarThreadLineTopPadding: CGFloat = 6
     static let threadLineWidth: CGFloat = 1
-    static let metaLineSpacing: CGFloat = 8
+    static let metaLineSpacing: CGFloat = 5
     static let textTopSpacing: CGFloat = 0
     static let imageTopSpacing: CGFloat = 10
     static let imageSpacing: CGFloat = 10
+    static let boostTopSpacing: CGFloat = 4
+    static let boostSpacing: CGFloat = 6
+    static let boostHorizontalInset: CGFloat = 10
+    static let boostVerticalInset: CGFloat = 6
+    static let fixedBoostManualRows = 2
+    static let fixedBoostManualRowHeight: CGFloat = 26
+    static let fixedBoostManualRowSpacing: CGFloat = 2
+    static let fixedBoostManualHeight: CGFloat =
+        CGFloat(fixedBoostManualRows) * fixedBoostManualRowHeight
+        + CGFloat(fixedBoostManualRows - 1) * fixedBoostManualRowSpacing
     static let replyShortcutTopSpacing: CGFloat = 8
     static let replyShortcutHeight: CGFloat = 30
     static let reactionTopSpacing: CGFloat = 0
@@ -61,6 +71,7 @@ enum FirePostCellLayoutCalculator {
         textHeight: CGFloat?,
         imageSizes: [CGSize],
         pollHeights: [CGFloat] = [],
+        boostLines: [String] = [],
         trait: FirePostLayoutTraitSignature
     ) -> FirePostCellLayout {
         let indent = indentWidth(for: key.depth)
@@ -109,7 +120,11 @@ enum FirePostCellLayoutCalculator {
             width: contentAvailableWidth,
             height: metaHeight
         )
-        cursorY += metaHeight + metaLineSpacing
+        let metadataHeight = ceil(UIFont.preferredFont(
+            forTextStyle: .caption2,
+            compatibleWith: contentTraitCollection
+        ).lineHeight)
+        cursorY += metaHeight + metaLineSpacing + metadataHeight + metaLineSpacing
 
         // Text frame
         let textFrame: CGRect?
@@ -189,12 +204,28 @@ enum FirePostCellLayoutCalculator {
             }
         }
 
+        // Boost frames
+        var boostFrames: [CGRect] = []
+        if !shouldCollapseText && boostLines.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            if textFrame != nil || !imageFrames.isEmpty || !pollFrames.isEmpty {
+                cursorY += boostTopSpacing
+            }
+            let frame = CGRect(
+                x: contentLeading,
+                y: cursorY,
+                width: contentAvailableWidth,
+                height: fixedBoostManualHeight
+            )
+            boostFrames.append(frame)
+            cursorY += fixedBoostManualHeight
+        }
+
         // Action row: nested-reply shortcut and reactions share one compact line.
         let replyShortcutFrame: CGRect?
         let reactionsFrame: CGRect?
         let hasActionRow = key.replyShortcutCount != nil || key.hasReactions
         if hasActionRow {
-            if textFrame != nil || !imageFrames.isEmpty || !pollFrames.isEmpty {
+            if textFrame != nil || !imageFrames.isEmpty || !pollFrames.isEmpty || !boostFrames.isEmpty {
                 cursorY += replyShortcutTopSpacing
             }
 
@@ -275,6 +306,7 @@ enum FirePostCellLayoutCalculator {
             textExpansionFrame: textExpansionFrame,
             imageFrames: imageFrames,
             pollFrames: pollFrames,
+            boostFrames: boostFrames,
             replyShortcutFrame: replyShortcutFrame,
             reactionsFrame: reactionsFrame,
             menuFrame: nil,
@@ -334,6 +366,28 @@ enum FirePostCellLayoutCalculator {
             ? min(resolvedLineCount, FirePostTextExpansionState.collapsedLineLimit)
             : resolvedLineCount
         return ceil(CGFloat(displayedLineCount) * lineHeight)
+    }
+
+    static func boostHeight(
+        text: String,
+        containerWidth: CGFloat,
+        contentSizeCategory: UIContentSizeCategory
+    ) -> CGFloat {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+
+        let traitCollection = UITraitCollection(preferredContentSizeCategory: contentSizeCategory)
+        let font = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traitCollection)
+        let maxTextWidth = max(containerWidth - boostHorizontalInset * 2, 1)
+        let boundingRect = (trimmed as NSString).boundingRect(
+            with: CGSize(width: maxTextWidth, height: font.lineHeight * 2.4),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font],
+            context: nil
+        )
+        let lineHeight = ceil(font.lineHeight)
+        let textHeight = min(ceil(boundingRect.height), lineHeight * 2)
+        return max(textHeight + boostVerticalInset * 2, lineHeight + boostVerticalInset * 2)
     }
 
     static func collapsedTextHeight(contentSizeCategory: UIContentSizeCategory) -> CGFloat {

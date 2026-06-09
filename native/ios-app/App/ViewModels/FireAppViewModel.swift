@@ -673,6 +673,10 @@ final class FireAppViewModel: ObservableObject {
         homeFeedStore?.loadMoreTopics()
     }
 
+    func patchHomeTopicCounts(from detail: TopicDetailState) {
+        homeFeedStore?.patchTopicCounts(from: detail)
+    }
+
     func loadTopicDetail(
         topicId: UInt64,
         topicSlug: String? = nil,

@@ -18,6 +18,7 @@ import coil.size.Size
 import com.fire.app.R
 import com.fire.app.core.ext.dp
 import com.fire.app.core.image.FireImageLoader
+import com.fire.app.core.image.FireImageUrls
 import com.fire.app.richtext.FireCookedImage
 import com.github.panpf.zoomimage.CoilZoomImageView
 import com.github.panpf.zoomimage.view.zoom.OnViewTapListener
@@ -185,7 +186,7 @@ class TopicImagePreviewDialogFragment : DialogFragment() {
         fun newInstance(image: FireCookedImage): TopicImagePreviewDialogFragment {
             return TopicImagePreviewDialogFragment().apply {
                 arguments = Bundle().apply {
-                    putString(ARG_URL, image.url)
+                    putString(ARG_URL, FireImageUrls.build(image.url) ?: image.url)
                     putString(ARG_ALT, image.altText)
                 }
             }

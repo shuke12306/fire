@@ -228,11 +228,49 @@ pub struct TopicReplyToUser {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPostBoostUser {
+    pub id: u64,
+    pub username: String,
+    pub name: Option<String>,
+    pub avatar_template: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPostBoost {
+    pub id: u64,
+    pub cooked: String,
+    pub display_text: String,
+    pub user: TopicPostBoostUser,
+    pub can_delete: bool,
+    pub can_flag: bool,
+    pub user_flag_status: Option<i32>,
+    pub available_flags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPostAuthorMetadata {
+    pub user_id: Option<u64>,
+    pub user_title: Option<String>,
+    pub primary_group_name: Option<String>,
+    pub flair_url: Option<String>,
+    pub flair_name: Option<String>,
+    pub flair_bg_color: Option<String>,
+    pub flair_color: Option<String>,
+    pub flair_group_id: Option<u64>,
+    pub moderator: bool,
+    pub admin: bool,
+    pub group_moderator: bool,
+    pub user_status_emoji: Option<String>,
+    pub user_status_description: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TopicPost {
     pub id: u64,
     pub username: String,
     pub name: Option<String>,
     pub avatar_template: Option<String>,
+    pub author_metadata: TopicPostAuthorMetadata,
     pub cooked: String,
     pub raw: Option<String>,
     pub post_number: u32,
@@ -249,6 +287,8 @@ pub struct TopicPost {
     pub bookmark_reminder_at: Option<String>,
     pub reactions: Vec<TopicReaction>,
     pub current_user_reaction: Option<TopicReaction>,
+    pub boosts: Vec<TopicPostBoost>,
+    pub can_boost: bool,
     pub polls: Vec<Poll>,
     pub accepted_answer: bool,
     pub can_accept_answer: bool,
@@ -269,6 +309,7 @@ pub struct TopicPostStream {
 pub struct TopicDetailSourceQuery {
     pub topic_id: u64,
     pub target_post_number: Option<u32>,
+    pub allow_suggested_unread_root: bool,
     pub track_visit: bool,
     pub force_load: bool,
     pub initial_batch_size: u16,
@@ -289,6 +330,7 @@ pub struct TopicHeader {
     pub like_count: u32,
     pub posts_count: u32,
     pub reply_count: u32,
+    pub highest_post_number: u32,
     pub created_at: Option<String>,
     pub last_read_post_number: Option<u32>,
     pub bookmarks: Vec<u64>,
@@ -367,6 +409,7 @@ pub struct TopicTreePresentationQuery {
     pub raw_stream_ids: Vec<u64>,
     pub loaded_posts: Vec<TopicPost>,
     pub focused_post_number: Option<u32>,
+    pub last_read_post_number: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -376,6 +419,7 @@ pub struct TopicTreePresentation {
     pub reply_rows: Vec<TopicTreeRow>,
     pub total_loaded_post_count: u32,
     pub visible_root_post_numbers: Vec<u32>,
+    pub first_unread_root_post_number: Option<u32>,
     pub gained_new_root_progress: bool,
 }
 
@@ -635,6 +679,7 @@ pub struct TopicDetail {
     pub views: u32,
     pub like_count: u32,
     pub created_at: Option<String>,
+    pub highest_post_number: u32,
     pub last_read_post_number: Option<u32>,
     pub bookmarks: Vec<u64>,
     pub bookmarked: bool,
@@ -681,6 +726,7 @@ impl TopicDetail {
             like_count: self.like_count,
             posts_count: self.posts_count,
             reply_count: self.reply_count(),
+            highest_post_number: self.highest_post_number,
             created_at: self.created_at.clone(),
             last_read_post_number: self.last_read_post_number,
             bookmarks: self.bookmarks.clone(),

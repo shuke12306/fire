@@ -285,7 +285,7 @@ enum FireTopicPresentation {
             imageAttachments: richContent.imageAttachments,
             attachmentIndex: &attachmentIndex
         )
-        return rawSegments.compactMap { segment in
+        var renderedSegments = rawSegments.compactMap { segment -> FireTopicPostRenderSegment? in
             switch segment {
             case .nodes(let nodes):
                 guard !nodes.isEmpty else { return nil }
@@ -298,6 +298,16 @@ enum FireTopicPresentation {
                 return .image(image)
             }
         }
+        var emittedImageIDs = Set(renderedSegments.compactMap { segment -> String? in
+            guard case .image(let image) = segment else {
+                return nil
+            }
+            return image.id
+        })
+        for image in richContent.imageAttachments where emittedImageIDs.insert(image.id).inserted {
+            renderedSegments.append(.image(image))
+        }
+        return renderedSegments
     }
 
     private static func rawRenderSegments(

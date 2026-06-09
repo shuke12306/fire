@@ -1,7 +1,11 @@
 package com.fire.app.ui.topicdetail
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
+import uniffi.fire_uniffi_topics.TopicPostAuthorMetadataState
+import uniffi.fire_uniffi_topics.TopicPostBoostState
+import uniffi.fire_uniffi_topics.TopicPostBoostUserState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.TopicTreeRowState
 
@@ -39,16 +43,93 @@ class TopicDetailPostRowsTest {
         assertEquals(listOf("author", "reply-new"), posts.map { it.username })
     }
 
+    @Test
+    fun initialScrollTargetPostNumber_prefersExplicitTarget() {
+        val target = TopicDetailPostRows.initialScrollTargetPostNumber(
+            explicitTargetPostNumber = 42u,
+            suggestedUnreadRootPostNumber = 7u,
+            shouldUseSuggestedUnreadRootTarget = true,
+        )
+
+        assertEquals(42u, target)
+    }
+
+    @Test
+    fun initialScrollTargetPostNumber_usesSuggestedUnreadRootOnlyWhenAllowed() {
+        assertEquals(
+            7u,
+            TopicDetailPostRows.initialScrollTargetPostNumber(
+                explicitTargetPostNumber = null,
+                suggestedUnreadRootPostNumber = 7u,
+                shouldUseSuggestedUnreadRootTarget = true,
+            ),
+        )
+        assertNull(
+            TopicDetailPostRows.initialScrollTargetPostNumber(
+                explicitTargetPostNumber = null,
+                suggestedUnreadRootPostNumber = 7u,
+                shouldUseSuggestedUnreadRootTarget = false,
+            ),
+        )
+        assertNull(
+            TopicDetailPostRows.initialScrollTargetPostNumber(
+                explicitTargetPostNumber = 0u,
+                suggestedUnreadRootPostNumber = 1u,
+                shouldUseSuggestedUnreadRootTarget = true,
+            ),
+        )
+    }
+
+    @Test
+    fun usesBoostBarrage_onlyForOriginalPostRowsWithBoosts() {
+        val original = PostRow(
+            post = post(id = 1uL, postNumber = 1u, username = "author", boosts = listOf(boost())),
+            depth = 0,
+        )
+        val reply = PostRow(
+            post = post(id = 2uL, postNumber = 2u, username = "reply", boosts = listOf(boost())),
+            depth = 1,
+        )
+        val originalWithoutBoosts = PostRow(
+            post = post(id = 1uL, postNumber = 1u, username = "author"),
+            depth = 0,
+        )
+
+        assertEquals(true, TopicDetailPostRows.usesBoostBarrage(original))
+        assertEquals(false, TopicDetailPostRows.usesBoostBarrage(reply))
+        assertEquals(false, TopicDetailPostRows.usesBoostBarrage(originalWithoutBoosts))
+    }
+
+    @Test
+    fun boostBarragePresentation_isFixedToFiveVisibleRows() {
+        assertEquals(5, TopicDetailBoostPresentation.BODY_BARRAGE_VISIBLE_LINE_LIMIT)
+        assertEquals(5, TopicDetailBoostPresentation.BODY_BARRAGE_MAX_LANES)
+    }
+
+    @Test
+    fun postRow_bodyUsesRegularInsetUnlessHeaderRequestsTitleWidth() {
+        val regular = PostRow(post = post(id = 1uL, postNumber = 1u, username = "author"))
+        val headerOriginal = PostRow(
+            post = post(id = 1uL, postNumber = 1u, username = "author"),
+            usesTitleWidthBody = true,
+        )
+
+        assertEquals(false, regular.usesTitleWidthBody)
+        assertEquals(true, headerOriginal.usesTitleWidthBody)
+    }
+
     private fun post(
         id: ULong,
         postNumber: UInt,
         username: String,
+        boosts: List<TopicPostBoostState> = emptyList(),
     ): TopicPostState {
         return TopicPostState(
             id = id,
             username = username,
             name = null,
             avatarTemplate = null,
+            authorMetadata = emptyAuthorMetadata(),
             cooked = "<p>$username</p>",
             raw = null,
             postNumber = postNumber,
@@ -65,6 +146,8 @@ class TopicDetailPostRowsTest {
             bookmarkReminderAt = null,
             reactions = emptyList(),
             currentUserReaction = null,
+            boosts = boosts,
+            canBoost = false,
             polls = emptyList(),
             renderDocument = null,
             acceptedAnswer = false,
@@ -74,6 +157,25 @@ class TopicDetailPostRowsTest {
             canDelete = false,
             canRecover = false,
             hidden = false,
+        )
+    }
+
+    private fun boost(): TopicPostBoostState {
+        return TopicPostBoostState(
+            id = 99uL,
+            cooked = "<p>Hello</p>",
+            renderDocument = null,
+            displayText = "Hello",
+            user = TopicPostBoostUserState(
+                id = 7uL,
+                username = "booster",
+                name = null,
+                avatarTemplate = null,
+            ),
+            canDelete = false,
+            canFlag = false,
+            userFlagStatus = null,
+            availableFlags = emptyList(),
         )
     }
 
@@ -89,6 +191,24 @@ class TopicDetailPostRowsTest {
             descendantCount = 0u,
             siblingIndex = 0u.toUShort(),
             isLastSibling = true,
+        )
+    }
+
+    private fun emptyAuthorMetadata(): TopicPostAuthorMetadataState {
+        return TopicPostAuthorMetadataState(
+            userId = null,
+            userTitle = null,
+            primaryGroupName = null,
+            flairUrl = null,
+            flairName = null,
+            flairBgColor = null,
+            flairColor = null,
+            flairGroupId = null,
+            moderator = false,
+            admin = false,
+            groupModerator = false,
+            userStatusEmoji = null,
+            userStatusDescription = null,
         )
     }
 }

@@ -96,19 +96,24 @@ class TopicDetailViewModel(
             _isLoading.value = true
             _errorMessage.value = null
             try {
+                val shouldUseSuggestedUnreadRootTarget = targetPostNumber == null && _detail.value == null
                 val payload = fetchTopicDetailPagePayload(
                     topicId = topicId,
                     targetPostNumber = targetPostNumber,
                     forceLoad = true,
                     trackVisit = true,
+                    allowSuggestedUnreadRoot = shouldUseSuggestedUnreadRootTarget,
                 )
                 val allPosts = applyFetchedPayload(payload)
                 preloadRenderContent(allPosts)
                 loadTopicAiSummaryIfNeeded(topicId, _detail.value)
                 maintainTopicDetailMessageBus(topicId, payload.sourceSnapshot.header.messageBusLastId)
-                targetPostNumber
-                    ?.takeIf { it > 0u }
-                    ?.let { scrollToPostWhenLoaded(it) }
+                val scrollTargetPostNumber = TopicDetailPostRows.initialScrollTargetPostNumber(
+                    explicitTargetPostNumber = targetPostNumber,
+                    suggestedUnreadRootPostNumber = payload.treePresentation.firstUnreadRootPostNumber,
+                    shouldUseSuggestedUnreadRootTarget = shouldUseSuggestedUnreadRootTarget,
+                )
+                scrollTargetPostNumber?.let { scrollToPostWhenLoaded(it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -138,12 +143,14 @@ class TopicDetailViewModel(
         targetPostNumber: UInt? = null,
         forceLoad: Boolean,
         trackVisit: Boolean,
+        allowSuggestedUnreadRoot: Boolean = false,
     ): TopicDetailPageState {
         return topicRepository.fetchTopicDetailPage(
             topicId = topicId,
             targetPostNumber = targetPostNumber,
             forceLoad = forceLoad,
             trackVisit = trackVisit,
+            allowSuggestedUnreadRoot = allowSuggestedUnreadRoot,
         )
     }
 
@@ -172,11 +179,13 @@ class TopicDetailViewModel(
             title = header.title,
             slug = header.slug,
             postsCount = header.postsCount,
+            replyCount = header.replyCount,
             categoryId = header.categoryId,
             tags = header.tags,
             views = header.views,
             likeCount = header.likeCount,
             createdAt = header.createdAt,
+            highestPostNumber = header.highestPostNumber,
             lastReadPostNumber = header.lastReadPostNumber,
             bookmarks = header.bookmarks,
             bookmarked = header.bookmarked,
@@ -857,6 +866,20 @@ object TopicDetailPostRows {
         return rowsByPostId.values.toList()
     }
 
+    fun initialScrollTargetPostNumber(
+        explicitTargetPostNumber: UInt?,
+        suggestedUnreadRootPostNumber: UInt?,
+        shouldUseSuggestedUnreadRootTarget: Boolean,
+    ): UInt? {
+        explicitTargetPostNumber?.takeIf { it > 0u }?.let { return it }
+        if (!shouldUseSuggestedUnreadRootTarget) return null
+        return suggestedUnreadRootPostNumber?.takeIf { it > 1u }
+    }
+
+    fun usesBoostBarrage(row: PostRow): Boolean {
+        return row.depth == 0 && row.post.boosts.isNotEmpty()
+    }
+
     fun postsForDetail(
         bodyPost: TopicPostState,
         loadedPosts: List<TopicPostState>,
@@ -881,4 +904,9 @@ object TopicDetailPostRows {
         }
         return postsById.values.toList()
     }
+}
+
+object TopicDetailBoostPresentation {
+    const val BODY_BARRAGE_VISIBLE_LINE_LIMIT = 5
+    const val BODY_BARRAGE_MAX_LANES = 5
 }

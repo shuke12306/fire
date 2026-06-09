@@ -9,6 +9,7 @@ class TopicListAdapter(
     private val onTagClick: (String) -> Unit = {},
     private val onTopicClick: (TopicRowState) -> Unit,
 ) : PagingDataAdapter<TopicRowState, TopicRowViewHolder>(TopicRowDiffCallback) {
+    private val detailPatchesByTopicId = mutableMapOf<ULong, HomeTopicDetailPatch>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TopicRowViewHolder {
         return TopicRowViewHolder.create(parent)
@@ -16,7 +17,20 @@ class TopicListAdapter(
 
     override fun onBindViewHolder(holder: TopicRowViewHolder, position: Int) {
         val row = getItem(position) ?: return
-        holder.bind(row, onTopicClick, onTagClick)
+        val displayRow = detailPatchesByTopicId[row.topic.id]
+            ?.let { HomeTopicDetailPatcher.patch(row, it) }
+            ?: row
+        holder.bind(displayRow, onTopicClick, onTagClick)
+    }
+
+    fun applyDetailPatches(patches: Map<ULong, HomeTopicDetailPatch>): Boolean {
+        if (detailPatchesByTopicId == patches) {
+            return false
+        }
+        detailPatchesByTopicId.clear()
+        detailPatchesByTopicId.putAll(patches)
+        notifyItemRangeChanged(0, itemCount)
+        return true
     }
 
     companion object {

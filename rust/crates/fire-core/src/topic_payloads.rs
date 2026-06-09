@@ -1,8 +1,9 @@
 use fire_models::{
     Poll, PollOption, PostReactionUpdate, ReactionUser, ReactionUsersGroup, TopicAiSummary,
     TopicDetail, TopicDetailCreatedBy, TopicDetailMeta, TopicListResponse, TopicParticipant,
-    TopicPost, TopicPostStream, TopicPoster, TopicReaction, TopicReplyToUser, TopicRow,
-    TopicSummary, TopicTag, TopicThread, TopicUser, VoteResponse, VotedUser,
+    TopicPost, TopicPostAuthorMetadata, TopicPostBoost, TopicPostBoostUser, TopicPostStream,
+    TopicPoster, TopicReaction, TopicReplyToUser, TopicRow, TopicSummary, TopicTag, TopicThread,
+    TopicUser, VoteResponse, VotedUser,
 };
 use serde::{
     de::{DeserializeOwned, Error as DeError},
@@ -18,7 +19,7 @@ use crate::json_helpers::{
     scalar_string,
 };
 use crate::topic_status_labels;
-use crate::{plain_text_from_html, preview_text_from_html};
+use crate::{plain_text_from_html, preview_text_from_html, render_cooked_html};
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct RawTopicListResponse {
@@ -527,6 +528,86 @@ fn normalized_scalar(value: Option<&str>) -> Option<String> {
     }
 }
 
+fn boost_display_text(cooked: &str) -> String {
+    let plain_text = render_cooked_html(cooked, "https://linux.do").plain_text;
+    separate_boost_emoji_shortcodes(&plain_text)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn separate_boost_emoji_shortcodes(value: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    let mut index = 0;
+
+    while index < value.len() {
+        let remaining = &value[index..];
+        if let Some((shortcode, next_index)) = boost_emoji_shortcode_at(value, index) {
+            if result
+                .chars()
+                .last()
+                .is_some_and(|character| !character.is_whitespace())
+            {
+                result.push(' ');
+            }
+            result.push_str(shortcode);
+            if value[next_index..]
+                .chars()
+                .next()
+                .is_some_and(|character| !character.is_whitespace())
+            {
+                result.push(' ');
+            }
+            index = next_index;
+            continue;
+        }
+
+        let character = remaining
+            .chars()
+            .next()
+            .expect("remaining string is non-empty");
+        result.push(character);
+        index += character.len_utf8();
+    }
+
+    result
+}
+
+fn boost_emoji_shortcode_at(value: &str, index: usize) -> Option<(&str, usize)> {
+    let remaining = value.get(index..)?;
+    let after_open = remaining.strip_prefix(':')?;
+    for (end, character) in after_open.char_indices() {
+        if character != ':' {
+            continue;
+        }
+        let name = &after_open[..end];
+        if !is_boost_emoji_shortcode_name(name) {
+            continue;
+        }
+        let next_index = index + end + 2;
+        let next_character = value[next_index..].chars().next();
+        if next_character.is_some_and(is_boost_emoji_shortcode_component_character) {
+            continue;
+        }
+        return Some((&value[index..next_index], next_index));
+    }
+    None
+}
+
+fn is_boost_emoji_shortcode_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.split(':').all(|component| {
+            !component.is_empty()
+                && component
+                    .chars()
+                    .all(is_boost_emoji_shortcode_component_character)
+        })
+}
+
+fn is_boost_emoji_shortcode_component_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '+')
+}
+
 fn timestamp_unix_ms(raw_value: Option<&str>) -> Option<u64> {
     let raw_value = raw_value?.trim();
     if raw_value.is_empty() {
@@ -673,6 +754,71 @@ impl From<RawTopicReplyToUser> for TopicReplyToUser {
 }
 
 #[derive(Debug, Default, Deserialize)]
+struct RawTopicPostUserStatus {
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    emoji: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    description: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawTopicPostBoostUser {
+    #[serde(default, deserialize_with = "deserialize_default_u64")]
+    id: u64,
+    #[serde(default, deserialize_with = "deserialize_default_string")]
+    username: String,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    avatar_template: Option<String>,
+}
+
+impl From<RawTopicPostBoostUser> for TopicPostBoostUser {
+    fn from(value: RawTopicPostBoostUser) -> Self {
+        Self {
+            id: value.id,
+            username: value.username,
+            name: value.name,
+            avatar_template: value.avatar_template,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawTopicPostBoost {
+    #[serde(default, deserialize_with = "deserialize_default_u64")]
+    id: u64,
+    #[serde(default, deserialize_with = "deserialize_default_string")]
+    cooked: String,
+    #[serde(default, deserialize_with = "deserialize_default_record")]
+    user: RawTopicPostBoostUser,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    can_delete: bool,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    can_flag: bool,
+    #[serde(default, deserialize_with = "deserialize_optional_i32")]
+    user_flag_status: Option<i32>,
+    #[serde(default, deserialize_with = "deserialize_default_string_sequence")]
+    available_flags: Vec<String>,
+}
+
+impl From<RawTopicPostBoost> for TopicPostBoost {
+    fn from(value: RawTopicPostBoost) -> Self {
+        let display_text = boost_display_text(&value.cooked);
+        Self {
+            id: value.id,
+            cooked: value.cooked,
+            display_text,
+            user: value.user.into(),
+            can_delete: value.can_delete,
+            can_flag: value.can_flag,
+            user_flag_status: value.user_flag_status,
+            available_flags: value.available_flags,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
 struct RawTopicPost {
     #[serde(default, deserialize_with = "deserialize_default_u64")]
     id: u64,
@@ -682,6 +828,30 @@ struct RawTopicPost {
     name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
     avatar_template: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u64")]
+    user_id: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    user_title: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    primary_group_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    flair_url: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    flair_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    flair_bg_color: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
+    flair_color: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u64")]
+    flair_group_id: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    moderator: bool,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    admin: bool,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    group_moderator: bool,
+    #[serde(default, deserialize_with = "deserialize_optional_record")]
+    user_status: Option<RawTopicPostUserStatus>,
     #[serde(default, deserialize_with = "deserialize_default_string")]
     cooked: String,
     #[serde(default, deserialize_with = "deserialize_optional_scalar_string")]
@@ -726,6 +896,10 @@ struct RawTopicPost {
     #[serde(default, deserialize_with = "deserialize_optional_record")]
     current_user_reaction: Option<RawTopicReaction>,
     #[serde(default, deserialize_with = "deserialize_default_sequence")]
+    boosts: Vec<RawTopicPostBoost>,
+    #[serde(default, deserialize_with = "deserialize_default_bool")]
+    can_boost: bool,
+    #[serde(default, deserialize_with = "deserialize_default_sequence")]
     polls: Vec<RawPoll>,
     #[serde(default, deserialize_with = "deserialize_optional_string_sequence_map")]
     polls_votes: Option<HashMap<String, Vec<String>>>,
@@ -763,6 +937,24 @@ impl From<RawTopicPost> for TopicPost {
             username: value.username,
             name: value.name,
             avatar_template: value.avatar_template,
+            author_metadata: TopicPostAuthorMetadata {
+                user_id: value.user_id,
+                user_title: value.user_title,
+                primary_group_name: value.primary_group_name,
+                flair_url: value.flair_url,
+                flair_name: value.flair_name,
+                flair_bg_color: value.flair_bg_color,
+                flair_color: value.flair_color,
+                flair_group_id: value.flair_group_id,
+                moderator: value.moderator,
+                admin: value.admin,
+                group_moderator: value.group_moderator,
+                user_status_emoji: value
+                    .user_status
+                    .as_ref()
+                    .and_then(|status| status.emoji.clone()),
+                user_status_description: value.user_status.and_then(|status| status.description),
+            },
             cooked: value.cooked,
             raw: value.raw,
             post_number: value.post_number,
@@ -779,6 +971,8 @@ impl From<RawTopicPost> for TopicPost {
             bookmark_reminder_at: value.bookmark_reminder_at,
             reactions: value.reactions.into_iter().map(Into::into).collect(),
             current_user_reaction: value.current_user_reaction.map(Into::into),
+            boosts: value.boosts.into_iter().map(Into::into).collect(),
+            can_boost: value.can_boost,
             polls,
             accepted_answer: value.accepted_answer,
             can_accept_answer: value.can_accept_answer,
@@ -1079,6 +1273,8 @@ pub(crate) struct RawTopicDetail {
     slug: String,
     #[serde(default, deserialize_with = "deserialize_default_u32")]
     posts_count: u32,
+    #[serde(default, deserialize_with = "deserialize_optional_u32")]
+    highest_post_number: Option<u32>,
     #[serde(default, deserialize_with = "deserialize_optional_u64")]
     category_id: Option<u64>,
     #[serde(default, deserialize_with = "deserialize_topic_tags")]
@@ -1172,6 +1368,7 @@ impl RawTopicDetail {
             title: value.title,
             slug: value.slug,
             posts_count: value.posts_count,
+            highest_post_number: value.highest_post_number.unwrap_or(value.posts_count),
             category_id: value.category_id,
             tags: value.tags,
             views: value.views,
@@ -1329,6 +1526,26 @@ where
     }
 
     Ok(records)
+}
+
+fn deserialize_default_string_sequence<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    let Value::Array(values) = value.unwrap_or(Value::Array(Vec::new())) else {
+        return Ok(Vec::new());
+    };
+
+    Ok(values
+        .into_iter()
+        .filter_map(|value| match value {
+            Value::String(value) => Some(value),
+            Value::Number(value) => Some(value.to_string()),
+            Value::Bool(value) => Some(value.to_string()),
+            Value::Array(_) | Value::Object(_) | Value::Null => None,
+        })
+        .collect())
 }
 
 fn deserialize_optional_string_sequence_map<'de, D>(
@@ -1609,7 +1826,24 @@ mod tests {
                         "username": "alice",
                         "cooked": "<p>root</p>",
                         "post_number": 1,
-                        "reply_count": 1
+                        "reply_count": 1,
+                        "can_boost": true,
+                        "boosts": [
+                            {
+                                "id": 501,
+                                "cooked": "<p>Hello <img class=\"emoji\" title=\":wave:\" alt=\":wave:\" src=\"/images/emoji/twitter/wave.png?v=12\"></p>",
+                                "user": {
+                                    "id": 7,
+                                    "username": "carol",
+                                    "name": "Carol",
+                                    "avatar_template": "/user_avatar/linux.do/carol/{size}/1.png"
+                                },
+                                "can_delete": true,
+                                "can_flag": true,
+                                "user_flag_status": 0,
+                                "available_flags": ["off_topic", 9]
+                            }
+                        ]
                     },
                     {
                         "id": 102,
@@ -1643,5 +1877,61 @@ mod tests {
         assert_eq!(detail.thread.original_post_number, Some(1));
         assert_eq!(detail.flat_posts.len(), 2);
         assert!(detail.timeline_entries.is_empty());
+    }
+
+    #[test]
+    fn topic_post_boosts_parse_display_text_and_permissions() {
+        let detail = sample_raw_topic_detail().into_topic_detail(false);
+        let post = detail
+            .post_stream
+            .posts
+            .iter()
+            .find(|post| post.id == 101)
+            .expect("root post");
+
+        assert!(post.can_boost);
+        assert_eq!(post.boosts.len(), 1);
+        let boost = &post.boosts[0];
+        assert_eq!(boost.id, 501);
+        assert_eq!(boost.display_text, "Hello :wave:");
+        assert_eq!(boost.user.username, "carol");
+        assert_eq!(boost.user.name.as_deref(), Some("Carol"));
+        assert!(boost.can_delete);
+        assert!(boost.can_flag);
+        assert_eq!(boost.user_flag_status, Some(0));
+        assert_eq!(boost.available_flags, ["off_topic", "9"]);
+    }
+
+    #[test]
+    fn topic_post_boost_display_text_normalizes_emoji_images_without_alt() {
+        let detail = serde_json::from_value::<RawTopicDetail>(json!({
+            "id": 42,
+            "title": "Topic",
+            "slug": "topic",
+            "post_stream": {
+                "posts": [
+                    {
+                        "id": 101,
+                        "username": "alice",
+                        "cooked": "<p>root</p>",
+                        "post_number": 1,
+                        "boosts": [
+                            {
+                                "id": 501,
+                                "cooked": "<p><img class=\"emoji\" title=\"smile\" src=\"/images/emoji/twitter/smile.png?v=12\"><img class=\"emoji\" src=\"/images/emoji/twitter/wave/t3.png?v=12\"> 🎉</p>",
+                                "user": {"id": 7, "username": "carol"}
+                            }
+                        ]
+                    }
+                ],
+                "stream": [101]
+            },
+            "details": {}
+        }))
+        .expect("sample topic detail should deserialize")
+        .into_topic_detail(false);
+        let boost = &detail.post_stream.posts[0].boosts[0];
+
+        assert_eq!(boost.display_text, ":smile: :wave:t3: 🎉");
     }
 }

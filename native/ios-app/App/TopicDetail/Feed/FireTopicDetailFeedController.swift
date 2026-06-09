@@ -43,6 +43,7 @@ final class FireTopicDetailFeedController: NSObject,
     var onBackgroundTap: (() -> Void)?
     var onScrollInteractionChanged: ((Bool) -> Void)?
     private var lastPublishedScrollInteractionActive = false
+    private var deferredIdleCheckGeneration: UInt64 = 0
 
     func setup() {
         collectionNode.dataSource = self
@@ -369,6 +370,12 @@ final class FireTopicDetailFeedController: NSObject,
                 plainText: postContext.renderContent.plainText,
                 images: postContext.renderContent.imageAttachments,
                 polls: FirePostPollRenderModel.models(from: postContext.post.polls),
+                boostLines: FirePostBoostDisplay.fixedDisplayLines(
+                    for: postContext.post.boosts,
+                    depth: postContext.depth,
+                    textExpansionState: postContext.textExpansionState,
+                    hasBodyTextTarget: postContext.renderContent.hasBoostBarrageTextTarget
+                ),
                 trait: trait
             )
         }
@@ -440,6 +447,7 @@ final class FireTopicDetailFeedController: NSObject,
         let capturedConfiguration = configuration
         let capturedLayoutManager = layoutManager
         let capturedCellFactory = cellFactory
+        let capturedBoostAnimationsEnabled = !isScrollInteractionActive
 
         return {
             if let postContext = capturedPostContext {
@@ -455,9 +463,11 @@ final class FireTopicDetailFeedController: NSObject,
                         replyTargetPostNumber: postContext.replyTargetPostNumber,
                         replyShortcutCount: postContext.replyShortcutCount,
                         isLoadingReplyContext: postContext.isLoadingReplyContext,
+                        replyContextError: postContext.replyContextError,
                         textExpansionState: postContext.textExpansionState,
                         showsDivider: postContext.showsDivider,
                         layoutWidth: capturedLayoutWidth,
+                        boostAnimationsEnabled: capturedBoostAnimationsEnabled,
                         layout: capturedLayoutKey.flatMap { capturedLayoutManager?.cachedLayout(forKey: $0) },
                         layoutKey: capturedLayoutKey
                     ),
@@ -505,16 +515,19 @@ final class FireTopicDetailFeedController: NSObject,
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         publishScrollInteractionStateIfNeeded()
         if !decelerate {
+            scheduleDeferredScrollIdleCheck()
             reevaluateVisibleState(forceLoadMoreEvaluation: true)
         }
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         publishScrollInteractionStateIfNeeded()
+        scheduleDeferredScrollIdleCheck()
         reevaluateVisibleState(forceLoadMoreEvaluation: true)
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        deferredIdleCheckGeneration &+= 1
         publishScrollInteractionStateIfNeeded()
     }
 
@@ -530,6 +543,7 @@ final class FireTopicDetailFeedController: NSObject,
     private func postCallbacks(configuration: FireTopicDetailRuntimeConfiguration) -> FirePostCellCallbacks {
         FirePostCellCallbacks(
             onLinkTapped: configuration.onLinkTapped,
+            onOpenProfile: configuration.onOpenProfile,
             onOpenImage: configuration.onOpenImage,
             onToggleLike: configuration.onToggleLike,
             onSelectReaction: configuration.onSelectReaction,
@@ -571,9 +585,11 @@ final class FireTopicDetailFeedController: NSObject,
                 replyTargetPostNumber: context.replyTargetPostNumber,
                 replyShortcutCount: context.replyShortcutCount,
                 isLoadingReplyContext: context.isLoadingReplyContext,
+                replyContextError: context.replyContextError,
                 textExpansionState: context.textExpansionState,
                 showsDivider: context.showsDivider,
                 layoutWidth: width,
+                boostAnimationsEnabled: !isScrollInteractionActive,
                 layout: layoutManager?.cachedLayout(forKey: layoutKey),
                 layoutKey: layoutKey
             ),
@@ -598,6 +614,14 @@ final class FireTopicDetailFeedController: NSObject,
 
         let pollSignature = FirePostPollRenderModel.models(from: context.post.polls)
             .map(\.signature)
+        let boostSignature = context.post.boosts.map { boost in
+            [
+                String(boost.id),
+                boost.user.username,
+                boost.user.name ?? "",
+                boost.displayText,
+            ].joined(separator: "\u{1E}")
+        }
 
         return FirePostCellLayoutKey(
             postID: context.post.id,
@@ -609,10 +633,12 @@ final class FireTopicDetailFeedController: NSObject,
             textContentID: textContentID,
             imageSignature: context.renderContent.segments.map(\.signatureToken),
             pollSignature: pollSignature,
+            boostSignature: boostSignature,
             hasReactions: !context.post.reactions.isEmpty,
             replyShortcutCount: context.replyShortcutCount,
             textExpansionState: context.textExpansionState,
             acceptedAnswer: context.post.acceptedAnswer,
+            hasAuthorMetadata: FirePostAuthorMetadataDisplay.hasVisibleMetadata(context.post),
             trait: trait
         )
     }
@@ -729,6 +755,7 @@ final class FireTopicDetailFeedController: NSObject,
                 pendingScrollTarget: configuration.pendingScrollTarget
             )
         }
+        updateVisibleBoostAnimationState()
     }
 
     private func publishScrollInteractionStateIfNeeded() {
@@ -736,6 +763,30 @@ final class FireTopicDetailFeedController: NSObject,
         guard lastPublishedScrollInteractionActive != isActive else { return }
         lastPublishedScrollInteractionActive = isActive
         onScrollInteractionChanged?(isActive)
+        updateVisibleBoostAnimationState()
+    }
+
+    private func scheduleDeferredScrollIdleCheck() {
+        deferredIdleCheckGeneration &+= 1
+        let generation = deferredIdleCheckGeneration
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.deferredIdleCheckGeneration == generation else {
+                return
+            }
+            self.publishScrollInteractionStateIfNeeded()
+            self.updateVisibleBoostAnimationState()
+        }
+    }
+
+    private func updateVisibleBoostAnimationState() {
+        let enabled = !isScrollInteractionActive
+        for indexPath in visibleIndexPaths {
+            guard let node = collectionNode.nodeForItem(at: indexPath) as? FirePostCellNode else {
+                continue
+            }
+            node.setBoostAnimationsEnabled(enabled)
+        }
     }
 
     @objc

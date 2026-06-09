@@ -19,11 +19,13 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
     // MARK: - Nodes
 
-    private let avatarNode = ASNetworkImageNode()
+    private let avatarNode = ASImageNode()
     private let avatarMonogramNode = ASTextNode()
     private let avatarContainerNode = ASDisplayNode()
     private let threadLineNode = ASDisplayNode()
     private let usernameNode = ASTextNode()
+    private let authorBadgeNode = ASTextNode()
+    private let authorMetadataNode = ASTextNode()
     private let replyContextNode = ASButtonNode()
     private let timestampNode = ASTextNode()
     private let acceptedAnswerNode = ASTextNode()
@@ -33,6 +35,21 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private let bodySelectableTextNode = FireSelectableRichTextNode()
     private let imageContainerNode = ASDisplayNode()
     private let pollContainerNode = ASDisplayNode()
+    private let boostContainerNode = ASDisplayNode()
+    private lazy var boostBarrageNode: ASDisplayNode = {
+        let node = ASDisplayNode(viewBlock: {
+            FirePostBoostBarrageView()
+        })
+        node.onDidLoad { [weak self] node in
+            guard let view = node.view as? FirePostBoostBarrageView else { return }
+            view.configure(
+                boosts: self?.boostBarrageBoosts ?? [],
+                batchSignature: self?.boostBarrageBatchSignature ?? "",
+                animationsEnabled: self?.boostAnimationsEnabled ?? true
+            )
+        }
+        return node
+    }()
     private let replyShortcutNode = ASButtonNode()
     private let reactionContainerNode = ASDisplayNode()
     private let dividerNode = ASDisplayNode()
@@ -51,12 +68,32 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
     private var currentContentSizeCategory: UIContentSizeCategory = .large
     private var renderedContentID: String?
     private var avatarSignature: String?
+    private var avatarLoadTask: Task<Void, Never>?
+    private var avatarLoadGeneration: UInt64 = 0
     private var contentSegmentNodes: [ASDisplayNode] = []
     private var contentSegmentSignature: [String] = []
     private var pollViews: [FirePostPollView] = []
     private var pollHeights: [CGFloat] = []
     private var pollSignature: [String] = []
     private var pollWidth: CGFloat = 0
+    private lazy var boostManualScrollerNode: ASDisplayNode = {
+        let node = ASDisplayNode(viewBlock: {
+            FirePostBoostManualScrollerView()
+        })
+        node.onDidLoad { [weak self] node in
+            guard let view = node.view as? FirePostBoostManualScrollerView else { return }
+            view.configure(
+                boosts: self?.boostManualBoosts ?? []
+            )
+        }
+        return node
+    }()
+    private var boostSignature: [String] = []
+    private var boostBarrageBoosts: [TopicPostBoostState] = []
+    private var boostBarrageLines: [String] = []
+    private var boostBarrageBatchSignature = ""
+    private var boostManualBoosts: [TopicPostBoostState] = []
+    private var boostAnimationsEnabled = true
     private var reactionButtons: [ASButtonNode] = []
     private var reactionButtonIDs: [String] = []
     private var displayedReactions: [TopicReactionState] = []
@@ -116,7 +153,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         avatarNode.cornerRadius = 16
         avatarNode.isHidden = true
         avatarNode.alpha = 0
-        avatarNode.delegate = self
         avatarMonogramNode.isLayerBacked = true
         avatarContainerNode.automaticallyManagesSubnodes = true
         avatarContainerNode.layoutSpecBlock = { [weak self] _, _ in
@@ -146,6 +182,16 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         usernameNode.truncationMode = .byTruncatingTail
         usernameNode.isLayerBacked = true
         usernameNode.style.flexShrink = 1.0
+        authorBadgeNode.maximumNumberOfLines = 1
+        authorBadgeNode.truncationMode = .byClipping
+        authorBadgeNode.isLayerBacked = true
+        authorBadgeNode.style.flexShrink = 0.0
+        authorBadgeNode.isHidden = true
+        authorMetadataNode.maximumNumberOfLines = 1
+        authorMetadataNode.truncationMode = .byTruncatingTail
+        authorMetadataNode.isLayerBacked = true
+        authorMetadataNode.style.flexShrink = 1.0
+        authorMetadataNode.isHidden = true
 
         replyContextNode.titleNode.maximumNumberOfLines = 1
         replyContextNode.titleNode.truncationMode = .byTruncatingTail
@@ -173,6 +219,36 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
         // Polls
         pollContainerNode.isHidden = true
+
+        // Boosts
+        boostContainerNode.isHidden = true
+        boostContainerNode.automaticallyManagesSubnodes = true
+        boostContainerNode.layoutSpecBlock = { [weak self] _, _ in
+            guard let self, !self.boostManualScrollerNode.isHidden else { return ASLayoutSpec() }
+            let scrollerSize = CGSize(
+                width: max(
+                    Self.availableContentWidth(
+                        totalWidth: self.currentLayoutWidth,
+                        depth: self.currentDepth,
+                        avatarSize: self.currentAvatarSize,
+                        avatarSpacing: self.currentAvatarSpacing
+                    ),
+                    1
+                ),
+                height: FirePostCellLayoutCalculator.fixedBoostManualHeight
+            )
+            self.boostManualScrollerNode.style.preferredSize = scrollerSize
+            self.boostManualScrollerNode.style.minHeight = ASDimensionMake(scrollerSize.height)
+            self.boostManualScrollerNode.style.maxHeight = ASDimensionMake(scrollerSize.height)
+            return ASWrapperLayoutSpec(layoutElement: self.boostManualScrollerNode)
+        }
+        boostContainerNode.style.minHeight = ASDimensionMake(FirePostCellLayoutCalculator.fixedBoostManualHeight)
+        boostContainerNode.style.maxHeight = ASDimensionMake(FirePostCellLayoutCalculator.fixedBoostManualHeight)
+        boostContainerNode.isUserInteractionEnabled = true
+        boostManualScrollerNode.isHidden = true
+        boostManualScrollerNode.isUserInteractionEnabled = true
+        boostBarrageNode.isHidden = true
+        boostBarrageNode.isUserInteractionEnabled = false
 
         // Reply shortcut
         replyShortcutNode.isHidden = true
@@ -221,6 +297,8 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         configureMeta(payload: payload)
         configureBodyContent(payload: payload)
         configurePolls(payload: payload)
+        boostAnimationsEnabled = payload.boostAnimationsEnabled
+        configureBoosts(payload: payload)
         configureReplyShortcut(payload: payload)
         configureReactions(payload: payload)
         configureDivider(shows: showsDivider)
@@ -261,10 +339,10 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         if let avatarURL {
             avatarNode.isHidden = false
             avatarNode.alpha = 0
-            avatarNode.setURL(avatarURL, resetToDefault: true)
+            loadAvatar(url: avatarURL)
         } else {
+            cancelAvatarLoad()
             avatarNode.isHidden = true
-            avatarNode.setURL(nil, resetToDefault: true)
         }
     }
 
@@ -290,10 +368,34 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         )
 
         usernameNode.attributedText = NSAttributedString(
-            string: payload.post.username.isEmpty ? "Unknown" : payload.post.username,
+            string: FirePostAuthorMetadataDisplay.displayName(for: payload.post),
             attributes: [.font: subheadlineFont, .foregroundColor: UIColor.label]
         )
         usernameNode.isUserInteractionEnabled = !payload.post.username.isEmpty
+
+        let primaryBadges = FirePostAuthorMetadataDisplay.primaryBadgeParts(for: payload.post)
+        if primaryBadges.isEmpty {
+            authorBadgeNode.isHidden = true
+            authorBadgeNode.attributedText = nil
+        } else {
+            authorBadgeNode.isHidden = false
+            authorBadgeNode.attributedText = Self.badgeAttributedText(parts: primaryBadges)
+        }
+
+        let secondaryParts = FirePostAuthorMetadataDisplay.secondaryLineParts(for: payload.post)
+        if secondaryParts.isEmpty {
+            authorMetadataNode.isHidden = true
+            authorMetadataNode.attributedText = nil
+        } else {
+            authorMetadataNode.isHidden = false
+            authorMetadataNode.attributedText = NSAttributedString(
+                string: secondaryParts.joined(separator: " · "),
+                attributes: [
+                    .font: captionFont,
+                    .foregroundColor: UIColor.secondaryLabel,
+                ]
+            )
+        }
 
         if let replyContext = payload.replyContext,
            let targetPN = payload.replyTargetPostNumber, targetPN > 0 {
@@ -320,7 +422,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         }
 
         postNumberNode.attributedText = NSAttributedString(
-            string: "#\(payload.post.postNumber)",
+            string: "#\(payload.post.postNumber)楼",
             attributes: [.font: monoCaptionFont, .foregroundColor: Self.tertiaryInkColor]
         )
 
@@ -344,9 +446,15 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
     private func configureBodyContent(payload: FirePostCellRenderPayload) {
         let hasInlineImages = payload.renderContent.segments.contains(where: \.isImage)
-        guard hasInlineImages, !payload.textExpansionState.isCollapsed else {
+        guard hasInlineImages else {
             configureBodyText(payload: payload)
             rebuildContentSegmentNodes([], renderSizes: [])
+            return
+        }
+
+        guard !payload.textExpansionState.isCollapsed else {
+            configureBodyText(payload: payload)
+            configureImageOnlySegmentNodes(payload: payload)
             return
         }
 
@@ -387,6 +495,36 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             contentSegmentSignature = nextSignature
         } else {
             updateContentSegmentNodes(payload.renderContent.segments, renderSizes: renderSizes)
+        }
+    }
+
+    private func configureImageOnlySegmentNodes(payload: FirePostCellRenderPayload) {
+        let availableWidth = Self.availableContentWidth(
+            totalWidth: payload.layoutWidth,
+            depth: currentDepth,
+            avatarSize: currentAvatarSize,
+            avatarSpacing: currentAvatarSpacing
+        )
+        let imageSegments = payload.renderContent.segments.compactMap { segment -> FireTopicPostRenderSegment? in
+            guard case .image = segment else { return nil }
+            return segment
+        }
+        let renderSizes = imageSegments.map { segment -> CGSize? in
+            guard case .image(let image) = segment else {
+                return nil
+            }
+            return FirePostCellLayoutCalculator.imageRenderSize(
+                for: image,
+                availableWidth: availableWidth,
+                depth: currentDepth
+            )
+        }
+        let nextSignature = imageSegments.map(\.signatureToken)
+        if contentSegmentSignature != nextSignature {
+            rebuildContentSegmentNodes(imageSegments, renderSizes: renderSizes)
+            contentSegmentSignature = nextSignature
+        } else {
+            updateContentSegmentNodes(imageSegments, renderSizes: renderSizes)
         }
     }
 
@@ -568,17 +706,105 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         }
         replyShortcutNode.isHidden = false
         replyShortcutNode.isEnabled = !payload.isLoadingReplyContext
-        let title = payload.isLoadingReplyContext
-            ? "正在加载回复..."
-            : (count > 0 ? "查看更多 \(count) 条回复" : "查看更多回复")
+        let title: String
+        if payload.isLoadingReplyContext {
+            title = "正在加载回复..."
+        } else if payload.replyContextError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            title = "加载失败，点按重试"
+        } else {
+            title = count > 0 ? "查看更多 \(count) 条回复" : "查看更多回复"
+        }
         replyShortcutNode.setAttributedTitle(NSAttributedString(
             string: title,
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .caption1),
-                .foregroundColor: Self.accentTextColor,
+                .foregroundColor: payload.replyContextError == nil
+                    ? Self.accentTextColor
+                    : UIColor.systemRed,
             ]
         ), for: .normal)
         replyShortcutNode.accessibilityLabel = title
+    }
+
+    private func configureBoosts(payload: FirePostCellRenderPayload) {
+        guard !payload.post.boosts.isEmpty else {
+            boostContainerNode.isHidden = true
+            boostBarrageNode.isHidden = true
+            configureBoostBarrage(boosts: [], batchSignature: "")
+            configureFixedBoostManualScroller(boosts: [])
+            boostSignature = []
+            return
+        }
+
+        let usesBodyBarrage = FirePostBoostDisplay.usesBodyBarrage(
+            depth: currentDepth,
+            textExpansionState: payload.textExpansionState,
+            hasBodyTextTarget: payload.renderContent.hasBoostBarrageTextTarget
+        )
+        let bodyBarrageBoosts = usesBodyBarrage
+            ? FirePostBoostDisplay.bodyBarrageBoosts(for: payload.post.boosts)
+            : []
+        boostBarrageNode.isHidden = !usesBodyBarrage || bodyBarrageBoosts.isEmpty
+        configureBoostBarrage(
+            boosts: bodyBarrageBoosts,
+            batchSignature: usesBodyBarrage && !bodyBarrageBoosts.isEmpty
+                ? FirePostBoostDisplay.bodyBarrageBatchSignature(
+                    postID: payload.post.id,
+                    boosts: payload.post.boosts
+                )
+                : ""
+        )
+        boostContainerNode.isHidden = usesBodyBarrage
+        if usesBodyBarrage {
+            configureFixedBoostManualScroller(boosts: [])
+            boostSignature = []
+            return
+        }
+
+        let nextSignature = payload.post.boosts.map { boost in
+            [
+                String(boost.id),
+                boost.user.username,
+                boost.user.name ?? "",
+                boost.displayText,
+                FirePostBoostDisplay.contentSignature(for: boost),
+            ].joined(separator: "\u{1E}")
+        }
+        if boostSignature != nextSignature {
+            boostSignature = nextSignature
+        }
+        configureFixedBoostManualScroller(boosts: payload.post.boosts)
+        boostContainerNode.setNeedsLayout()
+    }
+
+    private func configureFixedBoostManualScroller(boosts: [TopicPostBoostState]) {
+        boostManualBoosts = boosts
+        boostManualScrollerNode.isHidden = boosts.isEmpty
+        guard boostManualScrollerNode.isNodeLoaded,
+              let view = boostManualScrollerNode.view as? FirePostBoostManualScrollerView else {
+            return
+        }
+        view.configure(boosts: boosts)
+    }
+
+    private func configureBoostBarrage(boosts: [TopicPostBoostState], batchSignature: String) {
+        boostBarrageBoosts = boosts
+        boostBarrageLines = boosts.map(FirePostBoostDisplay.displayLine(for:))
+        boostBarrageBatchSignature = batchSignature
+        guard boostBarrageNode.isNodeLoaded,
+              let view = boostBarrageNode.view as? FirePostBoostBarrageView else {
+            return
+        }
+        view.configure(boosts: boosts, batchSignature: batchSignature, animationsEnabled: boostAnimationsEnabled)
+    }
+
+    func setBoostAnimationsEnabled(_ enabled: Bool) {
+        guard boostAnimationsEnabled != enabled else { return }
+        boostAnimationsEnabled = enabled
+        if boostBarrageNode.isNodeLoaded,
+           let view = boostBarrageNode.view as? FirePostBoostBarrageView {
+            view.setAnimationsEnabled(enabled)
+        }
     }
 
     private func configureReactions(payload: FirePostCellRenderPayload) {
@@ -745,23 +971,31 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         avatarSizeStyle.style.maxWidth = ASDimensionMake(avatarSz)
 
         // Meta row
-        let spacer = ASLayoutSpec()
-        spacer.style.flexGrow = 1.0
-
-        var metaChildren: [ASLayoutElement] = [usernameNode]
-        if !replyContextNode.isHidden {
-            metaChildren.append(replyContextNode)
+        var authorChildren: [ASLayoutElement] = [usernameNode]
+        if !authorBadgeNode.isHidden {
+            authorChildren.append(authorBadgeNode)
         }
-        metaChildren.append(timestampNode)
-        metaChildren.append(spacer)
         if !acceptedAnswerNode.isHidden {
-            metaChildren.append(acceptedAnswerNode)
+            authorChildren.append(acceptedAnswerNode)
         }
         if !menuNode.isHidden {
             menuNode.style.preferredSize = CGSize(width: 20, height: 20)
-            metaChildren.append(menuNode)
+            authorChildren.append(menuNode)
         }
-        metaChildren.append(postNumberNode)
+        let authorRow = ASStackLayoutSpec(
+            direction: .horizontal,
+            spacing: 5,
+            justifyContent: .start,
+            alignItems: .center,
+            children: authorChildren
+        )
+        authorRow.style.flexShrink = 1.0
+        authorRow.style.flexGrow = 0.0
+
+        let firstLineSpacer = ASLayoutSpec()
+        firstLineSpacer.style.flexGrow = 1.0
+
+        let metaChildren: [ASLayoutElement] = [authorRow, firstLineSpacer, timestampNode]
         let metaRow = ASStackLayoutSpec(
             direction: .horizontal,
             spacing: 6,
@@ -773,22 +1007,60 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
         // Content column
         var contentChildren: [ASLayoutElement] = [metaRow]
+        var didAttachBoostBarrage = false
+        var secondaryChildren: [ASLayoutElement] = []
+        if !replyContextNode.isHidden {
+            secondaryChildren.append(replyContextNode)
+        }
+        if !authorMetadataNode.isHidden {
+            secondaryChildren.append(authorMetadataNode)
+        }
+        if !secondaryChildren.isEmpty {
+            let secondarySpacer = ASLayoutSpec()
+            secondarySpacer.style.flexGrow = 1.0
+            secondaryChildren.append(secondarySpacer)
+            secondaryChildren.append(postNumberNode)
+            let secondaryRow = ASStackLayoutSpec(
+                direction: .horizontal,
+                spacing: 6,
+                justifyContent: .start,
+                alignItems: .center,
+                children: secondaryChildren
+            )
+            secondaryRow.style.flexShrink = 1.0
+            contentChildren.append(secondaryRow)
+        } else {
+            let secondarySpacer = ASLayoutSpec()
+            secondarySpacer.style.flexGrow = 1.0
+            let postNumberRow = ASStackLayoutSpec(
+                direction: .horizontal,
+                spacing: 0,
+                justifyContent: .start,
+                alignItems: .center,
+                children: [secondarySpacer, postNumberNode]
+            )
+            contentChildren.append(postNumberRow)
+        }
 
         if !bodyTextNode.isHidden {
-            contentChildren.append(bodyTextNode)
+            contentChildren.append(bodyElement(bodyTextNode, didAttachBoostBarrage: &didAttachBoostBarrage))
         }
         if !bodySelectableTextNode.isHidden {
-            contentChildren.append(bodySelectableTextNode)
+            contentChildren.append(bodyElement(bodySelectableTextNode, didAttachBoostBarrage: &didAttachBoostBarrage))
         }
 
         if !shouldSuppressAttachments {
             for segmentNode in contentSegmentNodes {
-                contentChildren.append(segmentNode)
+                contentChildren.append(bodyElement(segmentNode, didAttachBoostBarrage: &didAttachBoostBarrage))
             }
 
             // Poll container
             if !pollContainerNode.isHidden {
                 contentChildren.append(pollContainerNode)
+            }
+
+            if !boostContainerNode.isHidden {
+                contentChildren.append(boostContainerNode)
             }
         }
 
@@ -853,7 +1125,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
         let contentStack = ASStackLayoutSpec(
             direction: .vertical,
-            spacing: 8,
+            spacing: 5,
             justifyContent: .start,
             alignItems: .stretch,
             children: contentChildren
@@ -933,11 +1205,10 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
 
     @objc private func handleProfileTap() {
         guard let username = currentPayload?.post.username.trimmingCharacters(in: .whitespacesAndNewlines),
-              !username.isEmpty,
-              let url = Self.profileURL(for: username) else {
+              !username.isEmpty else {
             return
         }
-        currentCallbacks?.onLinkTapped(url)
+        currentCallbacks?.onOpenProfile(username)
     }
 
     @objc private func handleSwipePan(_ gestureRecognizer: UIPanGestureRecognizer) {
@@ -1129,6 +1400,34 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         return result
     }
 
+    private static func badgeAttributedText(parts: [String]) -> NSAttributedString {
+        let captionFont = UIFont.preferredFont(forTextStyle: .caption2)
+        let result = NSMutableAttributedString()
+        let colors: [UIColor] = [
+            UIColor.systemOrange,
+            UIColor.systemTeal,
+            UIColor.systemIndigo,
+            UIColor.systemPink,
+        ]
+        for (index, part) in parts.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: " "))
+            }
+            let color = colors[index % colors.count]
+            result.append(NSAttributedString(
+                string: part,
+                attributes: [
+                    .font: UIFontMetrics(forTextStyle: .caption2).scaledFont(
+                        for: UIFont.systemFont(ofSize: captionFont.pointSize, weight: .semibold)
+                    ),
+                    .foregroundColor: color,
+                    .backgroundColor: color.withAlphaComponent(0.13),
+                ]
+            ))
+        }
+        return result
+    }
+
     private static func expansionTruncationToken() -> NSAttributedString {
         let font = UIFont.preferredFont(forTextStyle: .subheadline)
         let result = NSMutableAttributedString(
@@ -1159,9 +1458,22 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         ].joined(separator: "\u{1F}")
     }
 
-    private static func profileURL(for username: String) -> URL? {
-        let encodedUsername = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        return URL(string: "fire://profile/\(encodedUsername)")
+    private func bodyElement(
+        _ node: ASDisplayNode,
+        didAttachBoostBarrage: inout Bool
+    ) -> ASLayoutElement {
+        guard !boostBarrageNode.isHidden,
+              !didAttachBoostBarrage,
+              node is ASTextNode || node is FireSelectableRichTextNode else {
+            return node
+        }
+        didAttachBoostBarrage = true
+        boostBarrageNode.style.flexGrow = 1.0
+        boostBarrageNode.style.flexShrink = 1.0
+        return ASOverlayLayoutSpec(
+            child: node,
+            overlay: boostBarrageNode
+        )
     }
 
     private static func availableContentWidth(
@@ -1195,7 +1507,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
                 layout.textFrame,
                 layout.replyShortcutFrame,
                 layout.reactionsFrame,
-            ].compactMap { $0 } + layout.imageFrames + layout.pollFrames
+            ].compactMap { $0 } + layout.imageFrames + layout.pollFrames + layout.boostFrames
             let union = visibleFrames.reduce(CGRect.null) { partial, frame in
                 partial.union(frame)
             }
@@ -1308,6 +1620,62 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         avatarNode.alpha = 0
     }
 
+    private func cancelAvatarLoad() {
+        avatarLoadTask?.cancel()
+        avatarLoadTask = nil
+        avatarLoadGeneration &+= 1
+        avatarNode.image = nil
+        showAvatarFallback()
+    }
+
+    private func loadAvatar(url: URL) {
+        avatarLoadTask?.cancel()
+        avatarLoadGeneration &+= 1
+        let generation = avatarLoadGeneration
+        let request = FireRemoteImageRequest(url: url)
+
+        if let cachedImage = FireRemoteImagePipeline.shared.cachedImage(for: request) {
+            avatarNode.image = cachedImage
+            showLoadedAvatar()
+            return
+        }
+
+        avatarNode.image = nil
+        showAvatarFallback()
+        avatarLoadTask = Task { [weak self] in
+            do {
+                let image = try await FireRemoteImagePipeline.shared.loadImage(for: request)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.applyLoadedAvatar(image, generation: generation)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.applyFailedAvatarLoad(generation: generation)
+                }
+            }
+        }
+    }
+
+    private func applyLoadedAvatar(_ image: UIImage, generation: UInt64) {
+        guard generation == avatarLoadGeneration else { return }
+        avatarNode.image = image
+        showLoadedAvatar()
+    }
+
+    private func applyFailedAvatarLoad(generation: UInt64) {
+        guard generation == avatarLoadGeneration else { return }
+        avatarNode.image = nil
+        showAvatarFallback()
+    }
+
+    deinit {
+        avatarLoadTask?.cancel()
+    }
+
     private func nearestViewController() -> UIViewController? {
         var responder: UIResponder? = view
         while let current = responder {
@@ -1317,29 +1685,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             responder = current.next
         }
         return nil
-    }
-}
-
-extension FirePostCellNode: ASNetworkImageNodeDelegate {
-    func imageNodeDidLoadImage(fromCache imageNode: ASNetworkImageNode) {
-        guard imageNode === avatarNode else {
-            return
-        }
-        showLoadedAvatar()
-    }
-
-    func imageNode(_ imageNode: ASNetworkImageNode, didLoad image: UIImage) {
-        guard imageNode === avatarNode else {
-            return
-        }
-        showLoadedAvatar()
-    }
-
-    func imageNode(_ imageNode: ASNetworkImageNode, didFailWithError error: Error) {
-        guard imageNode === avatarNode else {
-            return
-        }
-        showAvatarFallback()
     }
 }
 
@@ -1636,6 +1981,459 @@ private final class FirePostImageNode: ASControlNode {
         return image.preparingThumbnail(of: targetSize)
             ?? image.preparingForDisplay()
             ?? image
+    }
+}
+
+// MARK: - Boost Animation Helpers
+
+private enum FirePostBoostLayerAnimator {
+    static func pause(_ layers: [CALayer]) {
+        for layer in layers where layer.speed != 0 {
+            let pausedTime = layer.convertTime(CACurrentMediaTime(), from: nil)
+            layer.speed = 0
+            layer.timeOffset = pausedTime
+        }
+    }
+
+    static func resume(_ layers: [CALayer]) {
+        for layer in layers where layer.speed == 0 {
+            let pausedTime = layer.timeOffset
+            layer.speed = 1
+            layer.timeOffset = 0
+            layer.beginTime = 0
+            let elapsed = layer.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
+            layer.beginTime = elapsed
+        }
+    }
+
+    static func hasPausedAnimation(_ layers: [CALayer]) -> Bool {
+        layers.contains { $0.speed == 0 }
+    }
+
+    static func hasAnimation(_ layers: [CALayer]) -> Bool {
+        layers.contains { !($0.animationKeys() ?? []).isEmpty }
+    }
+
+    static func resetTiming(_ layers: [CALayer]) {
+        for layer in layers {
+            layer.speed = 1
+            layer.timeOffset = 0
+            layer.beginTime = 0
+        }
+    }
+
+    static func stableHash(text: String?, index: Int) -> UInt32 {
+        var hash: UInt32 = 2_166_136_261
+        for byte in (text ?? "").utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16_777_619
+        }
+        hash ^= UInt32(index & 0xFFFF)
+        return hash
+    }
+}
+
+// MARK: - Boost Barrage
+
+private final class FirePostBoostBarrageView: UIView {
+    private static let maximumLaneCount = 5
+    private static let chipHeight: CGFloat = 24
+    private static let minimumLaneGap: CGFloat = 4
+    private static var displayedBatchSignatures: Set<String> = []
+
+    private var chips: [FirePostBoostChipView] = []
+    private var signature: String = ""
+    private var batchSignature: String = ""
+    private var lastAnimatedBounds: CGRect = .null
+    private var animationsEnabled = true
+    private var animationRunID: UInt64 = 0
+    private var pendingAnimationCompletionCount = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        backgroundColor = .clear
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(boosts: [TopicPostBoostState], batchSignature: String, animationsEnabled: Bool) {
+        let visibleBoosts = boosts.filter {
+            !$0.displayText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let isCurrentActiveBatch = batchSignature == self.batchSignature && !chips.isEmpty
+        guard !batchSignature.isEmpty,
+              !Self.displayedBatchSignatures.contains(batchSignature) || isCurrentActiveBatch else {
+            signature = ""
+            self.batchSignature = batchSignature
+            removeAllLabels()
+            isHidden = true
+            return
+        }
+        let nextSignature = visibleBoosts.map(FirePostBoostDisplay.contentSignature(for:)).joined(separator: "\u{1E}")
+        guard nextSignature != signature || batchSignature != self.batchSignature else {
+            isHidden = visibleBoosts.isEmpty
+            setAnimationsEnabled(animationsEnabled)
+            return
+        }
+
+        self.animationsEnabled = animationsEnabled
+        signature = nextSignature
+        self.batchSignature = batchSignature
+        chips.forEach { chip in
+            chip.layer.removeAllAnimations()
+            chip.removeFromSuperview()
+        }
+        chips.removeAll()
+        isHidden = visibleBoosts.isEmpty
+
+        for boost in visibleBoosts {
+            let chip = FirePostBoostChipView(
+                backgroundColor: UIColor.systemBackground.withAlphaComponent(0.72),
+                textColor: .label,
+                borderColor: UIColor.systemOrange.withAlphaComponent(0.28)
+            )
+            chip.configure(
+                attributedText: FirePostBoostDisplay.displayContent(
+                    for: boost,
+                    textColor: .label,
+                    accentColor: .systemBlue
+                ),
+                signature: FirePostBoostDisplay.contentSignature(for: boost)
+            )
+            addSubview(chip)
+            chips.append(chip)
+        }
+        restartLayoutAndAnimations()
+    }
+
+    func setAnimationsEnabled(_ enabled: Bool) {
+        guard animationsEnabled != enabled else { return }
+        animationsEnabled = enabled
+        if enabled {
+            let layers = chips.map(\.layer)
+            if FirePostBoostLayerAnimator.hasPausedAnimation(layers),
+               FirePostBoostLayerAnimator.hasAnimation(layers) {
+                FirePostBoostLayerAnimator.resume(layers)
+            } else if !FirePostBoostLayerAnimator.hasAnimation(layers) {
+                FirePostBoostLayerAnimator.resetTiming(layers)
+                restartLayoutAndAnimations()
+            }
+        } else {
+            FirePostBoostLayerAnimator.pause(chips.map(\.layer))
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutLabelsAndStartAnimationIfNeeded()
+    }
+
+    private func layoutLabelsAndStartAnimationIfNeeded() {
+        guard !chips.isEmpty,
+              bounds.width > 1,
+              bounds.height > 1,
+              lastAnimatedBounds != bounds else {
+            return
+        }
+        lastAnimatedBounds = bounds
+
+        let availableLaneCount = max(
+            1,
+            min(
+                Self.maximumLaneCount,
+                Int((bounds.height + Self.minimumLaneGap) / (Self.chipHeight + Self.minimumLaneGap))
+            )
+        )
+        let laneCount = max(1, min(chips.count, availableLaneCount))
+        let maxChipWidth = max(bounds.width * 0.72, 1)
+        let shouldAnimate = animationsEnabled && !UIAccessibility.isReduceMotionEnabled
+        let laneStep = laneCount > 1
+            ? max((bounds.height - Self.chipHeight) / CGFloat(laneCount - 1), Self.minimumLaneGap)
+            : 0
+        let runID: UInt64
+        if shouldAnimate {
+            animationRunID &+= 1
+            runID = animationRunID
+            pendingAnimationCompletionCount = chips.count
+            Self.displayedBatchSignatures.insert(batchSignature)
+        } else {
+            runID = animationRunID
+            pendingAnimationCompletionCount = 0
+        }
+
+        for (index, chip) in chips.enumerated() {
+            chip.layer.removeAllAnimations()
+            chip.transform = .identity
+            let measured = chip.sizeThatFits(CGSize(width: maxChipWidth, height: Self.chipHeight))
+            let chipWidth = min(max(measured.width, 48), maxChipWidth)
+            let lane = index % laneCount
+            let laneCycle = index / laneCount
+            let hash = FirePostBoostLayerAnimator.stableHash(text: chip.signature, index: index)
+            let jitterLimit = laneCount > 1 ? min(laneStep * 0.18, 4) : 0
+            let jitter = jitterLimit > 0
+                ? (CGFloat(Int(hash % 100)) / 99 - 0.5) * jitterLimit
+                : 0
+            let y = min(
+                max(CGFloat(lane) * laneStep + jitter, 0),
+                max(bounds.height - Self.chipHeight, 0)
+            )
+            let startOffset = CGFloat(hash % 42)
+            let startX = bounds.width
+                + startOffset
+                + CGFloat(laneCycle) * (bounds.width * 0.22 + 56)
+            chip.frame = CGRect(
+                x: shouldAnimate ? startX : staticX(for: index, width: chipWidth),
+                y: y,
+                width: chipWidth,
+                height: Self.chipHeight
+            )
+            chip.alpha = 0.92
+
+            guard shouldAnimate else { continue }
+            let travel = startX + chipWidth + 24
+            let durationJitter = Double((hash >> 8) % 90) / 100
+            let delayJitter = Double((hash >> 16) % 45) / 100
+            UIView.animate(
+                withDuration: 9.4 + durationJitter + Double(laneCycle) * 0.35,
+                delay: Double(index) * 0.48 + delayJitter,
+                options: [.curveLinear, .allowUserInteraction],
+                animations: {
+                    chip.transform = CGAffineTransform(translationX: -travel, y: 0)
+                    chip.alpha = 0.62
+                },
+                completion: { [weak self] finished in
+                    self?.recordAnimationCompletion(runID: runID, finished: finished)
+                }
+            )
+        }
+    }
+
+    private func staticX(for index: Int, width: CGFloat) -> CGFloat {
+        let slotCount = max(chips.count + 1, 2)
+        let progress = CGFloat(index + 1) / CGFloat(slotCount)
+        return max((bounds.width - width) * progress, 0)
+    }
+
+    private func restartLayoutAndAnimations() {
+        lastAnimatedBounds = .null
+        FirePostBoostLayerAnimator.resetTiming(chips.map(\.layer))
+        animationRunID &+= 1
+        pendingAnimationCompletionCount = 0
+        chips.forEach { chip in
+            chip.layer.removeAllAnimations()
+            chip.transform = .identity
+        }
+        setNeedsLayout()
+    }
+
+    private func removeAllLabels() {
+        animationRunID &+= 1
+        pendingAnimationCompletionCount = 0
+        chips.forEach { chip in
+            chip.layer.removeAllAnimations()
+            chip.removeFromSuperview()
+        }
+        chips.removeAll()
+        lastAnimatedBounds = .null
+    }
+
+    private func recordAnimationCompletion(runID: UInt64, finished: Bool) {
+        guard finished,
+              runID == animationRunID,
+              pendingAnimationCompletionCount > 0 else {
+            return
+        }
+        pendingAnimationCompletionCount -= 1
+        guard pendingAnimationCompletionCount == 0,
+              !batchSignature.isEmpty else {
+            return
+        }
+        removeAllLabels()
+        signature = ""
+        isHidden = true
+    }
+}
+
+private final class FirePostBoostChipView: UIView {
+    private(set) var signature: String = ""
+    private let textView = FireRichTextUIView()
+    private let horizontalInset: CGFloat = 10
+
+    init(backgroundColor: UIColor, textColor: UIColor, borderColor: UIColor? = nil) {
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        self.backgroundColor = backgroundColor
+        layer.cornerRadius = 12
+        layer.masksToBounds = true
+        if let borderColor {
+            layer.borderWidth = 0.5
+            layer.borderColor = borderColor.cgColor
+        }
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.isScrollEnabled = false
+        textView.isUserInteractionEnabled = false
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.backgroundColor = .clear
+        textView.textColor = textColor
+        textView.textContainer.maximumNumberOfLines = 1
+        textView.textContainer.lineBreakMode = .byTruncatingTail
+        addSubview(textView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(attributedText: NSAttributedString, signature: String) {
+        self.signature = signature
+        textView.renderedContentID = "boost:\(signature)"
+        textView.attributedText = attributedText
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        textView.frame = bounds.insetBy(dx: horizontalInset, dy: 0)
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let textSize = textView.sizeThatFits(CGSize(
+            width: max(size.width - horizontalInset * 2, 1),
+            height: size.height
+        ))
+        return CGSize(
+            width: min(textSize.width + horizontalInset * 2, size.width),
+            height: size.height
+        )
+    }
+}
+
+// MARK: - Fixed Boost Manual Scroller
+
+private final class FirePostBoostManualScrollerView: UIView {
+    private static let laneCount = 2
+    private static let chipHeight: CGFloat = 22
+
+    private let scrollView = UIScrollView()
+    private let contentView = UIView()
+    private var rowViews: [UIView] = []
+    private var chips: [FirePostBoostChipView] = []
+    private var signature: String = ""
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = true
+        clipsToBounds = false
+        backgroundColor = .clear
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.alwaysBounceVertical = false
+        scrollView.delaysContentTouches = false
+        scrollView.backgroundColor = .clear
+        addSubview(scrollView)
+        scrollView.addSubview(contentView)
+        for _ in 0..<Self.laneCount {
+            let row = UIView()
+            row.clipsToBounds = false
+            contentView.addSubview(row)
+            rowViews.append(row)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(boosts: [TopicPostBoostState]) {
+        let visibleBoosts = boosts.filter {
+            !$0.displayText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let nextSignature = visibleBoosts.map(FirePostBoostDisplay.contentSignature(for:)).joined(separator: "\u{1E}")
+        guard nextSignature != signature else {
+            isHidden = visibleBoosts.isEmpty
+            return
+        }
+
+        signature = nextSignature
+        chips.forEach { chip in
+            chip.removeFromSuperview()
+        }
+        chips.removeAll()
+        scrollView.setContentOffset(.zero, animated: false)
+        isHidden = visibleBoosts.isEmpty
+
+        for (index, boost) in visibleBoosts.enumerated() {
+            let chip = FirePostBoostChipView(
+                backgroundColor: UIColor.secondarySystemFill.withAlphaComponent(0.78),
+                textColor: .secondaryLabel
+            )
+            chip.configure(
+                attributedText: FirePostBoostDisplay.displayContent(
+                    for: boost,
+                    textColor: .secondaryLabel,
+                    accentColor: .systemBlue
+                ),
+                signature: FirePostBoostDisplay.contentSignature(for: boost)
+            )
+            rowViews[index % Self.laneCount].addSubview(chip)
+            chips.append(chip)
+        }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutRows()
+    }
+
+    private func layoutRows() {
+        guard bounds.width > 1, bounds.height > 1 else {
+            return
+        }
+
+        let rowHeight = FirePostCellLayoutCalculator.fixedBoostManualRowHeight
+        let rowSpacing = FirePostCellLayoutCalculator.fixedBoostManualRowSpacing
+        scrollView.frame = bounds
+        let maxChipWidth = max(bounds.width * 0.72, 1)
+        var cursorXByRow = Array(repeating: CGFloat(0), count: Self.laneCount)
+        for (index, chip) in chips.enumerated() {
+            let rowIndex = index % Self.laneCount
+            let measured = chip.sizeThatFits(CGSize(width: maxChipWidth, height: Self.chipHeight))
+            let chipWidth = min(max(measured.width, 48), maxChipWidth)
+            chip.frame = CGRect(
+                x: cursorXByRow[rowIndex],
+                y: max((rowHeight - Self.chipHeight) / 2, 0),
+                width: chipWidth,
+                height: Self.chipHeight
+            )
+            chip.alpha = 1
+            chip.transform = .identity
+            cursorXByRow[rowIndex] += chipWidth + 8
+        }
+
+        let contentWidth = max((cursorXByRow.max() ?? 0) - 8, bounds.width)
+        contentView.frame = CGRect(x: 0, y: 0, width: contentWidth, height: bounds.height)
+        scrollView.contentSize = CGSize(width: contentWidth, height: bounds.height)
+        for (rowIndex, row) in rowViews.enumerated() {
+            row.transform = .identity
+            row.frame = CGRect(
+                x: 0,
+                y: CGFloat(rowIndex) * (rowHeight + rowSpacing),
+                width: contentWidth,
+                height: rowHeight
+            )
+        }
     }
 }
 

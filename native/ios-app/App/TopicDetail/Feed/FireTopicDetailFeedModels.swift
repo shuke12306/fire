@@ -108,6 +108,7 @@ struct FireTopicDetailRuntimePostContext {
     let showsDivider: Bool
     let replyShortcutCount: UInt32?
     let isLoadingReplyContext: Bool
+    let replyContextError: String?
     let textExpansionState: FirePostTextExpansionState
 }
 
@@ -129,11 +130,69 @@ private struct FireTopicDetailReplyThreadIndex {
     let secondaryIndicesByRoot: [Int: [Int]]
 }
 
+enum FireTopicDetailReplyContextLoadPolicy {
+    static func shouldLoadReplyContext(
+        for post: TopicPostState,
+        replyRows: [FirePreparedTopicTimelineRow],
+        postLookup: [UInt64: TopicPostState]
+    ) -> Bool {
+        let declaredReplyCount = Int(post.replyCount)
+        guard declaredReplyCount > 0 else {
+            return false
+        }
+        return loadedSecondaryReplyCount(
+            rootPostNumber: post.postNumber,
+            replyRows: replyRows,
+            postLookup: postLookup
+        ) < declaredReplyCount
+    }
+
+    static func loadedSecondaryReplyCount(
+        rootPostNumber: UInt32,
+        replyRows: [FirePreparedTopicTimelineRow],
+        postLookup: [UInt64: TopicPostState]
+    ) -> Int {
+        var rowByPostNumber: [UInt32: FirePreparedTopicTimelineRow] = [:]
+        rowByPostNumber.reserveCapacity(replyRows.count)
+        for row in replyRows where postLookup[row.entry.postId] != nil {
+            rowByPostNumber[row.entry.postNumber] = row
+        }
+
+        func resolvesToRoot(_ row: FirePreparedTopicTimelineRow, visiting: inout Set<UInt32>) -> Bool {
+            guard row.entry.postNumber != rootPostNumber else {
+                return false
+            }
+            guard visiting.insert(row.entry.postNumber).inserted else {
+                return false
+            }
+            guard let parentPostNumber = row.entry.parentPostNumber else {
+                return false
+            }
+            if parentPostNumber == rootPostNumber {
+                return true
+            }
+            guard let parentRow = rowByPostNumber[parentPostNumber] else {
+                return false
+            }
+            return resolvesToRoot(parentRow, visiting: &visiting)
+        }
+
+        return replyRows.reduce(0) { partial, row in
+            guard postLookup[row.entry.postId] != nil else {
+                return partial
+            }
+            var visiting = Set<UInt32>()
+            return partial + (resolvesToRoot(row, visiting: &visiting) ? 1 : 0)
+        }
+    }
+}
+
 final class FireTopicDetailRuntimeInteractions {
     let isMutatingPost: (UInt64) -> Bool
     let isPostTextExpanded: (UInt64) -> Bool
     let isReplyThreadExpanded: (UInt64) -> Bool
     let isLoadingPostReplyContext: (UInt64) -> Bool
+    let postReplyContextError: (UInt64) -> String?
     let onVisiblePostNumbersChanged: (Set<UInt32>) -> Void
     let onRefresh: () async -> Void
     let onLoadTopicDetail: () async -> Void
@@ -144,6 +203,7 @@ final class FireTopicDetailRuntimeInteractions {
     let onOpenPostNumber: (UInt32) -> Void
     let onOpenPostReplies: (TopicPostState) -> Void
     let onLinkTapped: (URL) -> Void
+    let onOpenProfile: (String) -> Void
     let onOpenImage: (FireCookedImage) -> Void
     let onToggleLike: (TopicPostState) -> Void
     let onSelectReaction: (TopicPostState, String) -> Void
@@ -165,6 +225,7 @@ final class FireTopicDetailRuntimeInteractions {
         isPostTextExpanded: @escaping (UInt64) -> Bool,
         isReplyThreadExpanded: @escaping (UInt64) -> Bool,
         isLoadingPostReplyContext: @escaping (UInt64) -> Bool,
+        postReplyContextError: @escaping (UInt64) -> String?,
         onVisiblePostNumbersChanged: @escaping (Set<UInt32>) -> Void,
         onRefresh: @escaping () async -> Void,
         onLoadTopicDetail: @escaping () async -> Void,
@@ -175,6 +236,7 @@ final class FireTopicDetailRuntimeInteractions {
         onOpenPostNumber: @escaping (UInt32) -> Void,
         onOpenPostReplies: @escaping (TopicPostState) -> Void,
         onLinkTapped: @escaping (URL) -> Void,
+        onOpenProfile: @escaping (String) -> Void,
         onOpenImage: @escaping (FireCookedImage) -> Void,
         onToggleLike: @escaping (TopicPostState) -> Void,
         onSelectReaction: @escaping (TopicPostState, String) -> Void,
@@ -195,6 +257,7 @@ final class FireTopicDetailRuntimeInteractions {
         self.isPostTextExpanded = isPostTextExpanded
         self.isReplyThreadExpanded = isReplyThreadExpanded
         self.isLoadingPostReplyContext = isLoadingPostReplyContext
+        self.postReplyContextError = postReplyContextError
         self.onVisiblePostNumbersChanged = onVisiblePostNumbersChanged
         self.onRefresh = onRefresh
         self.onLoadTopicDetail = onLoadTopicDetail
@@ -205,6 +268,7 @@ final class FireTopicDetailRuntimeInteractions {
         self.onOpenPostNumber = onOpenPostNumber
         self.onOpenPostReplies = onOpenPostReplies
         self.onLinkTapped = onLinkTapped
+        self.onOpenProfile = onOpenProfile
         self.onOpenImage = onOpenImage
         self.onToggleLike = onToggleLike
         self.onSelectReaction = onSelectReaction
@@ -252,6 +316,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     var isPostTextExpanded: (UInt64) -> Bool { interactionState.isPostTextExpanded }
     var isReplyThreadExpanded: (UInt64) -> Bool { interactionState.isReplyThreadExpanded }
     var isLoadingPostReplyContext: (UInt64) -> Bool { interactionState.isLoadingPostReplyContext }
+    var postReplyContextError: (UInt64) -> String? { interactionState.postReplyContextError }
     var onVisiblePostNumbersChanged: (Set<UInt32>) -> Void { interactions.onVisiblePostNumbersChanged }
     var onRefresh: () async -> Void { interactions.onRefresh }
     var onLoadTopicDetail: () async -> Void { interactions.onLoadTopicDetail }
@@ -262,6 +327,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     var onOpenPostNumber: (UInt32) -> Void { interactions.onOpenPostNumber }
     var onOpenPostReplies: (TopicPostState) -> Void { interactions.onOpenPostReplies }
     var onLinkTapped: (URL) -> Void { interactions.onLinkTapped }
+    var onOpenProfile: (String) -> Void { interactions.onOpenProfile }
     var onOpenImage: (FireCookedImage) -> Void { interactions.onOpenImage }
     var onToggleLike: (TopicPostState) -> Void { interactions.onToggleLike }
     var onSelectReaction: (TopicPostState, String) -> Void { interactions.onSelectReaction }
@@ -293,7 +359,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
 
     var displayedReplyCount: UInt32 {
         if let detail {
-            return max(detail.postsCount, 1) - 1
+            return detail.replyCount
         }
         return topic.replyCount
     }
@@ -362,7 +428,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     }
 
     var totalReplyCount: Int {
-        detail.map { max(Int($0.postsCount) - 1, 0) } ?? Int(topic.replyCount)
+        detail.map { Int($0.replyCount) } ?? Int(topic.replyCount)
     }
 
     var showsTopicVote: Bool {
@@ -484,6 +550,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
                         replyContext: nil,
                         replyTargetPostNumber: nil,
                         isLoadingReplyContext: false,
+                        replyContextError: nil,
                         textExpansionState: .disabled
                     )
                 } ?? "missing"
@@ -613,6 +680,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
                                 replyContext: replyContext,
                                 replyTargetPostNumber: replyTargetPostNumber,
                                 isLoadingReplyContext: isLoadingReplyContext,
+                                replyContextError: post.map { postReplyContextError($0.id) } ?? nil,
                                 textExpansionState: textExpansionState
                             )
                         } ?? "missing"
@@ -652,6 +720,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
                 showsDivider: false,
                 replyShortcutCount: nil,
                 isLoadingReplyContext: false,
+                replyContextError: nil,
                 textExpansionState: .disabled
             )
 
@@ -683,6 +752,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
                 showsDivider: item.replyShowsDivider,
                 replyShortcutCount: item.replyShortcutCount,
                 isLoadingReplyContext: isLoadingPostReplyContext(post.id),
+                replyContextError: postReplyContextError(post.id),
                 textExpansionState: FirePostTextExpansionState(
                     isCollapsible: true,
                     isExpanded: isPostTextExpanded(post.id)
@@ -875,8 +945,10 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
     ) -> String {
         [
             String(post.id),
+            FirePostAuthorMetadataDisplay.contentToken(for: post),
             renderContent?.signature.token ?? "pending",
             Self.pollsContentToken(post.polls),
+            FirePostBoostDisplay.contentToken(for: post.boosts),
             String(!post.reactions.isEmpty),
             String(replyShortcutCount != nil),
             String(textExpansionState.isExpanded),
@@ -890,13 +962,15 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
         replyContext: String?,
         replyTargetPostNumber: UInt32?,
         isLoadingReplyContext: Bool,
+        replyContextError: String?,
         textExpansionState: FirePostTextExpansionState
     ) -> String {
         var parts: [String] = []
-        parts.reserveCapacity(29)
+        parts.reserveCapacity(30)
         parts.append(String(post.id))
         parts.append(String(post.postNumber))
         parts.append(post.username)
+        parts.append(FirePostAuthorMetadataDisplay.contentToken(for: post))
         parts.append(post.avatarTemplate ?? "")
         parts.append(post.createdAt ?? "")
         parts.append(post.updatedAt ?? "")
@@ -908,6 +982,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
         parts.append(Self.reactionsContentToken(post.reactions))
         parts.append(post.currentUserReaction?.id ?? "")
         parts.append(Self.pollsContentToken(post.polls))
+        parts.append(FirePostBoostDisplay.contentToken(for: post.boosts))
         parts.append(String(post.acceptedAnswer))
         parts.append(String(post.canEdit))
         parts.append(String(post.canDelete))
@@ -918,6 +993,7 @@ struct FireTopicDetailRuntimeConfiguration: @unchecked Sendable {
         parts.append(post.bookmarkName ?? "")
         parts.append(post.bookmarkReminderAt ?? "")
         parts.append(String(isLoadingReplyContext))
+        parts.append(replyContextError ?? "")
         parts.append(String(textExpansionState.isExpanded))
         parts.append(String(textExpansionState.isCollapsible))
         parts.append(String(canWriteInteractions))

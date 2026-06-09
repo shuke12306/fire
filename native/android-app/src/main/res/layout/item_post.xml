@@ -26,28 +26,72 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/post_username"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/post_header_primary"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
-                android:textColor="@color/fire_text_primary"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/post_meta"
-                android:layout_width="wrap_content"
+                <TextView
+                    android:id="@+id/post_username"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.55"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
+                    android:textColor="@color/fire_text_primary"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/post_author_chips"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="0.45"
+                    android:clipToPadding="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal" />
+
+                <TextView
+                    android:id="@+id/post_meta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Caption"
+                    android:textColor="@color/fire_text_tertiary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/post_header_secondary"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.AppCompat.Caption"
-                android:textColor="@color/fire_text_secondary" />
+                android:layout_marginTop="0dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/post_author_metadata"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Caption"
+                    android:textColor="@color/fire_text_secondary" />
+
+                <TextView
+                    android:id="@+id/post_floor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Caption"
+                    android:textColor="@color/fire_text_tertiary" />
+            </LinearLayout>
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/post_floor"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.AppCompat.Caption"
-            android:textColor="@color/fire_text_secondary" />
     </LinearLayout>
 
     <TextView
@@ -60,13 +104,28 @@
         android:textColor="@color/fire_accent"
         android:visibility="gone" />
 
-    <LinearLayout
-        android:id="@+id/post_body_container"
+    <FrameLayout
+        android:id="@+id/post_body_frame"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="46dp"
-        android:layout_marginTop="8dp"
-        android:orientation="vertical" />
+        android:layout_marginTop="8dp">
+
+        <LinearLayout
+            android:id="@+id/post_body_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <FrameLayout
+            android:id="@+id/post_boost_barrage_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/post_poll_container"
@@ -77,7 +136,17 @@
         android:orientation="vertical"
         android:visibility="gone" />
 
+    <LinearLayout
+        android:id="@+id/post_boost_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="46dp"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:visibility="gone" />
+
     <HorizontalScrollView
+        android:id="@+id/post_actions_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="46dp"

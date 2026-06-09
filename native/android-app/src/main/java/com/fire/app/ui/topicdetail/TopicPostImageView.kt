@@ -11,6 +11,7 @@ import coil.request.ImageRequest
 import com.fire.app.R
 import com.fire.app.core.ext.dp
 import com.fire.app.core.image.FireImageLoader
+import com.fire.app.core.image.FireImageUrls
 import com.fire.app.richtext.FireCookedImage
 
 class TopicPostImageView(context: Context) : FrameLayout(context) {
@@ -76,7 +77,7 @@ class TopicPostImageView(context: Context) : FrameLayout(context) {
         image: FireCookedImage,
         onImageClick: (FireCookedImage) -> Unit,
     ) {
-        this.image = image
+        this.image = image.normalizedUrl()
         this.onImageClick = onImageClick
         contentDescription = image.altText ?: context.getString(R.string.topic_detail_image_attachment)
         imageView.contentDescription = contentDescription
@@ -147,5 +148,9 @@ class TopicPostImageView(context: Context) : FrameLayout(context) {
         return (widthPx * imageHeight / imageWidth)
             .toInt()
             .coerceIn(minHeight, maxHeight)
+    }
+
+    private fun FireCookedImage.normalizedUrl(): FireCookedImage {
+        return FireImageUrls.build(url)?.let { copy(url = it) } ?: this
     }
 }

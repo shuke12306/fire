@@ -14,6 +14,7 @@ typealias FirePostLayoutComputation = @Sendable (
     String,
     [FireCookedImage],
     [FirePostPollRenderModel],
+    [String],
     FirePostLayoutTraitSignature
 ) -> FirePostCellLayout
 
@@ -52,13 +53,14 @@ final class FirePostLayoutManager: ObservableObject {
             label: "com.fire.post-layout-manager",
             qos: .userInitiated
         ),
-        computeLayout: @escaping FirePostLayoutComputation = { key, attributedText, plainText, images, polls, trait in
+        computeLayout: @escaping FirePostLayoutComputation = { key, attributedText, plainText, images, polls, boostLines, trait in
             FirePostLayoutManager.defaultComputeLayout(
                 key: key,
                 attributedText: attributedText,
                 plainText: plainText,
                 images: images,
                 polls: polls,
+                boostLines: boostLines,
                 trait: trait
             )
         }
@@ -81,6 +83,7 @@ final class FirePostLayoutManager: ObservableObject {
         plainText: String,
         images: [FireCookedImage],
         polls: [FirePostPollRenderModel],
+        boostLines: [String],
         trait: FirePostLayoutTraitSignature
     ) {
         if layoutCache[key] != nil || inFlightKeys.contains(key) {
@@ -95,7 +98,7 @@ final class FirePostLayoutManager: ObservableObject {
         let plainText = plainText
 
         queue.async { [weak self] in
-            let layout = computeLayout(key, attributedTextBox.value, plainText, images, polls, trait)
+            let layout = computeLayout(key, attributedTextBox.value, plainText, images, polls, boostLines, trait)
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -168,6 +171,7 @@ final class FirePostLayoutManager: ObservableObject {
         plainText: String,
         images: [FireCookedImage],
         polls: [FirePostPollRenderModel],
+        boostLines: [String],
         trait: FirePostLayoutTraitSignature
     ) -> FirePostCellLayout {
         let contentSizeCategory = UIContentSizeCategory(rawValue: trait.contentSizeCategory)
@@ -201,6 +205,7 @@ final class FirePostLayoutManager: ObservableObject {
             textHeight: textHeight,
             imageSizes: imageSizes,
             pollHeights: pollHeights,
+            boostLines: boostLines,
             trait: trait
         )
     }

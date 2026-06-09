@@ -42,6 +42,19 @@ object FireRichTextBlockBuilder {
             }
         }
         flushText()
+        val emittedImageUrls = blocks
+            .asSequence()
+            .filterIsInstance<FireRichTextBlock.Image>()
+            .map { it.image.url.trim() }
+            .filter { it.isNotEmpty() }
+            .toMutableSet()
+        for (image in imageAttachments) {
+            val url = image.url.trim()
+            if (url.isNotEmpty() && emittedImageUrls.add(url)) {
+                flushText()
+                blocks += FireRichTextBlock.Image(image.copy(url = url))
+            }
+        }
         return blocks
     }
 
