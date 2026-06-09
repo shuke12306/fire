@@ -20,12 +20,12 @@ reviewer, and date.
 | iOS release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, commit SHA, and `scripts/verify-performance-benchmarks.sh` output. |
 | Android release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, commit SHA, and `scripts/verify-performance-benchmarks.sh` output. |
 | Benchmark failure disposition | Every threshold failure has a fixed, accepted, or no-ship decision. | | Not started | | | Required only if benchmark failures exist; verifier accepts explicit `Accepted` rows with notes. |
-| VoiceOver audit | Full iOS release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links. |
-| TalkBack audit | Full Android release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links. |
-| Dynamic Type / font-scale audit | iOS Dynamic Type and Android font scale results recorded. | | Not started | | | Include largest supported accessibility sizes. |
-| Reduce Motion / haptic audit | Motion and haptic behavior audited with accessibility settings enabled. | | Not started | | | Include any expected platform differences. |
-| High contrast / color-blindness audit | Light, dark, OLED, high-contrast, and color-state checks recorded. | | Not started | | | Include contrast failures and remediation. |
-| Accessibility failure disposition | Every blocking accessibility failure has a fixed, accepted, or no-ship decision. | | Not started | | | Required after the full accessibility audit pass. |
+| VoiceOver audit | Full iOS release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links and `scripts/verify-accessibility-audit.sh` output. |
+| TalkBack audit | Full Android release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links and `scripts/verify-accessibility-audit.sh` output. |
+| Dynamic Type / font-scale audit | iOS Dynamic Type and Android font scale results recorded. | | Not started | | | Include largest supported accessibility sizes; verifier requires both platforms. |
+| Reduce Motion / haptic audit | Motion and haptic behavior audited with accessibility settings enabled. | | Not started | | | Include any expected platform differences; verifier requires both platforms. |
+| High contrast / color-blindness audit | Light, dark, OLED, high-contrast, and color-state checks recorded. | | Not started | | | Include contrast failures and remediation; verifier requires both platforms. |
+| Accessibility failure disposition | Every blocking accessibility failure has a fixed, accepted, or no-ship decision. | | Not started | | | Required after the full accessibility audit pass; verifier accepts explicit `Accepted` rows with notes. |
 
 ## Evidence Rules
 

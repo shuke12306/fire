@@ -62,6 +62,21 @@ All release candidates must pass this checklist on both iOS and Android before s
 | --- | --- | --- | --- | --- | --- | --- |
 | | | | | | | |
 
+Use exactly the screen and audit category names from this checklist. `Result`
+accepts `Pass` for completed release-candidate coverage or `Accepted` for an
+explicit waiver with notes. Simulator and emulator rows may be linked as
+supporting context elsewhere, but they do not satisfy this log.
+
 ## Release Rule
 
 Do not mark P4 accessibility complete until the results log covers the release candidate on both platforms and all blocking failures are fixed.
+
+Before marking accessibility evidence complete, run:
+
+```bash
+scripts/verify-accessibility-audit.sh
+```
+
+The verifier fails until every listed screen and audit category has an iOS and
+Android physical-device row with date, tester, device, and `Pass` or `Accepted`
+disposition.

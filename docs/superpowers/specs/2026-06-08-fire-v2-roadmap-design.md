@@ -438,7 +438,7 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - Reduce Motion 测试
 - 高对比度模式测试
 
-当前已有跨平台 accessibility audit checklist；VoiceOver、TalkBack、Dynamic Type/font-scale、Reduce Motion/haptic、高对比度/色盲检查仍需人工执行并记录结果。
+当前已有跨平台 accessibility audit checklist 和 `scripts/verify-accessibility-audit.sh`；VoiceOver、TalkBack、Dynamic Type/font-scale、Reduce Motion/haptic、高对比度/色盲检查仍需人工执行并记录结果。
 
 ---
 
@@ -520,4 +520,4 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - [ ] 话题详情首屏 < 2s
 - [ ] VoiceOver / TalkBack 全流程可操作
 
-P4 repository scaffolding 已完成一部分，并已有 store media / performance / release gate 校验脚本；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。
+P4 repository scaffolding 已完成一部分，并已有 store media / performance / accessibility / release gate 校验脚本；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。
