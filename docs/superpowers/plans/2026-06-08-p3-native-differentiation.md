@@ -43,7 +43,7 @@ Fully feasible. The Rust `fire-store` crate already has a SQLite migration syste
 
 5. **Material You uses `DynamicColors` from the Material component library.** Android already depends on `com.google.android.material`. Dynamic Color support is a one-time theme configuration, not a new dependency. The `FireColors.kt` resolver pattern is extended with a `dynamicColorsEnabled` check that falls back to static colors on API < 31.
 
-6. **Toast component replaces non-critical `.alert()` calls.** Six `.alert()` call sites in the iOS app are used for non-critical feedback (e.g., "saved", "copied"). These should be non-modal toasts. Critical confirmations (logout, delete) remain as `.alert()`.
+6. **Toast component replaces non-critical `.alert()` calls.** Notice-only iOS `.alert("提示", ...)` call sites are non-modal toasts. Critical confirmations, blocking load failures, and error-detail modals remain as alerts or inline error states.
 
 ### New Types
 
@@ -82,16 +82,18 @@ struct FireWidgetData: Codable {
 ```
 
 ```swift
-// iOS: toast component
-struct FireToastView: View {
-    let message: String
-    let icon: String?
-    let style: FireToastStyle
-    @Binding var isPresented: Bool
-}
-
 enum FireToastStyle {
     case success, error, info, warning
+}
+
+struct FireToast: Identifiable, Equatable {
+    let id: UUID
+    let message: String
+    let style: FireToastStyle
+}
+
+struct FireToastView: View {
+    let toast: FireToast
 }
 ```
 
@@ -100,138 +102,38 @@ enum FireToastStyle {
 ### Task 1: Toast/Snackbar Component (iOS + Android)
 
 **Files:**
-- Create: `native/ios-app/App/Core/FireToast.swift`
 - Modify: `native/ios-app/App/Core/FireComponents.swift`
 - Create: `native/android-app/src/main/java/com/fire/app/core/ui/FireToast.kt`
 - Modify: `native/ios-app/App/Views/Home/FireHomeView.swift`
+- Modify: `native/ios-app/App/Views/Home/FireFilteredTopicListView.swift`
 - Modify: `native/ios-app/App/Views/Bookmarks/FireBookmarksView.swift`
-- Modify: `native/ios-app/App/Views/Composer/FireComposerView.swift`
+- Modify: `native/ios-app/App/Views/Search/FireSearchView.swift`
+- Modify: `native/ios-app/App/Views/Other/FireDraftsView.swift`
+- Modify: `native/ios-app/App/Views/Other/FireReadHistoryView.swift`
+- Modify: `native/ios-app/App/Views/Messages/FirePrivateMessagesView.swift`
+- Modify: `native/ios-app/App/Views/Profile/FirePublicProfileView.swift`
+- Modify: Android composer sheets and topic-detail interaction feedback surfaces
 
-- [ ] **Step 1: Create `FireToastStyle` enum and `FireToastView` in `native/ios-app/App/Core/FireToast.swift`**
+- [x] **Step 1: Add `FireToastStyle`, `FireToast`, `FireToastView`, and `fireToast(_:)` in `native/ios-app/App/Core/FireComponents.swift`**
 
-```swift
-import SwiftUI
+  Implemented in the existing compiled component library instead of creating `FireToast.swift` to avoid unrelated `Fire.xcodeproj` metadata churn while the project file has local dirty changes. The modifier owns an identity-aware auto-dismiss task so an old timer cannot dismiss a newer toast.
 
-enum FireToastStyle {
-    case success, error, info, warning
+- [x] **Step 2: Create `FireToast` Android component in `native/android-app/src/main/java/com/fire/app/core/ui/FireToast.kt`**
 
-    var iconName: String {
-        switch self {
-        case .success: return "checkmark.circle.fill"
-        case .error: return "xmark.circle.fill"
-        case .info: return "info.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        }
-    }
+  Implemented as a Material `Snackbar` wrapper with `SUCCESS`, `ERROR`, `INFO`, and `WARNING` styles backed by the existing Fire color resources plus a string-resource overload.
 
-    var tintColor: Color {
-        switch self {
-        case .success: return FireTheme.success
-        case .error: return Color.red
-        case .info: return FireTheme.accent
-        case .warning: return FireTheme.warning
-        }
-    }
-}
+- [x] **Step 3: Replace non-critical iOS notice alerts with `fireToast`**
 
-struct FireToastView: View {
-    let message: String
-    let style: FireToastStyle
-    @Binding var isPresented: Bool
-    @State private var opacity: Double = 0
+  Converted notice-only `.alert("提示", ...)` feedback in Home, filtered topic lists, Bookmarks, Search, Drafts, Read History, Private Messages, and public-profile private-message submission. Critical confirmations and blocking error states remain modal or inline.
 
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: style.iconName)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(style.tintColor)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(FireTheme.ink)
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(FireTheme.chromeStrong)
-        .clipShape(RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
-        .opacity(opacity)
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.25)) { opacity = 1 }
-            Task {
-                try? await Task.sleep(for: .seconds(2.5))
-                withAnimation(.easeOut(duration: 0.25)) { opacity = 0 }
-                try? await Task.sleep(for: .seconds(0.3))
-                isPresented = false
-            }
-        }
-    }
-}
+- [x] **Step 4: Add Android Snackbar calls in composer and topic-detail feedback flows**
 
-extension View {
-    func fireToast(_ message: String, style: FireToastStyle = .info, isPresented: Binding<Bool>) -> some View {
-        overlay(alignment: .top) {
-            if isPresented.wrappedValue {
-                FireToastView(message: message, style: style, isPresented: isPresented)
-                    .padding(.top, 60)
-                    .padding(.horizontal, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.easeOut(duration: 0.25), value: isPresented.wrappedValue)
-    }
-}
-```
+  Converted composer sheet errors/draft restore/login/category warnings plus topic-detail action errors, bookmark save/delete, quote-empty, and reaction picker/user feedback at the UI boundary. ViewModels remain business-state owners and do not own Android views.
 
-- [ ] **Step 2: Create `FireToast` Android component in `native/android-app/src/main/java/com/fire/app/core/ui/FireToast.kt`**
+- [x] **Step 5: Verify**
 
-```kotlin
-package com.fire.app.core.ui
-
-import android.content.Context
-import android.view.View
-import android.widget.FrameLayout
-import android.widget.TextView
-import com.google.android.material.snackbar.Snackbar
-
-object FireToast {
-
-    enum class Style { SUCCESS, ERROR, INFO, WARNING }
-
-    fun show(anchor: View, message: String, style: Style = Style.INFO) {
-        val snackbar = Snackbar.make(anchor, message, Snackbar.LENGTH_SHORT)
-        val context = anchor.context
-        snackbar.setBackgroundTint(resolveBackgroundColor(context, style))
-        snackbar.setTextColor(resolveTextColor(context, style))
-        snackbar.show()
-    }
-
-    private fun resolveBackgroundColor(context: Context, style: Style): Int {
-        return when (style) {
-            Style.SUCCESS -> com.fire.app.R.color.fire_success
-            Style.ERROR -> com.fire.app.R.color.fire_error
-            Style.INFO -> com.fire.app.R.color.fire_accent
-            Style.WARNING -> com.fire.app.R.color.fire_warning
-        }.let { context.getColor(it) }
-    }
-
-    private fun resolveTextColor(context: Context, style: Style): Int {
-        return context.getColor(android.R.color.white)
-    }
-}
-```
-
-- [ ] **Step 3: Replace non-critical `.alert()` in `FireHomeView.swift` (line 156) with `fireToast` modifier**
-
-Find the `.alert("提示", isPresented: ...)` at line 156 and replace with a toast binding. This alert is for non-critical feedback (e.g., topic action result).
-
-- [ ] **Step 4: Replace non-critical `.alert()` in `FireDraftsView.swift` (line 211) and `FirePrivateMessagesView.swift` (line 354)**
-
-Same pattern — these are informational "提示" alerts that should be non-modal.
-
-- [ ] **Step 5: Add `showToast` calls in Android composer/bookmark/reaction flows**
-
-In `ComposerViewModel.kt` and `BookmarksViewModel.kt`, replace any Toast.makeText() calls with `FireToast.show()`.
+  - `cd native/android-app && ./gradlew testDebugUnitTest --tests com.fire.app.ui.composer.MarkdownInsertionTest` — passed
+  - `cd native/ios-app && xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF,OS=18.3.1' -quiet` — passed; existing unrelated warnings remain
 
 **Commit message:** `feat(toast): add FireToast component, replace non-critical alerts on iOS and Android`
 
@@ -1864,14 +1766,16 @@ Verify all text-on-background combinations pass WCAG AA (4.5:1 for normal text, 
 
 ## File Change Summary
 
-- `native/ios-app/App/Core/FireToast.swift` — Toast component with auto-dismiss and style variants
-- `native/ios-app/App/Core/FireComponents.swift` — Reference toast modifier additions
+- `native/ios-app/App/Core/FireComponents.swift` — Toast component, auto-dismiss modifier, and style variants
 - `native/android-app/src/main/java/com/fire/app/core/ui/FireToast.kt` — Snackbar-based Android toast
-- `native/ios-app/App/Views/Home/FireHomeView.swift` — Replace alert with toast, add offline banner
+- `native/ios-app/App/Views/Home/FireHomeView.swift` — Replace notice alert with toast
+- `native/ios-app/App/Views/Home/FireFilteredTopicListView.swift` — Replace notice alert with toast
 - `native/ios-app/App/Views/Bookmarks/FireBookmarksView.swift` — Replace alert with toast
-- `native/ios-app/App/Views/Composer/FireComposerView.swift` — Replace alert with toast
+- `native/ios-app/App/Views/Search/FireSearchView.swift` — Replace notice alert with toast
 - `native/ios-app/App/Views/Other/FireDraftsView.swift` — Replace alert with toast
+- `native/ios-app/App/Views/Other/FireReadHistoryView.swift` — Replace notice alert with toast
 - `native/ios-app/App/Views/Messages/FirePrivateMessagesView.swift` — Replace alert with toast
+- `native/ios-app/App/Views/Profile/FirePublicProfileView.swift` — Replace composer notice alert with toast
 - `native/ios-app/App/Widget/FireWidgetData.swift` — Shared data model for widget communication
 - `native/ios-app/App/Widget/FireWidgetEntry.swift` — Timeline entry and provider types
 - `native/ios-app/App/Widget/FireWidgetBundle.swift` — Widget extension entry point

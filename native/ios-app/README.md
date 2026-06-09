@@ -197,6 +197,9 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - keeps the top bar title fixed to `首页` so the authenticated home shell does not echo the current profile name in the navigation chrome
   - now renders its feed/category/tag state from `FireHomeFeedStore`, so home pagination and filter changes no longer flow through the app-wide root observable
   - now routes the home feed through `FireHomeCollectionView`, keeping toolbar/sheet/navigation ownership in SwiftUI while moving the hot-path list mechanics to the W3 diffable collection host
+  - surfaces non-critical composer and topic-action feedback through the shared `FireToast` overlay instead of blocking notice alerts
+- `App/Core/FireComponents.swift`
+  - contains the shared SwiftUI `FireToast` presentation primitive for transient success/error/info/warning feedback, with identity-aware auto-dismiss and FireTheme styling
 - `App/FireCategoriesView.swift` and `App/FireTagPickerSheet.swift`
   - now read category/tag bootstrap metadata and selected home filters from `FireHomeFeedStore`
 - `App/TopicDetail/`

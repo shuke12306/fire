@@ -43,8 +43,8 @@ struct FireHomeView: View {
     @State private var selectedRoute: FireAppRoute?
     @State private var lastTriggeredTopicsPage: UInt32?
     @State private var composerNotice: String?
+    @State private var toast: FireToast?
     @State private var editingBookmarkContext: FireBookmarkEditorContext?
-    @State private var topicActionNotice: String?
     @Namespace private var pushTransitionNamespace
 
     private static let paginationPrefetchDistance: CGFloat = 480
@@ -143,6 +143,9 @@ struct FireHomeView: View {
                 lastTriggeredTopicsPage = nil
             }
         }
+        .onChange(of: composerNotice) { _, message in
+            showToast(message, style: .info)
+        }
         .sheet(isPresented: $showCategoryBrowser) {
             FireCategoryBrowserSheet(viewModel: viewModel)
                 .fireSheet(presented: $showCategoryBrowser)
@@ -195,19 +198,7 @@ struct FireHomeView: View {
                 }
             )
         }
-        .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil || topicActionNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    composerNotice = nil
-                    topicActionNotice = nil
-                }
-            }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(composerNotice ?? topicActionNotice ?? "")
-        }
+        .fireToast($toast)
     }
 
     private func resetPaginationTracking() {
@@ -241,11 +232,20 @@ struct FireHomeView: View {
                     topicID: row.topic.id,
                     notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
                 )
-                topicActionNotice = "已静音话题"
+                showToast("已静音话题", style: .success)
             } catch {
-                topicActionNotice = error.localizedDescription
+                showToast(error.localizedDescription, style: .error)
             }
         }
+    }
+
+    private func showToast(_ message: String?, style: FireToastStyle) {
+        guard let message,
+              !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        toast = FireToast(message: message, style: style)
+        composerNotice = nil
     }
 
     private func handleTopicListScrollMetricsChange(_ newMetrics: FireCollectionScrollMetrics) {

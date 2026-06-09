@@ -271,6 +271,8 @@
     <string name="topic_detail_bookmark_reminder_label">Reminder</string>
     <string name="topic_detail_bookmark_reminder_pick">Pick reminder time</string>
     <string name="topic_detail_bookmark_save">Save Bookmark</string>
+    <string name="topic_detail_bookmark_saved">Bookmark saved.</string>
+    <string name="topic_detail_bookmark_deleted">Bookmark removed.</string>
     <string name="topic_detail_bookmark_delete">Delete Bookmark</string>
     <string name="topic_detail_bookmark_error">Unable to update bookmark.</string>
     <string name="bookmark_reminder_channel_name">Bookmark Reminders</string>

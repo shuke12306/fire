@@ -10,11 +10,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.fire.app.R
 import com.fire.app.core.error.FireErrorReporter
+import com.fire.app.core.ui.FireToast
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -159,11 +159,10 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 launch {
                 vm.error.collectLatest { error ->
                     if (error != null) {
-                        Toast.makeText(
-                            requireContext(),
+                        showToast(
                             error.ifBlank { getString(R.string.topic_detail_reply_error) },
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                            FireToast.Style.ERROR,
+                        )
                     }
                 }
             }
@@ -204,11 +203,10 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 val markdown = uploadImageMarkdown(requireContext(), sessionStore, uri)
                 insertMarkdownAtCursor(bodyInput, markdown)
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
+                showToast(
                     e.localizedMessage ?: getString(R.string.composer_upload_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             } finally {
                 progressBar.visibility = View.GONE
                 uploadButton.isEnabled = true
@@ -220,7 +218,11 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         val draft = runCatching { sessionStore.fetchDraft(draftKey()) }.getOrNull() ?: return
         draftSequence = draft.sequence
         draft.data.reply?.let { bodyInput.setText(it) }
-        Toast.makeText(requireContext(), R.string.composer_draft_restored, Toast.LENGTH_SHORT).show()
+        showToast(getString(R.string.composer_draft_restored), FireToast.Style.INFO)
+    }
+
+    private fun showToast(message: String, style: FireToast.Style) {
+        FireToast.show(view ?: return, message, style)
     }
 
     private fun applyInitialBodyIfNeeded() {

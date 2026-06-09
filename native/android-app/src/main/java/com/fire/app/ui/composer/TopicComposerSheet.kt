@@ -11,11 +11,11 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.fire.app.R
 import com.fire.app.core.error.FireErrorReporter
+import com.fire.app.core.ui.FireToast
 import com.fire.app.displayName
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
@@ -144,17 +144,9 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
             categorySpinner.isEnabled = canCreateTopic
             submitButton.isEnabled = canCreateTopic
             if (!canCreateTopic && categories.isEmpty()) {
-                Toast.makeText(
-                    requireContext(),
-                    R.string.create_topic_no_categories,
-                    Toast.LENGTH_SHORT,
-                ).show()
+                showToast(getString(R.string.create_topic_no_categories), FireToast.Style.WARNING)
             } else if (!canCreateTopic) {
-                Toast.makeText(
-                    requireContext(),
-                    R.string.create_topic_login_required,
-                    Toast.LENGTH_SHORT,
-                ).show()
+                showToast(getString(R.string.create_topic_login_required), FireToast.Style.WARNING)
             }
             restoreDraftIfAvailable()
             draftAutosave?.start()
@@ -188,7 +180,7 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
                     return@setOnClickListener
                 }
                 if (category == null) {
-                    Toast.makeText(requireContext(), R.string.create_topic_no_categories, Toast.LENGTH_SHORT).show()
+                    showToast(getString(R.string.create_topic_no_categories), FireToast.Style.WARNING)
                     return@setOnClickListener
                 }
                 if (tags.size < category.minimumRequiredTags.toInt()) {
@@ -235,11 +227,10 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
                 launch {
                 vm.error.collectLatest { error ->
                     if (error != null) {
-                        Toast.makeText(
-                            requireContext(),
+                        showToast(
                             error.ifBlank { getString(R.string.create_topic_error) },
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                            FireToast.Style.ERROR,
+                        )
                     }
                 }
             }
@@ -292,11 +283,10 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
                 val markdown = uploadImageMarkdown(requireContext(), sessionStore, uri)
                 insertMarkdownAtCursor(bodyInput, markdown)
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
+                showToast(
                     e.localizedMessage ?: getString(R.string.composer_upload_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             } finally {
                 progressBar.visibility = View.GONE
                 uploadButton.isEnabled = true
@@ -323,7 +313,11 @@ class TopicComposerSheet : BottomSheetDialogFragment() {
         if (draft.data.tags.isNotEmpty()) {
             tagsInput.setText(draft.data.tags.joinToString(" "))
         }
-        Toast.makeText(requireContext(), R.string.composer_draft_restored, Toast.LENGTH_SHORT).show()
+        showToast(getString(R.string.composer_draft_restored), FireToast.Style.INFO)
+    }
+
+    private fun showToast(message: String, style: FireToast.Style) {
+        FireToast.show(view ?: return, message, style)
     }
 
     private suspend fun persistDraftIfNeeded() {

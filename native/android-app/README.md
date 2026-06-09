@@ -63,6 +63,10 @@ the shared Rust core at build time.
   restore/autosave/delete, and local Markdown preview with upload-image preview.
 - `TopicDetailActivity` is still the authoritative Android topic detail surface.
   It is intentionally a dedicated activity outside the main tab `NavHost`.
+- `core/ui/FireToast.kt` is the shared Material Snackbar wrapper for transient
+  success/error/info/warning feedback. Composer sheets and topic-detail action
+  flows use it at the UI boundary; ViewModels continue to expose business state
+  and never own Android views.
 
 ## Topic Detail
 

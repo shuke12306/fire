@@ -44,6 +44,7 @@ import com.fire.app.richtext.FireCookedImage
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
 import com.fire.app.core.image.FireAvatarUrls
+import com.fire.app.core.ui.FireToast
 import com.fire.app.ui.composer.ComposerTagAssist
 import com.fire.app.ui.composer.PrivateMessageComposerSheet
 import com.fire.app.ui.composer.QuoteMarkdown
@@ -361,7 +362,7 @@ class TopicDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             vm.actionError.collectLatest { error ->
-                Toast.makeText(this@TopicDetailActivity, error, Toast.LENGTH_SHORT).show()
+                FireToast.show(binding.root, error, FireToast.Style.ERROR)
             }
         }
 
@@ -369,12 +370,22 @@ class TopicDetailActivity : AppCompatActivity() {
             vm.bookmarkEvents.collectLatest { event ->
                 when (event) {
                     is BookmarkEvent.Saved -> {
+                        FireToast.show(
+                            binding.root,
+                            R.string.topic_detail_bookmark_saved,
+                            FireToast.Style.SUCCESS,
+                        )
                         val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
                         pendingBookmarkReminders.remove(key)?.let { request ->
                             scheduleBookmarkReminderAfterSave(request.copy(reminderAt = event.reminderAt))
                         }
                     }
                     is BookmarkEvent.Deleted -> {
+                        FireToast.show(
+                            binding.root,
+                            R.string.topic_detail_bookmark_deleted,
+                            FireToast.Style.INFO,
+                        )
                         val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
                         pendingBookmarkReminders.remove(key)
                         BookmarkReminderScheduler.cancel(
@@ -407,7 +418,7 @@ class TopicDetailActivity : AppCompatActivity() {
             plainText = post.renderDocument?.plainText.orEmpty(),
         )
         if (quote == null) {
-            Toast.makeText(this, R.string.topic_detail_quote_empty, Toast.LENGTH_SHORT).show()
+            FireToast.show(binding.root, R.string.topic_detail_quote_empty, FireToast.Style.INFO)
             return
         }
         showReplyComposer(
@@ -1197,11 +1208,11 @@ class TopicDetailActivity : AppCompatActivity() {
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@TopicDetailActivity,
+                FireToast.show(
+                    binding.root,
                     e.localizedMessage ?: getString(R.string.topic_detail_reaction_users_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             }
         }
     }
@@ -1227,22 +1238,22 @@ class TopicDetailActivity : AppCompatActivity() {
     private fun showReactionPicker(post: TopicPostState) {
         val currentReaction = post.currentUserReaction
         if (currentReaction?.canUndo == false) {
-            Toast.makeText(
-                this,
+            FireToast.show(
+                binding.root,
                 R.string.topic_detail_reaction_locked,
-                Toast.LENGTH_SHORT,
-            ).show()
+                FireToast.Style.WARNING,
+            )
             return
         }
 
         lifecycleScope.launch {
             val options = fullReactionOptionsForPost(post)
             if (options.isEmpty()) {
-                Toast.makeText(
-                    this@TopicDetailActivity,
+                FireToast.show(
+                    binding.root,
                     R.string.topic_detail_reaction_empty,
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.INFO,
+                )
                 return@launch
             }
 

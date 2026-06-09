@@ -82,6 +82,7 @@ struct FireDraftsView: View {
     @ObservedObject var viewModel: FireAppViewModel
     @StateObject private var draftsViewModel: FireDraftsViewModel
     @State private var composerNotice: String?
+    @State private var toast: FireToast?
 
     init(viewModel: FireAppViewModel) {
         self.viewModel = viewModel
@@ -209,18 +210,15 @@ struct FireDraftsView: View {
         .refreshable {
             await draftsViewModel.refresh()
         }
-        .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    composerNotice = nil
-                }
+        .onChange(of: composerNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
             }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(composerNotice ?? "")
+            toast = FireToast(message: message, style: .info)
+            composerNotice = nil
         }
+        .fireToast($toast)
     }
 
     private func composerRoute(for draft: DraftState) -> FireComposerRoute? {

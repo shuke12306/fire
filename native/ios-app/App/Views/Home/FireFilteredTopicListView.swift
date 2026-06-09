@@ -210,6 +210,7 @@ struct FireFilteredTopicListView: View {
     @State private var selectedRoute: FireAppRoute?
     @State private var editingBookmarkContext: FireBookmarkEditorContext?
     @State private var topicActionNotice: String?
+    @State private var toast: FireToast?
     @Namespace private var feedSelectorNamespace
     @Namespace private var pushTransitionNamespace
 
@@ -345,18 +346,15 @@ struct FireFilteredTopicListView: View {
                 }
             )
         }
-        .alert("提示", isPresented: Binding(
-            get: { topicActionNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    topicActionNotice = nil
-                }
+        .onChange(of: topicActionNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
             }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(topicActionNotice ?? "")
+            toast = FireToast(message: message, style: .error)
+            topicActionNotice = nil
         }
+        .fireToast($toast)
     }
 
     // MARK: - Kind Selector
@@ -508,7 +506,7 @@ struct FireFilteredTopicListView: View {
                     topicID: row.topic.id,
                     notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
                 )
-                topicActionNotice = "已静音话题"
+                toast = FireToast(message: "已静音话题", style: .success)
             } catch {
                 topicActionNotice = error.localizedDescription
             }
