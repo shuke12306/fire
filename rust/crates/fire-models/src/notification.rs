@@ -73,6 +73,8 @@ pub struct NotificationListResponse {
     pub seen_notification_id: Option<u64>,
     pub load_more_notifications: Option<String>,
     pub next_offset: Option<u32>,
+    #[serde(default)]
+    pub is_cached: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,9 +82,13 @@ pub struct NotificationState {
     pub counters: NotificationCounters,
     pub recent: Vec<NotificationItem>,
     pub has_loaded_recent: bool,
+    #[serde(default)]
+    pub recent_is_cached: bool,
     pub recent_seen_notification_id: Option<u64>,
     pub full: Vec<NotificationItem>,
     pub has_loaded_full: bool,
+    #[serde(default)]
+    pub full_is_cached: bool,
     pub total_rows_notifications: u32,
     pub full_seen_notification_id: Option<u64>,
     pub full_load_more_notifications: Option<String>,

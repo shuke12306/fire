@@ -109,6 +109,7 @@ pub struct NotificationListState {
     pub seen_notification_id: Option<u64>,
     pub load_more_notifications: Option<String>,
     pub next_offset: Option<u32>,
+    pub is_cached: bool,
 }
 
 impl From<NotificationListResponse> for NotificationListState {
@@ -119,6 +120,7 @@ impl From<NotificationListResponse> for NotificationListState {
             seen_notification_id: value.seen_notification_id,
             load_more_notifications: value.load_more_notifications,
             next_offset: value.next_offset,
+            is_cached: value.is_cached,
         }
     }
 }
@@ -128,9 +130,11 @@ pub struct NotificationCenterState {
     pub counters: NotificationCountersState,
     pub recent: Vec<NotificationItemState>,
     pub has_loaded_recent: bool,
+    pub recent_is_cached: bool,
     pub recent_seen_notification_id: Option<u64>,
     pub full: Vec<NotificationItemState>,
     pub has_loaded_full: bool,
+    pub full_is_cached: bool,
     pub total_rows_notifications: u32,
     pub full_seen_notification_id: Option<u64>,
     pub full_load_more_notifications: Option<String>,
@@ -143,9 +147,11 @@ impl From<NotificationState> for NotificationCenterState {
             counters: value.counters.into(),
             recent: value.recent.into_iter().map(Into::into).collect(),
             has_loaded_recent: value.has_loaded_recent,
+            recent_is_cached: value.recent_is_cached,
             recent_seen_notification_id: value.recent_seen_notification_id,
             full: value.full.into_iter().map(Into::into).collect(),
             has_loaded_full: value.has_loaded_full,
+            full_is_cached: value.full_is_cached,
             total_rows_notifications: value.total_rows_notifications,
             full_seen_notification_id: value.full_seen_notification_id,
             full_load_more_notifications: value.full_load_more_notifications,

@@ -234,6 +234,7 @@ pub struct TopicListState {
     pub rows: Vec<TopicRowState>,
     pub more_topics_url: Option<String>,
     pub next_page: Option<u32>,
+    pub is_cached: bool,
 }
 
 impl From<TopicListResponse> for TopicListState {
@@ -244,6 +245,7 @@ impl From<TopicListResponse> for TopicListState {
             rows: value.rows.into_iter().map(Into::into).collect(),
             more_topics_url: value.more_topics_url,
             next_page: value.next_page,
+            is_cached: value.is_cached,
         }
     }
 }

@@ -43,6 +43,14 @@ pub(crate) fn run(connection: &Connection) -> Result<(), FireStoreError> {
         )?;
     }
 
+    if current_version < 4 {
+        connection.execute_batch(MIGRATION_4)?;
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at_ms) VALUES (4, ?1)",
+            [now_ms()],
+        )?;
+    }
+
     Ok(())
 }
 
@@ -160,4 +168,29 @@ CREATE TABLE IF NOT EXISTS current_user_cache (
     data TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+"#;
+
+const MIGRATION_4: &str = r#"
+CREATE TABLE IF NOT EXISTS topic_list_cache (
+    auth_scope_hash TEXT NOT NULL,
+    scope_key TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    fetched_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (auth_scope_hash, scope_key, page)
+);
+
+CREATE INDEX IF NOT EXISTS topic_list_cache_by_updated_at
+    ON topic_list_cache (auth_scope_hash, fetched_at_ms);
+
+CREATE TABLE IF NOT EXISTS notification_list_cache (
+    auth_scope_hash TEXT NOT NULL,
+    scope_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    fetched_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (auth_scope_hash, scope_key)
+);
+
+CREATE INDEX IF NOT EXISTS notification_list_cache_by_updated_at
+    ON notification_list_cache (auth_scope_hash, fetched_at_ms);
 "#;

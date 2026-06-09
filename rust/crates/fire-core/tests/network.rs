@@ -96,6 +96,44 @@ async fn fetch_topic_list_parses_latest_payload() {
         response.rows[0].last_poster_username.as_deref(),
         Some("alice")
     );
+    assert!(!response.is_cached);
+}
+
+#[tokio::test]
+async fn fetch_topic_list_returns_cached_page_on_network_error() {
+    let responses = vec![raw_json_response(
+        200,
+        "application/json",
+        &sample_latest_json(),
+    )];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+
+    let live = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("live topic list");
+    assert!(!live.is_cached);
+
+    let cached = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("cached topic list");
+    let _ = server.shutdown().await;
+
+    assert!(cached.is_cached);
+    assert_eq!(cached.rows.len(), 1);
+    assert_eq!(cached.rows[0].topic.id, live.rows[0].topic.id);
 }
 
 #[tokio::test]

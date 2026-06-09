@@ -29,6 +29,7 @@ use fire_models::{
 };
 use fire_store::FireStore;
 use openwire::Client;
+use sha1::{Digest, Sha1};
 use tokio::sync::Mutex as TokioMutex;
 use tracing::info;
 use url::Url;
@@ -342,6 +343,10 @@ impl FireCore {
         }
     }
 
+    pub(crate) fn current_auth_scope_hash(&self) -> String {
+        auth_scope_hash(self.base_url(), &self.snapshot())
+    }
+
     pub fn app_state_refresher(&self) -> &Arc<crate::app_state_refresher::AppStateRefresher> {
         self.app_state_refresher.get_or_init(|| {
             Arc::new(crate::app_state_refresher::AppStateRefresher::new(
@@ -550,6 +555,28 @@ impl FireCore {
             );
         }
     }
+}
+
+fn auth_scope_hash(base_url: &str, snapshot: &SessionSnapshot) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(base_url.as_bytes());
+    hasher.update(b"\0");
+    if let Some(user_id) = snapshot.bootstrap.current_user_id {
+        hasher.update(user_id.to_string().as_bytes());
+    }
+    hasher.update(b"\0");
+    if let Some(username) = snapshot.bootstrap.current_username.as_deref() {
+        hasher.update(username.trim().to_ascii_lowercase().as_bytes());
+    }
+    hasher.update(b"\0");
+    if let Some(t_token) = snapshot.cookies.t_token.as_deref() {
+        hasher.update(t_token.as_bytes());
+    }
+    hasher.update(b"\0");
+    if let Some(forum_session) = snapshot.cookies.forum_session.as_deref() {
+        hasher.update(forum_session.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 pub(crate) fn mutate_runtime_session_tracking_auth_change<F>(

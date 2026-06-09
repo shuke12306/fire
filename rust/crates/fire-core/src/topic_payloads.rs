@@ -70,6 +70,7 @@ impl From<RawTopicListResponse> for TopicListResponse {
             rows,
             more_topics_url,
             next_page,
+            is_cached: false,
         }
     }
 }

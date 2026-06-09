@@ -897,112 +897,47 @@ FireWidgetData.updateWidgetData(
 **Files:**
 - Modify: `rust/crates/fire-store/src/migrations.rs` (add migration 4)
 - Modify: `rust/crates/fire-store/src/lib.rs` (add cache read/write methods)
+- Modify: `rust/crates/fire-models/src/topic.rs` and `rust/crates/fire-models/src/notification.rs` (surface cached response metadata)
 - Modify: `rust/crates/fire-core/src/core/topics.rs` (add cache integration to fetch)
 - Modify: `rust/crates/fire-core/src/core/notifications.rs` (add cache integration)
-- Modify: `rust/crates/fire-uniffi/src/lib.rs` (expose cache methods if needed)
+- Modify: `rust/crates/fire-core/src/core/session.rs` (clear scoped caches on logout)
+- Modify: `rust/crates/fire-uniffi-types/src/records/topic_list.rs` and `rust/crates/fire-uniffi-notifications/src/records.rs` (carry cached metadata across UniFFI)
 
-- [ ] **Step 1: Add Migration 4 for topic list and notification cache tables in `migrations.rs`**
+- [x] **Step 1: Add Migration 4 for topic list and notification cache tables in `migrations.rs`**
 
-```rust
-const MIGRATION_4: &str = r#"
-CREATE TABLE IF NOT EXISTS topic_list_cache (
-    auth_scope_hash TEXT NOT NULL,
-    scope_key TEXT NOT NULL,
-    page INTEGER NOT NULL,
-    payload_json TEXT NOT NULL,
-    fetched_at_ms INTEGER NOT NULL,
-    PRIMARY KEY (auth_scope_hash, scope_key, page)
-);
+  Added `topic_list_cache` keyed by `(auth_scope_hash, scope_key, page)` and `notification_list_cache` keyed by `(auth_scope_hash, scope_key)`, with update-time indexes for future pruning.
 
-CREATE TABLE IF NOT EXISTS notification_list_cache (
-    auth_scope_hash TEXT NOT NULL,
-    scope_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    fetched_at_ms INTEGER NOT NULL,
-    PRIMARY KEY (auth_scope_hash, scope_key)
-);
-"#;
-```
+- [x] **Step 2: Add `topic_list_cache_write` and `topic_list_cache_read` methods to `FireStore` in `lib.rs`**
 
-Add the migration runner:
+  Added scoped topic-list write/read methods plus unit coverage for auth scope, scope key, and page isolation.
 
-```rust
-if current_version < 4 {
-    connection.execute_batch(MIGRATION_4)?;
-    connection.execute(
-        "INSERT OR IGNORE INTO schema_migrations (version, applied_at_ms) VALUES (4, ?1)",
-        [now_ms()],
-    )?;
-}
-```
+- [x] **Step 3: Add `notification_list_cache_write` and `notification_list_cache_read` methods to `FireStore`**
 
-- [ ] **Step 2: Add `topic_list_cache_write` and `topic_list_cache_read` methods to `FireStore` in `lib.rs`**
+  Added notification list write/read methods and shared `clear_list_caches(auth_scope_hash)` for logout invalidation.
 
-```rust
-pub fn topic_list_cache_write(
-    &self,
-    auth_scope_hash: &str,
-    scope_key: &str,
-    page: u32,
-    payload_json: &str,
-) -> Result<(), FireStoreError> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
-    self.connection.execute(
-        "INSERT OR REPLACE INTO topic_list_cache (auth_scope_hash, scope_key, page, payload_json, fetched_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![auth_scope_hash, scope_key, page, payload_json, now_ms],
-    )?;
-    Ok(())
-}
+- [x] **Step 4: Add cache write after successful topic list fetch in `topics.rs`**
 
-pub fn topic_list_cache_read(
-    &self,
-    auth_scope_hash: &str,
-    scope_key: &str,
-    page: u32,
-) -> Result<Option<String>, FireStoreError> {
-    let mut stmt = self.connection.prepare(
-        "SELECT payload_json FROM topic_list_cache WHERE auth_scope_hash = ?1 AND scope_key = ?2 AND page = ?3 ORDER BY fetched_at_ms DESC LIMIT 1"
-    )?;
-    let mut rows = stmt.query(rusqlite::params![auth_scope_hash, scope_key, page])?;
-    match rows.next()? {
-        Some(row) => Ok(Some(row.get(0)?)),
-        None => Ok(None),
-    }
-}
-```
+  `fetch_topic_list` serializes the parsed `TopicListResponse` after successful network parse and stores it under the current Rust-owned auth scope hash. Cache write failures are logged and non-fatal.
 
-- [ ] **Step 3: Add `notification_list_cache_write` and `notification_list_cache_read` methods to `FireStore`**
+- [x] **Step 5: Add read-through cache fallback on network error in `topics.rs`**
 
-Same pattern as topic list, but with `notification_list_cache` table and `scope_key` only (no page).
+  `fetch_topic_list` falls back only for `FireCoreError::Network`; HTTP, Cloudflare, login, stale-session, and parse errors stay authoritative. Cached responses return with `TopicListResponse.is_cached = true`, and UniFFI exposes `TopicListState.is_cached`.
 
-- [ ] **Step 4: Add cache write after successful topic list fetch in `topics.rs`**
+- [x] **Step 6: Add same cache write/fallback for notifications in `notifications.rs`**
 
-In the `fetch_topic_list` method (or equivalent in `FireCore`), after a successful API response, serialize the response and call `store.topic_list_cache_write()` with the scope key derived from `kind:category_id:tag`.
+  Recent and full notification pages use scoped cache keys that include kind, limit, and offset. Cached responses set `NotificationListResponse.is_cached = true`, update the Rust notification runtime, and UniFFI exposes `NotificationListState.is_cached`, `NotificationCenterState.recent_is_cached`, and `NotificationCenterState.full_is_cached`.
 
-- [ ] **Step 5: Add read-through cache fallback on network error in `topics.rs`**
+- [x] **Step 7: Add cache invalidation on logout in `session.rs`**
 
-When `fetch_topic_list` encounters a network error, attempt `store.topic_list_cache_read()`. If a cache hit exists, return the cached payload. If no cache exists, propagate the original error.
+  `logout_local()` clears topic and notification list caches for the current auth scope before mutating session cookies, then clears runtime notification/topic presence state as before.
 
-- [ ] **Step 6: Add same cache write/fallback for notifications in `notifications.rs`**
+- [x] **Step 8: Verify with `cargo test -p fire-store` and `cargo test -p fire-core`**
 
-- [ ] **Step 7: Add cache invalidation on logout in `session.rs`**
-
-```rust
-// In logout_local() or equivalent:
-store.connection.execute("DELETE FROM topic_list_cache WHERE auth_scope_hash = ?1", [auth_scope_hash])?;
-store.connection.execute("DELETE FROM notification_list_cache WHERE auth_scope_hash = ?1", [auth_scope_hash])?;
-```
-
-- [ ] **Step 8: Verify with `cargo test -p fire-store` and `cargo test -p fire-core`**
-
-```bash
-cargo test -p fire-store
-cargo test -p fire-core
-cargo build -p fire-uniffi
-```
+  - `cargo test -p fire-store` — passed
+  - `cargo test -p fire-core fetch_topic_list_returns_cached_page_on_network_error` — passed
+  - `cargo test -p fire-core fetch_recent_notifications_returns_cached_page_on_network_error` — passed
+  - `cargo test -p fire-core` — passed
+  - `cargo build -p fire-uniffi` — passed
 
 **Commit message:** `feat(offline-cache): add Rust-side topic list and notification cache with read-through fallback`
 

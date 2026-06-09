@@ -10,7 +10,7 @@ use fire_models::{
 use http::Method;
 use openwire::RequestBody;
 use serde_json::Value;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::{
     network::{expect_success, FireChallengePresentation},
@@ -34,9 +34,11 @@ pub(crate) struct FireNotificationRuntime {
     counters: Option<NotificationCounters>,
     recent: Vec<NotificationItem>,
     has_loaded_recent: bool,
+    recent_is_cached: bool,
     recent_seen_notification_id: Option<u64>,
     full: Vec<NotificationItem>,
     has_loaded_full: bool,
+    full_is_cached: bool,
     total_rows_notifications: u32,
     full_seen_notification_id: Option<u64>,
     full_load_more_notifications: Option<String>,
@@ -58,9 +60,11 @@ impl FireCore {
                 .unwrap_or_else(|| notification_counters_from_snapshot(&snapshot)),
             recent: runtime.recent.clone(),
             has_loaded_recent: runtime.has_loaded_recent,
+            recent_is_cached: runtime.recent_is_cached,
             recent_seen_notification_id: runtime.recent_seen_notification_id,
             full: runtime.full.clone(),
             has_loaded_full: runtime.has_loaded_full,
+            full_is_cached: runtime.full_is_cached,
             total_rows_notifications: runtime.total_rows_notifications,
             full_seen_notification_id: runtime.full_seen_notification_id,
             full_load_more_notifications: runtime.full_load_more_notifications.clone(),
@@ -83,6 +87,7 @@ impl FireCore {
         ensure_notification_session(self)?;
         let limit = normalized_limit(limit, DEFAULT_RECENT_LIMIT);
         info!(limit, "fetching recent notifications");
+        let cache_scope_key = notification_cache_scope_key("recent", limit, None);
 
         let traced = self
             .build_json_get_request(
@@ -96,7 +101,22 @@ impl FireCore {
                 &[],
             )?
             .with_challenge_presentation(FireChallengePresentation::Background);
-        let (trace_id, response) = self.execute_request(traced).await?;
+        let (trace_id, response) = match self.execute_request(traced).await {
+            Ok(response) => response,
+            Err(error @ FireCoreError::Network { .. }) => {
+                if let Some(cached) = self.read_cached_notification_list(&cache_scope_key)? {
+                    warn!("recent notification network fetch failed; returning cached page");
+                    let mut runtime = self
+                        .notifications
+                        .lock()
+                        .expect("notification runtime lock poisoned");
+                    apply_recent_page(&mut runtime, &cached);
+                    return Ok(cached);
+                }
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
         let response =
             expect_success(self, "fetch recent notifications", trace_id, response).await?;
         let value: Value = self
@@ -115,6 +135,7 @@ impl FireCore {
                 .expect("notification runtime lock poisoned");
             apply_recent_page(&mut runtime, &page);
         }
+        self.write_cached_notification_list(&cache_scope_key, &page);
         debug!(
             notification_count = page.notifications.len(),
             seen_notification_id = ?page.seen_notification_id,
@@ -132,6 +153,7 @@ impl FireCore {
         let limit = normalized_limit(limit, DEFAULT_FULL_LIMIT);
         let offset = offset.filter(|value| *value > 0);
         info!(limit, offset = ?offset, "fetching notifications page");
+        let cache_scope_key = notification_cache_scope_key("full", limit, offset);
 
         let mut query_params = vec![("limit", limit.to_string())];
         if let Some(offset) = offset {
@@ -141,7 +163,25 @@ impl FireCore {
         let traced = self
             .build_json_get_request("fetch notifications", "/notifications", query_params, &[])?
             .with_challenge_presentation(FireChallengePresentation::Foreground);
-        let (trace_id, response) = self.execute_request(traced).await?;
+        let (trace_id, response) = match self.execute_request(traced).await {
+            Ok(response) => response,
+            Err(error @ FireCoreError::Network { .. }) => {
+                if let Some(cached) = self.read_cached_notification_list(&cache_scope_key)? {
+                    warn!(
+                        offset = ?offset,
+                        "notification page network fetch failed; returning cached page"
+                    );
+                    let mut runtime = self
+                        .notifications
+                        .lock()
+                        .expect("notification runtime lock poisoned");
+                    apply_full_page(&mut runtime, &cached, offset.unwrap_or(0));
+                    return Ok(cached);
+                }
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
         let response = expect_success(self, "fetch notifications", trace_id, response).await?;
         let value: Value = self
             .read_response_json("fetch notifications", trace_id, response)
@@ -159,6 +199,7 @@ impl FireCore {
                 .expect("notification runtime lock poisoned");
             apply_full_page(&mut runtime, &page, offset.unwrap_or(0));
         }
+        self.write_cached_notification_list(&cache_scope_key, &page);
         debug!(
             notification_count = page.notifications.len(),
             next_offset = ?page.next_offset,
@@ -166,6 +207,55 @@ impl FireCore {
             "notifications page fetched successfully"
         );
         Ok(page)
+    }
+
+    fn read_cached_notification_list(
+        &self,
+        scope_key: &str,
+    ) -> Result<Option<NotificationListResponse>, FireCoreError> {
+        let auth_scope_hash = self.current_auth_scope_hash();
+        let payload = {
+            let store = self
+                .shared_store
+                .lock()
+                .expect("shared store mutex poisoned");
+            store.notification_list_cache_read(&auth_scope_hash, scope_key)?
+        };
+
+        let Some(payload) = payload else {
+            return Ok(None);
+        };
+
+        let mut cached: NotificationListResponse =
+            serde_json::from_str(&payload).map_err(|source| {
+                FireCoreError::ResponseDeserialize {
+                    operation: "cached notification list",
+                    source,
+                }
+            })?;
+        cached.is_cached = true;
+        Ok(Some(cached))
+    }
+
+    fn write_cached_notification_list(&self, scope_key: &str, response: &NotificationListResponse) {
+        let auth_scope_hash = self.current_auth_scope_hash();
+        let mut cached = response.clone();
+        cached.is_cached = false;
+        let payload = match serde_json::to_string(&cached) {
+            Ok(payload) => payload,
+            Err(error) => {
+                warn!(error = %error, "failed to serialize notification list cache payload");
+                return;
+            }
+        };
+        let result = self
+            .shared_store
+            .lock()
+            .expect("shared store mutex poisoned")
+            .notification_list_cache_write(&auth_scope_hash, scope_key, &payload);
+        if let Err(error) = result {
+            warn!(error = %error, "failed to write notification list cache");
+        }
     }
 
     pub async fn mark_notification_read(
@@ -314,9 +404,14 @@ fn normalized_limit(limit: Option<u32>, default_value: u32) -> u32 {
         .unwrap_or(default_value)
 }
 
+fn notification_cache_scope_key(kind: &str, limit: u32, offset: Option<u32>) -> String {
+    format!("{kind}|limit={limit}|offset={}", offset.unwrap_or(0))
+}
+
 fn apply_recent_page(runtime: &mut FireNotificationRuntime, page: &NotificationListResponse) {
     runtime.recent = page.notifications.clone();
     runtime.has_loaded_recent = true;
+    runtime.recent_is_cached = page.is_cached;
     runtime.recent_seen_notification_id = page.seen_notification_id;
 
     if runtime.has_loaded_full {
@@ -341,6 +436,7 @@ fn apply_full_page(
         }
     }
     runtime.has_loaded_full = true;
+    runtime.full_is_cached = page.is_cached;
     runtime.total_rows_notifications = page.total_rows_notifications;
     runtime.full_seen_notification_id = page.seen_notification_id;
     runtime.full_load_more_notifications = page.load_more_notifications.clone();
@@ -353,9 +449,11 @@ fn apply_full_page(
 
 fn merge_live_notification(runtime: &mut FireNotificationRuntime, notification: NotificationItem) {
     if runtime.has_loaded_recent {
+        runtime.recent_is_cached = false;
         insert_recent_notification(&mut runtime.recent, notification.clone());
     }
     if runtime.has_loaded_full {
+        runtime.full_is_cached = false;
         upsert_notification(&mut runtime.full, notification, true);
     }
 }
