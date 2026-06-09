@@ -564,7 +564,7 @@ final class FireTopicPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(attachment.remoteURL.absoluteString, "https://linux.do/images/emoji/twitter/smile.png?v=12")
-        XCTAssertEqual(attachment.fallbackText, "smile")
+        XCTAssertEqual(attachment.fallbackText, ":smile:")
         XCTAssertTrue(content.imageAttachments.isEmpty)
     }
 

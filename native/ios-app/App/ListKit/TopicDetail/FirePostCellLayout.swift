@@ -106,7 +106,6 @@ enum FirePostBoostDisplay {
             return [
                 String(boost.id),
                 text,
-                contentSignature(for: boost),
             ].joined(separator: "\u{1E}")
         }
         .prefix(bodyBarrageVisibleLineLimit)
