@@ -33,7 +33,8 @@ reviewer, and date.
   issue trackers, test-run artifacts, or signed review notes. Use a well-formed
   HTTP(S) URL with a hostname or a safe repo-relative path to a non-empty local
   file; placeholder hosts such as localhost, `.local`, `.test`, and `.invalid`
-  are rejected.
+  are rejected, as are malformed hosts with empty labels or labels that start or
+  end with `-`.
 - Owner, evidence-link, and notes metadata must identify real release evidence;
   fake, mock, placeholder, dummy, synthetic, TODO/TBD, `example.com`,
   `not-real`, or `not real` markers are rejected.

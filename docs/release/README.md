@@ -97,7 +97,8 @@ evidence rows are missing, duplicated, or incomplete. `Accepted` rows require
 approval/waiver context and a reason in `Notes`, for example
 `Approved by ...; reason: ...`. Evidence links must be well-formed HTTP(S) URLs
 with hostnames or safe repo-relative paths to non-empty local files; placeholder
-hosts such as localhost, `.local`, `.test`, and `.invalid` are rejected. Owner,
+hosts such as localhost, `.local`, `.test`, and `.invalid` are rejected, as are
+malformed hosts with empty labels or labels that start or end with `-`. Owner,
 evidence-link, and notes metadata must not contain fake/mock/placeholder markers.
 Dates must be real calendar dates in `YYYY-MM-DD` form. Rows with missing or
 extra Markdown table columns are rejected; keep the exact table shape and escape
@@ -118,8 +119,9 @@ duplicated, or incomplete. `Accepted` rows require approval/waiver context and a
 waiver reason in `Notes`, for example `Approved by ...; reason: ...`. Evidence
 links must be well-formed HTTP(S) URLs with hostnames or safe repo-relative paths
 to non-empty local files; placeholder hosts such as localhost, `.local`, `.test`,
-and `.invalid` are rejected. Reviewer, evidence-link, and notes metadata must
-not contain fake/mock/placeholder markers. Dates must be real calendar dates in
+and `.invalid` are rejected, as are malformed hosts with empty labels or labels
+that start or end with `-`. Reviewer, evidence-link, and notes metadata must not
+contain fake/mock/placeholder markers. Dates must be real calendar dates in
 `YYYY-MM-DD` form. Rows with missing or extra Markdown table columns are
 rejected; keep the exact table shape and escape literal `|` characters in cell
 text.
@@ -178,12 +180,13 @@ must also include explicit waiver/approval language and a reason in `Notes`,
 such as `Approved by ...; reason: ...`; vague status notes do not close a manual
 gate. Evidence links must be well-formed HTTP(S) URLs with hostnames or safe
 repo-relative paths to non-empty local files; placeholder hosts such as
-localhost, `.local`, `.test`, and `.invalid` are rejected. Manual evidence
-verifiers also reject completed or accepted rows whose owner, reviewer, tester,
-device, result, evidence-link, or notes metadata still contain fake, mock,
-placeholder, dummy, synthetic, TODO/TBD, `example.com`, `not-real`, or `not real`
-markers, whose dates are impossible calendar dates, or whose rows have missing
-or extra Markdown table columns.
+localhost, `.local`, `.test`, and `.invalid` are rejected, as are malformed hosts
+with empty labels or labels that start or end with `-`. Manual evidence verifiers
+also reject completed or accepted rows whose owner, reviewer, tester, device,
+result, evidence-link, or notes metadata still contain fake, mock, placeholder,
+dummy, synthetic, TODO/TBD, `example.com`, `not-real`, or `not real` markers,
+whose dates are impossible calendar dates, or whose rows have missing or extra
+Markdown table columns.
 
 The roadmap acceptance boxes can also be checked directly:
 

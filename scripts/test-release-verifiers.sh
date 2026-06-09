@@ -210,6 +210,7 @@ def write_release_gate(
     placeholder_owner=False,
     invalid_date=False,
     malformed_url=False,
+    malformed_host=False,
     extra_column=False,
     escaped_pipe=False,
     missing_trailing_pipe=False,
@@ -235,6 +236,8 @@ def write_release_gate(
             if missing_local_link and index == 0
             else "https:///release-0"
             if malformed_url and index == 0
+            else "https://bad-.github.com/release-0"
+            if malformed_host and index == 0
             else "https://evidence.local/release-0"
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{1000 + index}"
@@ -267,6 +270,7 @@ def write_internal(
     placeholder_owner=False,
     invalid_date=False,
     malformed_url=False,
+    malformed_host=False,
     extra_column=False,
     escaped_pipe=False,
     missing_trailing_pipe=False,
@@ -297,6 +301,8 @@ def write_internal(
             if missing_local_link and index == 0
             else "https:///internal-0"
             if malformed_url and index == 0
+            else "https://bad-.github.com/internal-0"
+            if malformed_host and index == 0
             else "https://localhost/internal-0"
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{2000 + index}"
@@ -332,6 +338,7 @@ def write_privacy(
     placeholder_reviewer=False,
     invalid_date=False,
     malformed_url=False,
+    malformed_host=False,
     extra_column=False,
     escaped_pipe=False,
     missing_trailing_pipe=False,
@@ -359,6 +366,8 @@ def write_privacy(
             if missing_local_link and index == 0
             else "https:///privacy-0"
             if malformed_url and index == 0
+            else "https://bad-.github.com/privacy-0"
+            if malformed_host and index == 0
             else "https://review.invalid/privacy-0"
             if placeholder_url and index == 0
             else f"https://github.com/peterich-rs/fire/issues/{3000 + index}"
@@ -575,6 +584,7 @@ write_internal(fixture / "internal-weak-invite.md", weak_invite_note=True)
 write_internal(fixture / "internal-weak-feedback.md", weak_feedback_note=True)
 write_internal(fixture / "internal-missing-link.md", missing_local_link=True)
 write_internal(fixture / "internal-malformed-url.md", malformed_url=True)
+write_internal(fixture / "internal-malformed-host.md", malformed_host=True)
 write_internal(fixture / "internal-placeholder-url.md", placeholder_url=True)
 write_internal(fixture / "internal-duplicate-row.md", duplicate_row=True)
 write_internal(fixture / "internal-placeholder-owner.md", placeholder_owner=True)
@@ -599,6 +609,7 @@ write_privacy(
 )
 write_privacy(fixture / "privacy-missing-link.md", missing_local_link=True)
 write_privacy(fixture / "privacy-malformed-url.md", malformed_url=True)
+write_privacy(fixture / "privacy-malformed-host.md", malformed_host=True)
 write_privacy(fixture / "privacy-placeholder-url.md", placeholder_url=True)
 write_privacy(fixture / "privacy-duplicate-row.md", duplicate_row=True)
 write_privacy(fixture / "privacy-placeholder-reviewer.md", placeholder_reviewer=True)
@@ -619,6 +630,7 @@ write_release_gate(
 )
 write_release_gate(fixture / "release-gates-missing-link.md", missing_local_link=True)
 write_release_gate(fixture / "release-gates-malformed-url.md", malformed_url=True)
+write_release_gate(fixture / "release-gates-malformed-host.md", malformed_host=True)
 write_release_gate(fixture / "release-gates-placeholder-url.md", placeholder_url=True)
 write_release_gate(fixture / "release-gates-placeholder-owner.md", placeholder_owner=True)
 write_release_gate(fixture / "release-gates-invalid-date.md", invalid_date=True)
@@ -828,6 +840,9 @@ expect_fail_contains "release gates reject missing local evidence path" \
 expect_fail_contains "release gates reject malformed evidence URL" \
   "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
   scripts/verify-release-gates.sh "$fixture/release-gates-malformed-url.md"
+expect_fail_contains "release gates reject malformed evidence URL host" \
+  "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
+  scripts/verify-release-gates.sh "$fixture/release-gates-malformed-host.md"
 expect_fail_contains "release gates reject placeholder evidence URL host" "$marker_failure" \
   scripts/verify-release-gates.sh "$fixture/release-gates-placeholder-url.md"
 expect_fail_contains "release gates reject placeholder owner metadata" \
@@ -875,6 +890,9 @@ expect_fail_contains "internal testing rejects missing local evidence path" \
 expect_fail_contains "internal testing rejects malformed evidence URL" \
   "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-malformed-url.md"
+expect_fail_contains "internal testing rejects malformed evidence URL host" \
+  "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-malformed-host.md"
 expect_fail_contains "internal testing rejects placeholder evidence URL host" "$marker_failure" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-placeholder-url.md"
 expect_fail_contains "internal testing rejects duplicate required row" \
@@ -914,6 +932,9 @@ expect_fail_contains "privacy review rejects missing local evidence path" \
 expect_fail_contains "privacy review rejects malformed evidence URL" \
   "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-malformed-url.md"
+expect_fail_contains "privacy review rejects malformed evidence URL host" \
+  "evidence link must be an HTTP(S) URL or safe repo-relative file path" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-malformed-host.md"
 expect_fail_contains "privacy review rejects placeholder evidence URL host" "$marker_failure" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-placeholder-url.md"
 expect_fail_contains "privacy review rejects duplicate required row" \

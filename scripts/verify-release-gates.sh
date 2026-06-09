@@ -120,8 +120,26 @@ function contains_accepted_waiver_metadata(value) {
       value ~ /[Nn]o-ship/)
 }
 
+function has_valid_http_host(value, host, label_count, labels, label_index) {
+  host = value
+  sub(/^https?:\/\//, "", host)
+  sub(/[\/?#].*$/, "", host)
+  sub(/:[0-9]+$/, "", host)
+  if (host == "" || length(host) > 253 || host ~ /^[.]|[.]$/ || host ~ /[.][.]/) {
+    return 0
+  }
+  label_count = split(host, labels, ".")
+  for (label_index = 1; label_index <= label_count; label_index += 1) {
+    if (labels[label_index] == "" || length(labels[label_index]) > 63 || labels[label_index] ~ /^-/ || labels[label_index] ~ /-$/) {
+      return 0
+    }
+  }
+  return 1
+}
+
 function is_http_url(value) {
-  return value ~ /^https?:\/\/[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]+)?([\/?#][^[:space:]]*)?$/
+  return value ~ /^https?:\/\/[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]+)?([\/?#][^[:space:]]*)?$/ &&
+    has_valid_http_host(value)
 }
 
 function is_safe_repo_path(value) {
