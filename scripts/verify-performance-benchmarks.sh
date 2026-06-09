@@ -2,13 +2,14 @@
 set -euo pipefail
 
 benchmark_file="${1:-docs/release/performance-benchmarks.md}"
+evidence_today="${FIRE_RELEASE_EVIDENCE_TODAY:-$(date +%F)}"
 
 if [[ ! -f "$benchmark_file" ]]; then
   echo "performance benchmark file not found: $benchmark_file" >&2
   exit 2
 fi
 
-awk '
+awk -v evidence_today="$evidence_today" '
 BEGIN {
   required_metric["Cold start to home visible"] = 1
   required_metric["Home feed scroll fluency"] = 1
@@ -78,6 +79,10 @@ function is_valid_date(value, year, month, day, max_day) {
     max_day = is_leap_year(year) ? 29 : 28
   }
   return day <= max_day
+}
+
+function is_future_date(value) {
+  return value > evidence_today
 }
 
 function contains_fake_evidence_marker(value, normalized) {
@@ -333,6 +338,8 @@ in_results_log && /^\|/ {
 
   if (!is_valid_date(date)) {
     fail(row_label, "date must be a valid YYYY-MM-DD calendar date")
+  } else if (is_future_date(date)) {
+    fail(row_label, "date must not be in the future")
   }
 
   if (commit !~ /^[0-9a-fA-F]{7,40}$/) {

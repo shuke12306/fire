@@ -2,13 +2,14 @@
 set -euo pipefail
 
 evidence_file="${1:-docs/release/internal-testing-evidence.md}"
+evidence_today="${FIRE_RELEASE_EVIDENCE_TODAY:-$(date +%F)}"
 
 if [[ ! -f "$evidence_file" ]]; then
   echo "internal testing evidence file not found: $evidence_file" >&2
   exit 2
 fi
 
-awk '
+awk -v evidence_today="$evidence_today" '
 BEGIN {
   required["iOS" SUBSEP "App Store Connect record"] = 1
   required["Android" SUBSEP "Play Console record"] = 1
@@ -103,6 +104,10 @@ function is_valid_date(value, year, month, day, max_day) {
     max_day = is_leap_year(year) ? 29 : 28
   }
   return day <= max_day
+}
+
+function is_future_date(value) {
+  return value > evidence_today
 }
 
 function contains_fake_evidence_marker(value, normalized) {
@@ -220,6 +225,8 @@ in_required_evidence && /^\|/ {
 
   if (!is_valid_date(date)) {
     fail(row_label, "date must be a valid YYYY-MM-DD calendar date")
+  } else if (is_future_date(date)) {
+    fail(row_label, "date must not be in the future")
   }
 
   if (!(platform == "iOS" || platform == "Android")) {

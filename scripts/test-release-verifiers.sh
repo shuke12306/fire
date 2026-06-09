@@ -217,6 +217,7 @@ def write_release_gate(
     placeholder_url=False,
     placeholder_owner=False,
     invalid_date=False,
+    future_date=False,
     malformed_url=False,
     malformed_host=False,
     single_label_url=False,
@@ -256,7 +257,13 @@ def write_release_gate(
             else f"https://github.com/peterich-rs/fire/issues/{1000 + index}"
         )
         owner = "placeholder owner" if placeholder_owner and index == 0 else "Release owner"
-        date = "2026-02-30" if invalid_date and index == 0 else "2026-06-09"
+        date = (
+            "2026-02-30"
+            if invalid_date and index == 0
+            else "2999-01-01"
+            if future_date and index == 0
+            else "2026-06-09"
+        )
         if escaped_pipe and index == 0:
             note += " escaped \\| separator"
         row = (
@@ -283,6 +290,7 @@ def write_internal(
     duplicate_row=False,
     placeholder_owner=False,
     invalid_date=False,
+    future_date=False,
     malformed_url=False,
     malformed_host=False,
     single_label_url=False,
@@ -327,7 +335,13 @@ def write_internal(
             else f"https://github.com/peterich-rs/fire/issues/{2000 + index}"
         )
         owner = "TODO owner" if placeholder_owner and index == 0 else "Release owner"
-        date = "2026-02-30" if invalid_date and index == 0 else "2026-06-09"
+        date = (
+            "2026-02-30"
+            if invalid_date and index == 0
+            else "2999-01-01"
+            if future_date and index == 0
+            else "2026-06-09"
+        )
         if escaped_pipe and index == 0:
             note += " escaped \\| separator"
         row = (
@@ -357,6 +371,7 @@ def write_privacy(
     duplicate_row=False,
     placeholder_reviewer=False,
     invalid_date=False,
+    future_date=False,
     malformed_url=False,
     malformed_host=False,
     single_label_url=False,
@@ -398,7 +413,13 @@ def write_privacy(
             else f"https://github.com/peterich-rs/fire/issues/{3000 + index}"
         )
         reviewer = "TBD reviewer" if placeholder_reviewer and index == 0 else "Reviewer"
-        date = "2026-02-30" if invalid_date and index == 0 else "2026-06-09"
+        date = (
+            "2026-02-30"
+            if invalid_date and index == 0
+            else "2999-01-01"
+            if future_date and index == 0
+            else "2026-06-09"
+        )
         if escaped_pipe and index == 0:
             note += " escaped \\| separator"
         row = (
@@ -440,6 +461,7 @@ def write_performance(
     memory_double_peak_miss=False,
     fake_device=False,
     invalid_date=False,
+    future_date=False,
     duplicate_row=False,
     extra_column=False,
     escaped_pipe=False,
@@ -463,7 +485,13 @@ def write_performance(
     for index, (platform, device, metric) in enumerate(entries):
         note = "Measured on release candidate"
         status = "Pass"
-        date = "2026-02-30" if invalid_date and index == 0 else "2026-06-09"
+        date = (
+            "2026-02-30"
+            if invalid_date and index == 0
+            else "2999-01-01"
+            if future_date and index == 0
+            else "2026-06-09"
+        )
         if fake_device and index == 0:
             device = "Mock Phone"
         result = "OK" if invalid_result and index == 0 else performance_result(metric)
@@ -506,6 +534,7 @@ def write_accessibility(
     accepted_note=None,
     fake_tester=False,
     invalid_date=False,
+    future_date=False,
     duplicate_row=False,
     duplicate_audit_row=False,
     extra_column=False,
@@ -525,7 +554,13 @@ def write_accessibility(
         device = "iPhone 15 Pro" if platform == "iOS" else "Pixel 8 Pro"
         for screen in screens + audits:
             tester = "Fake Tester" if fake_tester and row_index == 0 else "Tester"
-            date = "2026-02-30" if invalid_date and row_index == 0 else "2026-06-09"
+            date = (
+                "2026-02-30"
+                if invalid_date and row_index == 0
+                else "2999-01-01"
+                if future_date and row_index == 0
+                else "2026-06-09"
+            )
             note = "Audited on release candidate"
             result = "Pass"
             if row_index == 0 and accepted_note:
@@ -584,6 +619,7 @@ write_performance(fixture / "performance-memory-peak-suffix.md", memory_peak_suf
 write_performance(fixture / "performance-memory-double-peak-miss.md", memory_double_peak_miss=True)
 write_performance(fixture / "performance-fake-device.md", fake_device=True)
 write_performance(fixture / "performance-invalid-date.md", invalid_date=True)
+write_performance(fixture / "performance-future-date.md", future_date=True)
 write_performance(fixture / "performance-duplicate-row.md", duplicate_row=True)
 write_performance(fixture / "performance-extra-column.md", extra_column=True)
 write_performance(fixture / "performance-escaped-pipe.md", escaped_pipe=True)
@@ -604,6 +640,7 @@ write_accessibility(fixture / "accessibility-not-real.md", marker="not-real")
 write_accessibility(fixture / "accessibility-not-real-space.md", marker="not real")
 write_accessibility(fixture / "accessibility-fake-tester.md", fake_tester=True)
 write_accessibility(fixture / "accessibility-invalid-date.md", invalid_date=True)
+write_accessibility(fixture / "accessibility-future-date.md", future_date=True)
 write_accessibility(fixture / "accessibility-duplicate-row.md", duplicate_row=True)
 write_accessibility(fixture / "accessibility-duplicate-audit-row.md", duplicate_audit_row=True)
 write_accessibility(fixture / "accessibility-extra-column.md", extra_column=True)
@@ -631,6 +668,7 @@ write_internal(fixture / "internal-placeholder-url.md", placeholder_url=True)
 write_internal(fixture / "internal-duplicate-row.md", duplicate_row=True)
 write_internal(fixture / "internal-placeholder-owner.md", placeholder_owner=True)
 write_internal(fixture / "internal-invalid-date.md", invalid_date=True)
+write_internal(fixture / "internal-future-date.md", future_date=True)
 write_internal(fixture / "internal-extra-column.md", extra_column=True)
 write_internal(fixture / "internal-escaped-pipe.md", escaped_pipe=True)
 write_internal(fixture / "internal-missing-trailing-pipe.md", missing_trailing_pipe=True)
@@ -658,6 +696,7 @@ write_privacy(fixture / "privacy-placeholder-url.md", placeholder_url=True)
 write_privacy(fixture / "privacy-duplicate-row.md", duplicate_row=True)
 write_privacy(fixture / "privacy-placeholder-reviewer.md", placeholder_reviewer=True)
 write_privacy(fixture / "privacy-invalid-date.md", invalid_date=True)
+write_privacy(fixture / "privacy-future-date.md", future_date=True)
 write_privacy(fixture / "privacy-extra-column.md", extra_column=True)
 write_privacy(fixture / "privacy-escaped-pipe.md", escaped_pipe=True)
 write_privacy(fixture / "privacy-missing-trailing-pipe.md", missing_trailing_pipe=True)
@@ -680,6 +719,7 @@ write_release_gate(fixture / "release-gates-single-label-url.md", single_label_u
 write_release_gate(fixture / "release-gates-placeholder-url.md", placeholder_url=True)
 write_release_gate(fixture / "release-gates-placeholder-owner.md", placeholder_owner=True)
 write_release_gate(fixture / "release-gates-invalid-date.md", invalid_date=True)
+write_release_gate(fixture / "release-gates-future-date.md", future_date=True)
 write_release_gate(fixture / "release-gates-extra-column.md", extra_column=True)
 write_release_gate(fixture / "release-gates-escaped-pipe.md", escaped_pipe=True)
 write_release_gate(fixture / "release-gates-missing-trailing-pipe.md", missing_trailing_pipe=True)
@@ -936,6 +976,9 @@ expect_fail_contains "release gates reject placeholder owner metadata" \
 expect_fail_contains "release gates reject invalid calendar date" \
   "date must be a valid YYYY-MM-DD calendar date" \
   scripts/verify-release-gates.sh "$fixture/release-gates-invalid-date.md"
+expect_fail_contains "release gates reject future dates" \
+  "date must not be in the future" \
+  scripts/verify-release-gates.sh "$fixture/release-gates-future-date.md"
 expect_fail_contains "release gates reject extra Markdown table column" \
   "row has extra Markdown table columns" \
   scripts/verify-release-gates.sh "$fixture/release-gates-extra-column.md"
@@ -995,6 +1038,9 @@ expect_fail_contains "internal testing rejects placeholder owner metadata" \
 expect_fail_contains "internal testing rejects invalid calendar date" \
   "date must be a valid YYYY-MM-DD calendar date" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-invalid-date.md"
+expect_fail_contains "internal testing rejects future dates" \
+  "date must not be in the future" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-future-date.md"
 expect_fail_contains "internal testing rejects extra Markdown table column" \
   "row has extra Markdown table columns" \
   scripts/verify-internal-testing-evidence.sh "$fixture/internal-extra-column.md"
@@ -1043,6 +1089,9 @@ expect_fail_contains "privacy review rejects placeholder reviewer metadata" \
 expect_fail_contains "privacy review rejects invalid calendar date" \
   "date must be a valid YYYY-MM-DD calendar date" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-invalid-date.md"
+expect_fail_contains "privacy review rejects future dates" \
+  "date must not be in the future" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-future-date.md"
 expect_fail_contains "privacy review rejects extra Markdown table column" \
   "row has extra Markdown table columns" \
   scripts/verify-privacy-review-evidence.sh "$fixture/privacy-extra-column.md"
@@ -1062,6 +1111,9 @@ expect_fail_contains "performance rejects fake device metadata" \
 expect_fail_contains "performance rejects invalid calendar date" \
   "date must be a valid YYYY-MM-DD calendar date" \
   scripts/verify-performance-benchmarks.sh "$fixture/performance-invalid-date.md"
+expect_fail_contains "performance rejects future dates" \
+  "date must not be in the future" \
+  scripts/verify-performance-benchmarks.sh "$fixture/performance-future-date.md"
 expect_fail_contains "performance rejects duplicate metric rows" \
   "duplicate performance benchmark result row" \
   scripts/verify-performance-benchmarks.sh "$fixture/performance-duplicate-row.md"
@@ -1093,6 +1145,9 @@ expect_fail_contains "accessibility rejects fake tester metadata" \
 expect_fail_contains "accessibility rejects invalid calendar date" \
   "date must be a valid YYYY-MM-DD calendar date" \
   scripts/verify-accessibility-audit.sh "$fixture/accessibility-invalid-date.md"
+expect_fail_contains "accessibility rejects future dates" \
+  "date must not be in the future" \
+  scripts/verify-accessibility-audit.sh "$fixture/accessibility-future-date.md"
 expect_fail_contains "accessibility rejects duplicate screen rows" \
   "duplicate accessibility screen result row" \
   scripts/verify-accessibility-audit.sh "$fixture/accessibility-duplicate-row.md"

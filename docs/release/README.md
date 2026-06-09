@@ -60,9 +60,10 @@ memory rows with multiple values must label the peak value with `peak`, such as
 verifier compares the highest labelled peak. Device, build type, result, and
 notes metadata must not contain fake/mock/placeholder markers or placeholder URL
 hosts such as localhost, `.local`, `.test`, and `.invalid`. Dates must be real
-calendar dates in `YYYY-MM-DD` form. Duplicate platform/metric rows and rows
-with missing or extra Markdown table columns are rejected; keep the exact table
-shape and escape literal `|` characters in cell text.
+calendar dates in `YYYY-MM-DD` form and must not be in the future. Duplicate
+platform/metric rows and rows with missing or extra Markdown table columns are
+rejected; keep the exact table shape and escape literal `|` characters in cell
+text.
 
 ## Accessibility Evidence
 
@@ -78,12 +79,12 @@ The verifier is expected to fail while the results log is empty, while any
 required screen or audit category lacks iOS/Android coverage, or while blocking
 failures lack an accepted disposition with approval/waiver context and a reason
 in `Notes`, for example `Approved by ...; reason: ...`. Dates must be real
-calendar dates in `YYYY-MM-DD` form. Tester, device, and notes metadata must not
-contain fake/mock/placeholder markers or placeholder URL hosts such as localhost,
-`.local`, `.test`, and `.invalid`. Duplicate platform/screen or platform/audit
-coverage rows and rows with missing or extra Markdown table columns are
-rejected; keep the exact table shape and escape literal `|` characters in cell
-text.
+calendar dates in `YYYY-MM-DD` form and must not be in the future. Tester,
+device, and notes metadata must not contain fake/mock/placeholder markers or
+placeholder URL hosts such as localhost, `.local`, `.test`, and `.invalid`.
+Duplicate platform/screen or platform/audit coverage rows and rows with missing
+or extra Markdown table columns are rejected; keep the exact table shape and
+escape literal `|` characters in cell text.
 
 ## Internal Testing Evidence
 
@@ -105,9 +106,9 @@ placeholder hosts such as localhost, `.local`, `.test`, and `.invalid`, and
 malformed hosts with empty labels or labels that start or end with `-` are
 rejected. Owner, evidence-link, and notes metadata must not contain
 fake/mock/placeholder markers.
-Dates must be real calendar dates in `YYYY-MM-DD` form. Rows with missing or
-extra Markdown table columns are rejected; keep the exact table shape and escape
-literal `|` characters in cell text.
+Dates must be real calendar dates in `YYYY-MM-DD` form and must not be in the
+future. Rows with missing or extra Markdown table columns are rejected; keep the
+exact table shape and escape literal `|` characters in cell text.
 
 ## Privacy Review Evidence
 
@@ -128,10 +129,9 @@ evidence links. Single-label URL hosts, placeholder hosts such as localhost,
 `.local`, `.test`, and `.invalid`, and malformed hosts with empty labels or
 labels that start or end with `-` are rejected. Reviewer, evidence-link, and
 notes metadata must not contain fake/mock/placeholder markers. Dates must be
-real calendar dates in
-`YYYY-MM-DD` form. Rows with missing or extra Markdown table columns are
-rejected; keep the exact table shape and escape literal `|` characters in cell
-text.
+real calendar dates in `YYYY-MM-DD` form and must not be in the future. Rows
+with missing or extra Markdown table columns are rejected; keep the exact table
+shape and escape literal `|` characters in cell text.
 
 ## Manual Release Inputs
 
@@ -169,7 +169,7 @@ evidence is missing, that fake-evidence markers, malformed store media,
 flat PNG placeholders, non-measurement performance results, target misses marked
 `Pass`, ambiguous or misleading multi-value memory results, duplicate manual
 evidence rows, duplicate performance/accessibility screen or audit coverage
-rows, invalid calendar dates, placeholder metadata fields, dead local evidence
+rows, invalid or future dates, placeholder metadata fields, dead local evidence
 paths, malformed evidence URLs, malformed URL hosts, placeholder URL hosts, extra
 Markdown table columns, missing Markdown table boundaries, and weak
 accepted-waiver notes are rejected, and that checked P4 roadmap acceptance is
@@ -195,7 +195,8 @@ verifiers also reject completed or
 accepted rows whose owner, reviewer, tester, device, result, evidence-link, or
 notes metadata still contain fake, mock, placeholder, dummy, synthetic, TODO/TBD,
 `example.com`, `not-real`, or `not real` markers, whose dates are impossible
-calendar dates, or whose rows have missing or extra Markdown table columns.
+calendar dates or future dates, or whose rows have missing or extra Markdown
+table columns.
 
 The roadmap acceptance boxes can also be checked directly:
 

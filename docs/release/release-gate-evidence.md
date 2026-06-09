@@ -42,7 +42,8 @@ reviewer, and date.
 - Keep exactly one row for every required gate in the table above. Do not rename,
   add, or remove gate rows; `scripts/verify-release-gates.sh` treats the exact
   gate names as the release-readiness contract.
-- `Date` must be a real calendar date in `YYYY-MM-DD` form.
+- `Date` must be a real calendar date in `YYYY-MM-DD` form and must not be in
+  the future.
 - Rows with missing or extra Markdown table columns are rejected; keep the exact
   table shape and escape literal `|` characters in cell text.
 - Record only release-candidate evidence. Simulator and emulator smoke runs may

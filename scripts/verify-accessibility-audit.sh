@@ -2,13 +2,14 @@
 set -euo pipefail
 
 audit_file="${1:-docs/release/accessibility-audit-checklist.md}"
+evidence_today="${FIRE_RELEASE_EVIDENCE_TODAY:-$(date +%F)}"
 
 if [[ ! -f "$audit_file" ]]; then
   echo "accessibility audit file not found: $audit_file" >&2
   exit 2
 fi
 
-awk '
+awk -v evidence_today="$evidence_today" '
 BEGIN {
   required_screen["Login and Cloudflare flow"] = 1
   required_screen["Home feed"] = 1
@@ -90,6 +91,10 @@ function is_valid_date(value, year, month, day, max_day) {
     max_day = is_leap_year(year) ? 29 : 28
   }
   return day <= max_day
+}
+
+function is_future_date(value) {
+  return value > evidence_today
 }
 
 function contains_fake_evidence_marker(value, normalized) {
@@ -182,6 +187,8 @@ in_results_log && /^\|/ {
 
   if (!is_valid_date(date)) {
     fail(row_label, "date must be a valid YYYY-MM-DD calendar date")
+  } else if (is_future_date(date)) {
+    fail(row_label, "date must not be in the future")
   }
 
   if (tester == "") {

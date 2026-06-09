@@ -28,7 +28,8 @@ Record one row for each review area below:
 
 - Record each required review area exactly once; duplicate rows are rejected so
   the release evidence remains unambiguous.
-- `Date` must be a real calendar date in `YYYY-MM-DD` form.
+- `Date` must be a real calendar date in `YYYY-MM-DD` form and must not be in
+  the future.
 - Rows with missing or extra Markdown table columns are rejected; keep the exact
   table shape and escape literal `|` characters in cell text.
 - `Status` must be `Complete` or `Accepted`.
