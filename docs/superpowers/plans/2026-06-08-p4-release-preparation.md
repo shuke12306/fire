@@ -26,7 +26,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-roadmap-architecture-constraints.sh` -- roadmap architecture/platform-boundary verifier for minimum APIs, native runtime paths, and reference boundaries.
 - `scripts/verify-roadmap-implementation-evidence.sh` -- checked P1-P3 roadmap implementation evidence verifier.
 - `scripts/verify-roadmap-p4-acceptance.sh` -- roadmap P4 acceptance verifier that keeps checked boxes tied to the shared P4 evidence suite.
-- `scripts/test-release-verifiers.sh` -- temporary-fixture regression tests for release evidence parsers, fake-evidence markers, marketing asset validation, and checked P4 acceptance guards.
+- `scripts/test-release-verifiers.sh` -- temporary-fixture regression tests for release-readiness wrapper wiring, release evidence parsers, fake-evidence markers, marketing asset validation, and checked P4 acceptance guards.
 - `scripts/benchmark-*.sh` -- benchmark workflows for cold start, scroll fluency, topic load, and memory.
 - `native/android-app/src/main/AndroidManifest.xml` -- Android backup is release-disabled with `allowBackup="false"`.
 - `native/android-app/src/main/res/xml/backup_rules.xml` -- all-exclude Android Auto Backup rules.
@@ -220,7 +220,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-roadmap-architecture-constraints.sh` is expected to pass while the platform/Rust ownership split, minimum API targets, iOS topic-detail native runtime path, and reference/infrastructure boundaries stay intact.
 - `scripts/verify-roadmap-implementation-evidence.sh` is expected to pass while checked P1-P3 acceptance code paths remain present; it does not prove P4 release readiness.
 - `scripts/verify-roadmap-p4-acceptance.sh` is expected to pass while P4 roadmap acceptance remains unchecked, and to fail if any acceptance box is checked before the shared P4 evidence suite passes.
-- `scripts/test-release-verifiers.sh` is expected to pass without real manual evidence because it uses isolated temporary fixtures to regression-test the release verifiers themselves, including fake-evidence marker rejection and malformed store-media failures.
+- `scripts/test-release-verifiers.sh` is expected to pass without real manual evidence because it uses isolated temporary fixtures to regression-test the release verifiers themselves, including release-readiness wrapper wiring, fake-evidence marker rejection, and malformed store-media failures.
 - Roadmap P4 acceptance remains unchecked until manual evidence exists.
 
 ## File Change Summary
@@ -273,7 +273,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-roadmap-architecture-constraints.sh` -- verifies minimum API targets, platform/Rust ownership boundaries, the iOS topic-detail native runtime path, and reference/infrastructure repository boundaries.
 - `scripts/verify-roadmap-implementation-evidence.sh` -- verifies checked P1-P3 acceptance code evidence remains present.
 - `scripts/verify-roadmap-p4-acceptance.sh` -- verifies exact roadmap P4 acceptance rows and requires the shared P4 evidence suite before checked acceptance.
-- `scripts/test-release-verifiers.sh` -- regression-tests release verifier failure modes with temporary fixtures, including fake evidence and malformed store-media cases.
+- `scripts/test-release-verifiers.sh` -- regression-tests release verifier failure modes with temporary fixtures, including release-readiness wrapper wiring, fake evidence, and malformed store-media cases.
 - `rust/crates/fire-core/src/core/persistence.rs` -- writes redacted session exports through the redacted envelope.
 - `rust/crates/fire-core/src/session_store.rs` -- creates versioned redacted envelopes with auth cookies stripped.
 - `rust/crates/fire-core/tests/session_flow.rs` -- covers redacted JSON and file persistence restore behavior.

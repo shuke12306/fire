@@ -339,6 +339,9 @@ suite_env=(
 expect_pass "P4 release evidence suite accepts complete fixtures" \
   "${suite_env[@]}" scripts/verify-p4-release-evidence-suite.sh
 
+expect_pass "release readiness accepts complete fixture evidence" \
+  "${suite_env[@]}" scripts/verify-release-readiness.sh
+
 expect_fail_contains "P4 release evidence suite rejects missing marketing asset" \
   "Play Store feature graphic" \
   env \
@@ -349,6 +352,17 @@ expect_fail_contains "P4 release evidence suite rejects missing marketing asset"
   "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
   "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
   scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "release readiness rejects missing lower-level fixture evidence" \
+  "Release readiness verification failed" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-missing-feature" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-release-readiness.sh
 
 expect_fail_contains "P4 release evidence suite rejects fake marketing filename" \
   "asset filename must not contain" \
