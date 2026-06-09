@@ -155,7 +155,7 @@ def png_file(root: Path, path: str, width: int, height: int):
         + chunk(b"IEND", b"")
     )
 
-def write_marketing(root: Path, include_feature_graphic=True):
+def write_marketing(root: Path, include_feature_graphic=True, mutation="valid"):
     screenshots = [
         "native/ios-app/marketing/screenshots/iPhone6.5/final-phone.png",
         "native/ios-app/marketing/screenshots/iPhone5.5/final-phone.png",
@@ -173,7 +173,24 @@ def write_marketing(root: Path, include_feature_graphic=True):
     preview.parent.mkdir(parents=True, exist_ok=True)
     preview.write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42")
 
-def write_release_gate(path: Path):
+    if mutation == "fake-filename":
+        png_file(root, "native/android-app/marketing/screenshots/phone/not-real-phone.png", 320, 320)
+    elif mutation == "tiny-screenshot":
+        png_file(root, "native/android-app/marketing/screenshots/phone/final-phone.png", 319, 319)
+    elif mutation == "malformed-png":
+        target = root / "native/android-app/marketing/screenshots/phone/final-phone.png"
+        target.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">II", 320, 320)
+            + b"\x08\x02\x00\x00\x00"
+            + b"\x00\x00\x00\x00"
+        )
+    elif mutation == "invalid-mp4":
+        preview.write_bytes(b"not an mp4")
+
+def write_release_gate(path: Path, marker=""):
     lines = [
         "# Release Gate Evidence",
         "",
@@ -183,13 +200,16 @@ def write_release_gate(path: Path):
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for index, gate in enumerate(release_gates):
+        note = "Completed release evidence"
+        if index == 0 and marker:
+            note += f" {marker}"
         lines.append(
             f"| {gate} | Required evidence | Release owner | Complete | "
-            f"docs/release/evidence-{index}.md | 2026-06-09 | Completed release evidence |"
+            f"docs/release/evidence-{index}.md | 2026-06-09 | {note} |"
         )
     path.write_text("\n".join(lines) + "\n")
 
-def write_internal(path: Path):
+def write_internal(path: Path, marker=""):
     lines = [
         "# Internal Testing Evidence",
         "",
@@ -199,13 +219,15 @@ def write_internal(path: Path):
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for index, (platform, gate, note) in enumerate(internal_rows):
+        if index == 0 and marker:
+            note += f" {marker}"
         lines.append(
             f"| 2026-06-09 | {platform} | {gate} | Release owner | Complete | "
             f"docs/release/internal-{index}.md | {note} |"
         )
     path.write_text("\n".join(lines) + "\n")
 
-def write_privacy(path: Path):
+def write_privacy(path: Path, marker=""):
     lines = [
         "# Privacy Review Evidence",
         "",
@@ -216,13 +238,15 @@ def write_privacy(path: Path):
     ]
     for index, area in enumerate(privacy_areas):
         note = "Release publication approval complete" if area == "Final publication approval" else "Review complete"
+        if index == 0 and marker:
+            note += f" {marker}"
         lines.append(
             f"| 2026-06-09 | {area} | Reviewer | Complete | "
             f"docs/release/privacy-{index}.md | {note} |"
         )
     path.write_text("\n".join(lines) + "\n")
 
-def write_performance(path: Path, omit_last=False):
+def write_performance(path: Path, omit_last=False, marker=""):
     lines = [
         "# Fire Performance Benchmarks",
         "",
@@ -238,14 +262,17 @@ def write_performance(path: Path, omit_last=False):
             entries.append((platform, device, metric))
     if omit_last:
         entries.pop()
-    for platform, device, metric in entries:
+    for index, (platform, device, metric) in enumerate(entries):
+        note = "Measured on release candidate"
+        if index == 0 and marker:
+            note += f" {marker}"
         lines.append(
             f"| 2026-06-09 | abc1234 | {platform} | {device} | Release archive | "
-            f"{metric} | OK | Pass | Measured on release candidate |"
+            f"{metric} | OK | Pass | {note} |"
         )
     path.write_text("\n".join(lines) + "\n")
 
-def write_accessibility(path: Path):
+def write_accessibility(path: Path, marker=""):
     lines = [
         "# Fire Accessibility Audit Checklist",
         "",
@@ -254,24 +281,43 @@ def write_accessibility(path: Path):
         "| Date | Tester | Platform | Device | Screen | Result | Notes |",
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
+    row_index = 0
     for platform in ("iOS", "Android"):
         device = "iPhone 15 Pro" if platform == "iOS" else "Pixel 8 Pro"
         for screen in screens + audits:
+            note = "Audited on release candidate"
+            if row_index == 0 and marker:
+                note += f" {marker}"
             lines.append(
                 f"| 2026-06-09 | Tester | {platform} | {device} | {screen} | "
-                f"Pass | Audited on release candidate |"
+                f"Pass | {note} |"
             )
+            row_index += 1
     path.write_text("\n".join(lines) + "\n")
 
 fixture = tmp / "fixture"
 write_marketing(fixture / "marketing")
 write_marketing(fixture / "marketing-missing-feature", include_feature_graphic=False)
+write_marketing(fixture / "marketing-fake-filename", mutation="fake-filename")
+write_marketing(fixture / "marketing-tiny-screenshot", mutation="tiny-screenshot")
+write_marketing(fixture / "marketing-malformed-png", mutation="malformed-png")
+write_marketing(fixture / "marketing-invalid-mp4", mutation="invalid-mp4")
 write_performance(fixture / "performance.md")
 write_performance(fixture / "performance-missing.md", omit_last=True)
+write_performance(fixture / "performance-not-real.md", marker="not-real")
+write_performance(fixture / "performance-not-real-space.md", marker="not real")
 write_accessibility(fixture / "accessibility.md")
+write_accessibility(fixture / "accessibility-not-real.md", marker="not-real")
+write_accessibility(fixture / "accessibility-not-real-space.md", marker="not real")
 write_internal(fixture / "internal.md")
+write_internal(fixture / "internal-not-real.md", marker="not-real")
+write_internal(fixture / "internal-not-real-space.md", marker="not real")
 write_privacy(fixture / "privacy.md")
+write_privacy(fixture / "privacy-not-real.md", marker="not-real")
+write_privacy(fixture / "privacy-not-real-space.md", marker="not real")
 write_release_gate(fixture / "release-gates.md")
+write_release_gate(fixture / "release-gates-not-real.md", marker="not-real")
+write_release_gate(fixture / "release-gates-not-real-space.md", marker="not real")
 
 roadmap = fixture / "checked-roadmap.md"
 text = Path("docs/superpowers/specs/2026-06-08-fire-v2-roadmap-design.md").read_text()
@@ -304,6 +350,50 @@ expect_fail_contains "P4 release evidence suite rejects missing marketing asset"
   "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
   scripts/verify-p4-release-evidence-suite.sh
 
+expect_fail_contains "P4 release evidence suite rejects fake marketing filename" \
+  "asset filename must not contain" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-fake-filename" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects tiny screenshots" \
+  "expected dimensions of at least 320px on each side" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-tiny-screenshot" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects malformed PNGs" \
+  "could not read PNG or JPEG dimensions" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-malformed-png" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects invalid MP4 previews" \
+  "MP4 file must contain an ftyp box" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-invalid-mp4" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
 expect_fail_contains "P4 release evidence suite rejects missing performance row" \
   "missing release-build physical-device result" \
   env \
@@ -314,6 +404,33 @@ expect_fail_contains "P4 release evidence suite rejects missing performance row"
   "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
   "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
   scripts/verify-p4-release-evidence-suite.sh
+
+marker_failure="not-real, or not real markers"
+
+expect_fail_contains "release gates reject not-real marker" "$marker_failure" \
+  scripts/verify-release-gates.sh "$fixture/release-gates-not-real.md"
+expect_fail_contains "release gates reject not real marker" "$marker_failure" \
+  scripts/verify-release-gates.sh "$fixture/release-gates-not-real-space.md"
+
+expect_fail_contains "internal testing rejects not-real marker" "$marker_failure" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-not-real.md"
+expect_fail_contains "internal testing rejects not real marker" "$marker_failure" \
+  scripts/verify-internal-testing-evidence.sh "$fixture/internal-not-real-space.md"
+
+expect_fail_contains "privacy review rejects not-real marker" "$marker_failure" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-not-real.md"
+expect_fail_contains "privacy review rejects not real marker" "$marker_failure" \
+  scripts/verify-privacy-review-evidence.sh "$fixture/privacy-not-real-space.md"
+
+expect_fail_contains "performance rejects not-real marker" "$marker_failure" \
+  scripts/verify-performance-benchmarks.sh "$fixture/performance-not-real.md"
+expect_fail_contains "performance rejects not real marker" "$marker_failure" \
+  scripts/verify-performance-benchmarks.sh "$fixture/performance-not-real-space.md"
+
+expect_fail_contains "accessibility rejects not-real marker" "$marker_failure" \
+  scripts/verify-accessibility-audit.sh "$fixture/accessibility-not-real.md"
+expect_fail_contains "accessibility rejects not real marker" "$marker_failure" \
+  scripts/verify-accessibility-audit.sh "$fixture/accessibility-not-real-space.md"
 
 expect_pass "roadmap P4 acceptance allows checked roadmap with complete fixture evidence" \
   "${suite_env[@]}" \

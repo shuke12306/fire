@@ -122,8 +122,8 @@ scripts/test-release-verifiers.sh
 
 That script uses temporary fixtures only. It proves that the shared suite can
 pass with complete fixture evidence, fails when lower-level fixture evidence is
-missing, and allows checked P4 roadmap acceptance only when the full fixture
-suite passes.
+missing, rejects fake-evidence markers and malformed store media, and allows
+checked P4 roadmap acceptance only when the full fixture suite passes.
 
 The final evidence register can also be checked directly:
 
