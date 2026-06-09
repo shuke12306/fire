@@ -162,6 +162,129 @@ PY
   return 2
 }
 
+validate_image_substance() {
+  local label="$1"
+  local image_file="$2"
+  local byte_count
+
+  byte_count="$(wc -c < "$image_file" | tr -d '[:space:]')"
+  if [[ "$byte_count" =~ ^[0-9]+$ ]] && (( byte_count < 256 )); then
+    fail "$label: image file is too small to be credible final store art: $image_file"
+    return 1
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local variation_status
+  if python3 - "$image_file" <<'PY'
+import sys
+import zlib
+from pathlib import Path
+
+data = Path(sys.argv[1]).read_bytes()
+if data[:8] != b"\x89PNG\r\n\x1a\n":
+    sys.exit(0)
+
+index = 8
+width = height = bit_depth = color_type = interlace = None
+idat = []
+while index + 12 <= len(data):
+    length = int.from_bytes(data[index:index + 4], "big")
+    chunk_type = data[index + 4:index + 8]
+    chunk_end = index + 12 + length
+    if chunk_end > len(data):
+        sys.exit(2)
+    payload = data[index + 8:index + 8 + length]
+    if chunk_type == b"IHDR":
+        if length != 13:
+            sys.exit(2)
+        width = int.from_bytes(payload[0:4], "big")
+        height = int.from_bytes(payload[4:8], "big")
+        bit_depth = payload[8]
+        color_type = payload[9]
+        interlace = payload[12]
+    elif chunk_type == b"IDAT":
+        idat.append(payload)
+    elif chunk_type == b"IEND":
+        break
+    index = chunk_end
+
+if not width or not height or bit_depth != 8 or interlace != 0 or color_type not in (0, 2, 4, 6):
+    sys.exit(0)
+
+channels = {0: 1, 2: 3, 4: 2, 6: 4}[color_type]
+stride = width * channels
+try:
+    raw = zlib.decompress(b"".join(idat))
+except zlib.error:
+    sys.exit(2)
+
+def recon_byte(value):
+    return value & 0xFF
+
+previous = bytearray(stride)
+unique_pixels = set()
+offset = 0
+sample_limit = 4096
+for _ in range(height):
+    if offset >= len(raw):
+        sys.exit(2)
+    filter_type = raw[offset]
+    offset += 1
+    row = bytearray(raw[offset:offset + stride])
+    offset += stride
+    if len(row) != stride:
+        sys.exit(2)
+    for i, value in enumerate(row):
+        left = row[i - channels] if i >= channels else 0
+        up = previous[i]
+        up_left = previous[i - channels] if i >= channels else 0
+        if filter_type == 0:
+            pass
+        elif filter_type == 1:
+            row[i] = recon_byte(value + left)
+        elif filter_type == 2:
+            row[i] = recon_byte(value + up)
+        elif filter_type == 3:
+            row[i] = recon_byte(value + ((left + up) // 2))
+        elif filter_type == 4:
+            predictor = left + up - up_left
+            distances = (
+                abs(predictor - left),
+                abs(predictor - up),
+                abs(predictor - up_left),
+            )
+            paeth = (left, up, up_left)[distances.index(min(distances))]
+            row[i] = recon_byte(value + paeth)
+        else:
+            sys.exit(2)
+    for pixel_offset in range(0, stride, channels):
+        unique_pixels.add(bytes(row[pixel_offset:pixel_offset + channels]))
+        if len(unique_pixels) > 1:
+            sys.exit(0)
+        if len(unique_pixels) >= sample_limit:
+            break
+    previous = row
+
+sys.exit(1)
+PY
+  then
+    variation_status=0
+  else
+    variation_status=$?
+  fi
+  if [[ "$variation_status" -eq 1 ]]; then
+    fail "$label: PNG image appears to be a single-color placeholder: $image_file"
+    return 1
+  fi
+  if [[ "$variation_status" -eq 2 ]]; then
+    fail "$label: could not inspect PNG pixel variation for $image_file"
+    return 1
+  fi
+}
+
 validate_image_file() {
   local label="$1"
   local image_file="$2"
@@ -214,6 +337,8 @@ validate_image_file() {
       fail "$label: expected dimensions of at least ${minimum_dimension}px on each side, found $dimensions for $image_file"
       return 1
     fi
+
+    validate_image_substance "$label" "$image_file" || return 1
 
     info "$label: valid image $image_file ($dimensions)"
     return 0

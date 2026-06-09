@@ -34,9 +34,10 @@ complete, but it is not a substitute for release-candidate capture and review.
 Final asset filenames must not contain fake, mock, placeholder, dummy,
 synthetic, TODO/TBD, `example.com`, `not-real`, or `not real` markers.
 Screenshot dimensions must decode cleanly and be at least 320px on each side;
-the Play feature graphic must be PNG content with exact `1024x500` dimensions.
-If an App Preview is included, `app-preview.mp4` must contain MP4 `ftyp`
-content.
+PNG screenshots must contain more than a single flat color; the Play feature
+graphic must be PNG content with exact `1024x500` dimensions and non-flat pixel
+content. If an App Preview is included, `app-preview.mp4` must contain MP4
+`ftyp` content.
 
 ## Performance Evidence
 
@@ -135,10 +136,10 @@ That script uses temporary fixtures only. It proves that the shared suite can
 pass with complete fixture evidence, that the full release-readiness wrapper can
 pass with complete fixture evidence, that both fail when lower-level fixture
 evidence is missing, that fake-evidence markers, malformed store media,
-non-measurement performance results, target misses marked `Pass`, dead local
-evidence paths, placeholder URL hosts, and weak accepted-waiver notes are
-rejected, and that checked P4 roadmap acceptance is allowed only when the full
-fixture suite passes.
+flat PNG placeholders, non-measurement performance results, target misses marked
+`Pass`, dead local evidence paths, placeholder URL hosts, and weak
+accepted-waiver notes are rejected, and that checked P4 roadmap acceptance is
+allowed only when the full fixture suite passes.
 
 The final evidence register can also be checked directly:
 

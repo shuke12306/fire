@@ -135,10 +135,19 @@ audits = [
     "Keyboard And Switch Control",
 ]
 
-def png_file(root: Path, path: str, width: int, height: int):
+def png_file(root: Path, path: str, width: int, height: int, flat=False):
     target = root / path
     target.parent.mkdir(parents=True, exist_ok=True)
-    raw = b"".join(b"\x00" + (b"\x00\x00\x00" * width) for _ in range(height))
+    rows = []
+    for y in range(height):
+        pixels = bytearray()
+        for x in range(width):
+            if flat:
+                pixels.extend((32, 32, 32))
+            else:
+                pixels.extend(((x + y) % 256, (x * 3) % 256, (y * 5) % 256))
+        rows.append(b"\x00" + bytes(pixels))
+    raw = b"".join(rows)
 
     def chunk(kind: bytes, data: bytes):
         return (
@@ -189,6 +198,8 @@ def write_marketing(root: Path, include_feature_graphic=True, mutation="valid"):
         )
     elif mutation == "invalid-mp4":
         preview.write_bytes(b"not an mp4")
+    elif mutation == "flat-png":
+        png_file(root, "native/android-app/marketing/screenshots/phone/final-phone.png", 320, 320, flat=True)
 
 def write_release_gate(
     path: Path,
@@ -393,6 +404,7 @@ write_marketing(fixture / "marketing-fake-filename", mutation="fake-filename")
 write_marketing(fixture / "marketing-tiny-screenshot", mutation="tiny-screenshot")
 write_marketing(fixture / "marketing-malformed-png", mutation="malformed-png")
 write_marketing(fixture / "marketing-invalid-mp4", mutation="invalid-mp4")
+write_marketing(fixture / "marketing-flat-png", mutation="flat-png")
 write_performance(fixture / "performance.md")
 write_performance(
     fixture / "performance-accepted-valid.md",
@@ -536,6 +548,17 @@ expect_fail_contains "P4 release evidence suite rejects malformed PNGs" \
   "could not read PNG or JPEG dimensions" \
   env \
   "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-malformed-png" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects flat PNG placeholders" \
+  "single-color placeholder" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-flat-png" \
   "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
   "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
   "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \

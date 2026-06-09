@@ -19,5 +19,6 @@ scripts/verify-marketing-assets.sh
 
 The validator fails while screenshot folders contain only `.gitkeep`
 placeholders or `feature-graphic.png` is missing. The feature graphic must use
-PNG content with exact `1024x500` dimensions before Play Store media evidence
-can be marked complete.
+PNG content with exact `1024x500` dimensions and non-flat pixel content before
+Play Store media evidence can be marked complete. PNG screenshots must also
+contain more than a single flat color.
