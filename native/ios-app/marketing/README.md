@@ -21,5 +21,7 @@ scripts/verify-marketing-assets.sh
 The validator fails while screenshot folders contain only `.gitkeep`
 placeholders, while PNG screenshots are flat single-color placeholders, or while
 dimensions cannot be decoded. If an App Preview is shipped, place it at
-`preview-video/app-preview.mp4`; otherwise leave the folder empty except for
-`.gitkeep` and record the no-ship decision in `docs/release/release-gate-evidence.md`.
+`preview-video/app-preview.mp4` as a regular MP4 file; otherwise leave the folder
+empty except for `.gitkeep` and record the no-ship decision in
+`docs/release/release-gate-evidence.md`. Do not add nested preview directories or
+alternate preview asset paths.

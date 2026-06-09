@@ -198,6 +198,11 @@ def write_marketing(root: Path, include_feature_graphic=True, mutation="valid"):
         )
     elif mutation == "invalid-mp4":
         preview.write_bytes(b"not an mp4")
+    elif mutation == "preview-unexpected-directory":
+        (root / "native/ios-app/marketing/preview-video/extra-preview").mkdir(parents=True, exist_ok=True)
+    elif mutation == "preview-path-directory":
+        preview.unlink()
+        preview.mkdir(parents=True, exist_ok=True)
     elif mutation == "flat-png":
         png_file(root, "native/android-app/marketing/screenshots/phone/final-phone.png", 320, 320, flat=True)
 
@@ -533,6 +538,8 @@ write_marketing(fixture / "marketing-fake-filename", mutation="fake-filename")
 write_marketing(fixture / "marketing-tiny-screenshot", mutation="tiny-screenshot")
 write_marketing(fixture / "marketing-malformed-png", mutation="malformed-png")
 write_marketing(fixture / "marketing-invalid-mp4", mutation="invalid-mp4")
+write_marketing(fixture / "marketing-preview-unexpected-directory", mutation="preview-unexpected-directory")
+write_marketing(fixture / "marketing-preview-path-directory", mutation="preview-path-directory")
 write_marketing(fixture / "marketing-flat-png", mutation="flat-png")
 write_performance(fixture / "performance.md")
 write_performance(
@@ -745,6 +752,28 @@ expect_fail_contains "P4 release evidence suite rejects invalid MP4 previews" \
   "MP4 file must contain an ftyp box" \
   env \
   "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-invalid-mp4" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects unexpected preview directories" \
+  "unexpected preview asset" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-preview-unexpected-directory" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects preview path directories" \
+  "preview asset must be a regular MP4 file" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-preview-path-directory" \
   "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
   "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
   "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \

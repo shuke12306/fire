@@ -444,7 +444,7 @@ validate_optional_preview_video() {
   local directory
   directory="$(asset_path "native/ios-app/marketing/preview-video")"
   local video_file="$directory/app-preview.mp4"
-  local other_file
+  local preview_entry
   local unexpected_count=0
 
   if [[ ! -d "$directory" ]]; then
@@ -452,12 +452,15 @@ validate_optional_preview_video() {
     return
   fi
 
-  while IFS= read -r other_file; do
-    if [[ "$other_file" != "$video_file" ]]; then
+  while IFS= read -r preview_entry; do
+    if [[ "$preview_entry" != "$video_file" ]]; then
       unexpected_count=$((unexpected_count + 1))
-      fail "iOS App Preview video: unexpected preview asset $other_file; use $video_file or leave only .gitkeep"
+      fail "iOS App Preview video: unexpected preview asset $preview_entry; use regular file $video_file or leave only .gitkeep"
+    elif [[ ! -f "$preview_entry" ]]; then
+      unexpected_count=$((unexpected_count + 1))
+      fail "iOS App Preview video: preview asset must be a regular MP4 file: $preview_entry"
     fi
-  done < <(find "$directory" -maxdepth 1 -type f ! -name '.gitkeep' ! -name '.*' | sort)
+  done < <(find "$directory" -maxdepth 1 -mindepth 1 ! -name '.gitkeep' ! -name '.*' | sort)
 
   if [[ ! -f "$video_file" ]]; then
     if [[ "$unexpected_count" -eq 0 ]]; then

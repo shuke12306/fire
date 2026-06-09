@@ -36,8 +36,9 @@ synthetic, TODO/TBD, `example.com`, `not-real`, or `not real` markers.
 Screenshot dimensions must decode cleanly and be at least 320px on each side;
 PNG screenshots must contain more than a single flat color; the Play feature
 graphic must be PNG content with exact `1024x500` dimensions and non-flat pixel
-content. If an App Preview is included, `app-preview.mp4` must contain MP4
-`ftyp` content.
+content. If an App Preview is included, `app-preview.mp4` must be a regular file
+with MP4 `ftyp` content; the preview folder must not contain nested directories
+or alternate asset paths.
 
 ## Performance Evidence
 
