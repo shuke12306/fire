@@ -204,7 +204,7 @@ login or a legacy recovery WebView from platform code.
 | Item | Choice |
 |---|---|
 | Language | Swift 5.10+ |
-| Minimum version | iOS 16 |
+| Minimum version | iOS 17 |
 | UI framework | UIKit + Texture (AsyncDisplayKit) |
 | Architecture | MVVM |
 | Image loading | **Nuke** (upper-layer scheduling + transitions + prefetch), **Rust** (lower-layer decode + cache) |
