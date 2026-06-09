@@ -429,7 +429,7 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - 内存峰值监控
 - 冷启动时间（< 3s 目标）
 
-当前已有 iOS `xctrace` 与 Android `adb` benchmark workflow；release-build 物理设备数据尚未采集。
+当前已有 iOS `xctrace` 与 Android `adb` benchmark workflow 和 `scripts/verify-performance-benchmarks.sh`；release-build 物理设备数据尚未采集。
 
 ### 5.5 无障碍审核
 
@@ -520,4 +520,4 @@ Rust 已有 bookmark reminder API，原生层已接入：
 - [ ] 话题详情首屏 < 2s
 - [ ] VoiceOver / TalkBack 全流程可操作
 
-P4 repository scaffolding 已完成一部分，并已有 store media / release gate 校验脚本；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。
+P4 repository scaffolding 已完成一部分，并已有 store media / performance / release gate 校验脚本；最终验收仍依赖手动 store media、store records/test tracks/tester invites、maintainer/legal review、release-build 物理设备 benchmark，以及 VoiceOver/TalkBack/Dynamic Type/Reduce Motion/high-contrast audit 结果。

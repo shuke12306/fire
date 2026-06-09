@@ -17,9 +17,9 @@ reviewer, and date.
 | Play Console record | App record exists with package name, data safety, content rating, store listing, and testing setup entered. | | Not started | | | Link to Play Console record or checklist export. |
 | Internal testing builds | Release-candidate iOS and Android builds uploaded to TestFlight / Play internal testing tracks. | | Not started | | | Include build numbers and commit SHA. |
 | Tester invites and feedback | Tester groups invited and feedback reviewed. | | Not started | | | Link to collected feedback or triage summary. |
-| iOS release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, and commit SHA. |
-| Android release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, and commit SHA. |
-| Benchmark failure disposition | Every threshold failure has a fixed, accepted, or no-ship decision. | | Not started | | | Required only if benchmark failures exist. |
+| iOS release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, commit SHA, and `scripts/verify-performance-benchmarks.sh` output. |
+| Android release benchmarks | Physical-device release-build measurements recorded in `performance-benchmarks.md`. | | Not started | | | Include device, OS, build type, commit SHA, and `scripts/verify-performance-benchmarks.sh` output. |
+| Benchmark failure disposition | Every threshold failure has a fixed, accepted, or no-ship decision. | | Not started | | | Required only if benchmark failures exist; verifier accepts explicit `Accepted` rows with notes. |
 | VoiceOver audit | Full iOS release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links. |
 | TalkBack audit | Full Android release-candidate flow audited and results recorded in `accessibility-audit-checklist.md`. | | Not started | | | Include blocking issue links. |
 | Dynamic Type / font-scale audit | iOS Dynamic Type and Android font scale results recorded. | | Not started | | | Include largest supported accessibility sizes. |

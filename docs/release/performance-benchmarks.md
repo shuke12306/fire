@@ -38,6 +38,21 @@ scripts/benchmark-memory-peak.sh android
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | | | | | | | | | |
 
+Use exactly the metric names from the target table. `Pass/Fail` accepts `Pass`
+for measurements inside the release threshold or `Accepted` for an explicit
+ship/no-ship decision on a threshold failure. Simulator and emulator rows may be
+linked as supporting context elsewhere, but they do not satisfy this log.
+
 ## Release Rule
 
 Do not mark P4 performance complete until this log contains release-build measurements for iOS and Android, and any failures have an explicit owner or ship/no-ship decision.
+
+Before marking performance evidence complete, run:
+
+```bash
+scripts/verify-performance-benchmarks.sh
+```
+
+The verifier fails until each target metric has an iOS and Android
+release-build physical-device row with date, commit, device, result, and
+`Pass` or `Accepted` disposition.
