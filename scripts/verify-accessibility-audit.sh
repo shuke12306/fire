@@ -148,6 +148,9 @@ in_results_log && /^\|/ {
   }
 
   row_count += 1
+  if (NF > 9) {
+    fail(row_label, "row has extra Markdown table columns; escape pipe characters in cells")
+  }
 
   if (!is_valid_date(date)) {
     fail(row_label, "date must be a valid YYYY-MM-DD calendar date")

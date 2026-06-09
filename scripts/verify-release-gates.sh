@@ -152,6 +152,9 @@ in_required_evidence && /^\|/ {
   if (row_label == "") {
     row_label = "row " row_count
   }
+  if (NF > 9) {
+    fail(row_label, "row has extra Markdown table columns; escape pipe characters in cells")
+  }
 
   if (seen_all[gate] > 0) {
     fail(row_label, "duplicate release gate evidence row")
