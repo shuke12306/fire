@@ -8,6 +8,7 @@ checks=(
   "Store marketing assets|scripts/verify-marketing-assets.sh"
   "Performance benchmarks|scripts/verify-performance-benchmarks.sh"
   "Accessibility audit|scripts/verify-accessibility-audit.sh"
+  "Internal testing evidence|scripts/verify-internal-testing-evidence.sh"
   "Release gate evidence|scripts/verify-release-gates.sh"
 )
 

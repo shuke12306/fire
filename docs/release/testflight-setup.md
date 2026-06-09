@@ -37,6 +37,7 @@ The script prepares UniFFI artifacts, regenerates the Xcode project from `native
 5. Fill privacy answers from `docs/release/app-store-data-collection.md`.
 6. Upload screenshots and any preview video from `native/ios-app/marketing/` after real capture and `scripts/verify-marketing-assets.sh` validation.
 7. Submit a TestFlight build for review.
+8. Record the App Store Connect record, uploaded build, tester invite, and feedback triage rows in `docs/release/internal-testing-evidence.md`.
 
 ## Test Groups
 

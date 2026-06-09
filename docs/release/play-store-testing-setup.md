@@ -30,6 +30,7 @@ native/android-app/build/outputs/bundle/release/app-release.aab
 5. Upload real screenshots and feature graphic from `native/android-app/marketing/` after `scripts/verify-marketing-assets.sh` validation.
 6. Upload the signed AAB to Internal testing.
 7. Complete content rating, target audience, data safety, and app access declarations.
+8. Record the Play Console record, uploaded build, tester invite, and feedback triage rows in `docs/release/internal-testing-evidence.md`.
 
 ## Test Tracks
 
