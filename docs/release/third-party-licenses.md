@@ -1,0 +1,442 @@
+# Third-Party Licenses
+
+Generated on: 2026-06-09
+
+This inventory is generated from dependency declarations and lockfiles. It is a release-review input, not legal advice.
+
+## Rust Workspace
+
+cargo-license is not installed.
+
+Install and regenerate:
+
+```bash
+cargo install cargo-license
+scripts/collect-licenses.sh > docs/release/third-party-licenses.md
+```
+
+Workspace crates declared in Cargo.lock:
+- adler2 2.0.1
+- ahash 0.8.12
+- aho-corasick 1.1.4
+- alloc-no-stdlib 2.0.4
+- alloc-stdlib 0.2.2
+- android_system_properties 0.1.5
+- anstyle 1.0.14
+- anyhow 1.0.102
+- askama 0.14.0
+- askama_derive 0.14.0
+- askama_parser 0.14.0
+- async-compression 0.4.18
+- async-trait 0.1.89
+- atomic-waker 1.1.2
+- autocfg 1.5.0
+- aws-lc-rs 1.16.2
+- aws-lc-sys 0.39.0
+- base16ct 0.2.0
+- base64 0.22.1
+- base64ct 1.8.3
+- basic-toml 0.1.10
+- bitflags 2.11.0
+- block-buffer 0.10.4
+- brotli 7.0.0
+- brotli-decompressor 4.0.3
+- bumpalo 3.20.2
+- bytes 1.11.1
+- camino 1.2.2
+- cargo-platform 0.1.9
+- cargo_metadata 0.19.2
+- cc 1.2.57
+- cesu8 1.1.0
+- cfg-if 1.0.4
+- chrono 0.4.44
+- clap 4.5.49
+- clap_builder 4.5.49
+- clap_derive 4.5.49
+- clap_lex 0.7.7
+- cmake 0.1.57
+- combine 4.6.7
+- const-oid 0.9.6
+- cookie 0.18.1
+- cookie_store 0.21.1
+- core-foundation 0.10.1
+- core-foundation-sys 0.8.7
+- cpufeatures 0.2.17
+- crc32fast 1.5.0
+- crossbeam-channel 0.5.15
+- crossbeam-queue 0.3.12
+- crossbeam-utils 0.8.21
+- crypto-bigint 0.5.5
+- crypto-common 0.1.6
+- cssparser 0.37.0
+- cssparser-macros 0.7.0
+- der 0.7.10
+- deranged 0.5.8
+- derive_more 2.1.1
+- derive_more-impl 2.1.1
+- digest 0.10.7
+- displaydoc 0.2.5
+- document-features 0.2.12
+- dtoa 1.0.11
+- dtoa-short 0.3.5
+- dunce 1.0.5
+- ecdsa 0.16.9
+- ego-tree 0.11.0
+- elliptic-curve 0.13.8
+- equivalent 1.0.2
+- errno 0.3.14
+- fallible-iterator 0.3.0
+- fallible-streaming-iterator 0.1.9
+- fastrand 2.3.0
+- ff 0.13.1
+- find-msvc-tools 0.1.9
+- fire-core 0.1.0
+- fire-models 0.1.0
+- fire-rich-text 0.1.0
+- fire-store 0.1.0
+- fire-uniffi 0.1.0
+- fire-uniffi-diagnostics 0.1.0
+- fire-uniffi-ldc 0.1.0
+- fire-uniffi-messagebus 0.1.0
+- fire-uniffi-notifications 0.1.0
+- fire-uniffi-search 0.1.0
+- fire-uniffi-session 0.1.0
+- fire-uniffi-topics 0.1.0
+- fire-uniffi-types 0.1.0
+- fire-uniffi-user 0.1.0
+- flate2 1.1.9
+- fnv 1.0.7
+- foldhash 0.1.5
+- form_urlencoded 1.2.2
+- fs-err 2.11.0
+- fs2 0.4.3
+- fs_extra 1.3.0
+- futures-channel 0.3.32
+- futures-core 0.3.32
+- futures-io 0.3.32
+- futures-macro 0.3.32
+- futures-sink 0.3.32
+- futures-task 0.3.32
+- futures-util 0.3.32
+- generic-array 0.14.9
+- getopts 0.2.24
+- getrandom 0.2.17
+- getrandom 0.3.4
+- getrandom 0.4.2
+- glob 0.3.3
+- goblin 0.8.2
+- group 0.13.0
+- h2 0.4.13
+- hashbrown 0.14.5
+- hashbrown 0.15.5
+- hashbrown 0.16.1
+- hashlink 0.9.1
+- heck 0.5.0
+- hex 0.4.3
+- hkdf 0.12.4
+- hmac 0.12.1
+- html5ever 0.39.0
+- http 1.4.0
+- http-body 1.0.1
+- http-body-util 0.1.3
+- httparse 1.10.1
+- httpdate 1.0.3
+- hyper 1.8.1
+- iana-time-zone 0.1.65
+- iana-time-zone-haiku 0.1.2
+- icu_collections 2.1.1
+- icu_locale_core 2.1.1
+- icu_normalizer 2.1.1
+- icu_normalizer_data 2.1.1
+- icu_properties 2.1.2
+- icu_properties_data 2.1.2
+- icu_provider 2.1.1
+- id-arena 2.3.0
+- idna 1.1.0
+- idna_adapter 1.2.1
+- indexmap 2.13.0
+- itoa 1.0.18
+- jni 0.21.1
+- jni-sys 0.3.1
+- jni-sys 0.4.1
+- jni-sys-macros 0.4.1
+- jobserver 0.1.34
+- js-sys 0.3.91
+- k256 0.13.4
+- lazy_static 1.5.0
+- leb128fmt 0.1.0
+- libc 0.2.183
+- libsqlite3-sys 0.30.1
+- linux-raw-sys 0.12.1
+- litemap 0.8.1
+- litrs 1.0.0
+- lock_api 0.4.14
+- log 0.4.29
+- markup5ever 0.39.0
+- mars-xlog 0.1.0-preview.2
+- mars-xlog-core 0.1.0-preview.2
+- matchers 0.2.0
+- memchr 2.8.0
+- memmap2 0.9.10
+- minimal-lexical 0.2.1
+- miniz_oxide 0.8.9
+- mio 1.1.1
+- new_debug_unreachable 1.0.6
+- nom 7.1.3
+- nu-ansi-term 0.50.3
+- num-conv 0.2.1
+- num-traits 0.2.19
+- once_cell 1.21.4
+- openssl-probe 0.2.1
+- openwire 0.1.0
+- openwire-core 0.1.0
+- openwire-rustls 0.1.0
+- openwire-tokio 0.1.0
+- parking_lot 0.12.5
+- parking_lot_core 0.9.12
+- percent-encoding 2.3.2
+- phf 0.13.1
+- phf_codegen 0.13.1
+- phf_generator 0.13.1
+- phf_macros 0.13.1
+- phf_shared 0.13.1
+- pin-project-lite 0.2.17
+- pin-utils 0.1.0
+- pkcs8 0.10.2
+- pkg-config 0.3.32
+- plain 0.2.3
+- potential_utf 0.1.4
+- powerfmt 0.2.0
+- precomputed-hash 0.1.1
+- prettyplease 0.2.37
+- proc-macro2 1.0.106
+- psl-types 2.0.11
+- publicsuffix 2.3.0
+- quote 1.0.45
+- r-efi 5.3.0
+- r-efi 6.0.0
+- rand_core 0.6.4
+- redox_syscall 0.5.18
+- regex 1.12.3
+- regex-automata 0.4.14
+- regex-syntax 0.8.10
+- rfc6979 0.4.0
+- ring 0.17.14
+- rusqlite 0.32.1
+- rustc-hash 2.1.1
+- rustc_version 0.4.1
+- rustix 1.1.4
+- rustls 0.23.37
+- rustls-native-certs 0.8.3
+- rustls-pemfile 2.2.0
+- rustls-pki-types 1.14.0
+- rustls-platform-verifier 0.6.2
+- rustls-platform-verifier-android 0.1.1
+- rustls-webpki 0.103.10
+- rustversion 1.0.22
+- same-file 1.0.6
+- schannel 0.1.29
+- scopeguard 1.2.0
+- scraper 0.27.0
+- scroll 0.12.0
+- scroll_derive 0.12.1
+- sec1 0.7.3
+- security-framework 3.7.0
+- security-framework-sys 2.17.0
+- selectors 0.38.0
+- semver 1.0.27
+- serde 1.0.228
+- serde_core 1.0.228
+- serde_derive 1.0.228
+- serde_json 1.0.149
+- serde_spanned 1.1.1
+- servo_arc 0.4.3
+- sha1 0.10.6
+- sha2 0.10.9
+- sharded-slab 0.1.7
+- shlex 1.3.0
+- signal-hook-registry 1.4.8
+- signature 2.2.0
+- simd-adler32 0.3.8
+- siphasher 1.0.2
+- slab 0.4.12
+- smallvec 1.15.1
+- smawk 0.3.2
+- socket2 0.6.3
+- spki 0.7.3
+- stable_deref_trait 1.2.1
+- static_assertions 1.1.0
+- string_cache 0.9.0
+- string_cache_codegen 0.6.1
+- strsim 0.11.1
+- subtle 2.6.1
+- syn 2.0.117
+- sync_wrapper 1.0.2
+- synstructure 0.13.2
+- tempfile 3.27.0
+- tendril 0.5.0
+- textwrap 0.16.2
+- thiserror 1.0.69
+- thiserror 2.0.18
+- thiserror-impl 1.0.69
+- thiserror-impl 2.0.18
+- thread_local 1.1.9
+- time 0.3.47
+- time-core 0.1.8
+- time-macros 0.2.27
+- tinystr 0.8.2
+- tokio 1.50.0
+- tokio-macros 2.6.1
+- tokio-rustls 0.26.4
+- tokio-util 0.7.18
+- toml 0.9.12+spec-1.1.0
+- toml_datetime 0.7.5+spec-1.1.0
+- toml_parser 1.1.2+spec-1.1.0
+- toml_writer 1.1.1+spec-1.1.0
+- tower 0.5.3
+- tower-layer 0.3.3
+- tower-service 0.3.3
+- tracing 0.1.44
+- tracing-attributes 0.1.31
+- tracing-core 0.1.36
+- tracing-log 0.2.0
+- tracing-subscriber 0.3.23
+- try-lock 0.2.5
+- typenum 1.19.0
+- unicode-ident 1.0.24
+- unicode-width 0.2.2
+- unicode-xid 0.2.6
+- uniffi 0.31.1
+- uniffi_bindgen 0.31.1
+- uniffi_core 0.31.1
+- uniffi_internal_macros 0.31.1
+- uniffi_macros 0.31.1
+- uniffi_meta 0.31.1
+- uniffi_pipeline 0.31.1
+- uniffi_udl 0.31.1
+- untrusted 0.9.0
+- url 2.5.8
+- utf-8 0.7.6
+- utf8_iter 1.0.4
+- valuable 0.1.1
+- vcpkg 0.2.15
+- version_check 0.9.5
+- walkdir 2.5.0
+- want 0.3.1
+- wasi 0.11.1+wasi-snapshot-preview1
+- wasip2 1.0.2+wasi-0.2.9
+- wasip3 0.4.0+wasi-0.3.0-rc-2026-01-06
+- wasm-bindgen 0.2.114
+- wasm-bindgen-macro 0.2.114
+- wasm-bindgen-macro-support 0.2.114
+- wasm-bindgen-shared 0.2.114
+- wasm-encoder 0.244.0
+- wasm-metadata 0.244.0
+- wasmparser 0.244.0
+- web_atoms 0.2.4
+- webpki-root-certs 1.0.6
+- webpki-roots 1.0.7
+- weedle2 5.0.0
+- winapi 0.3.9
+- winapi-i686-pc-windows-gnu 0.4.0
+- winapi-util 0.1.11
+- winapi-x86_64-pc-windows-gnu 0.4.0
+- windows-core 0.62.2
+- windows-implement 0.60.2
+- windows-interface 0.59.3
+- windows-link 0.2.1
+- windows-result 0.4.1
+- windows-strings 0.5.1
+- windows-sys 0.45.0
+- windows-sys 0.52.0
+- windows-sys 0.61.2
+- windows-targets 0.42.2
+- windows-targets 0.52.6
+- windows_aarch64_gnullvm 0.42.2
+- windows_aarch64_gnullvm 0.52.6
+- windows_aarch64_msvc 0.42.2
+- windows_aarch64_msvc 0.52.6
+- windows_i686_gnu 0.42.2
+- windows_i686_gnu 0.52.6
+- windows_i686_gnullvm 0.52.6
+- windows_i686_msvc 0.42.2
+- windows_i686_msvc 0.52.6
+- windows_x86_64_gnu 0.42.2
+- windows_x86_64_gnu 0.52.6
+- windows_x86_64_gnullvm 0.42.2
+- windows_x86_64_gnullvm 0.52.6
+- windows_x86_64_msvc 0.42.2
+- windows_x86_64_msvc 0.52.6
+- winnow 0.7.15
+- winnow 1.0.1
+- wit-bindgen 0.51.0
+- wit-bindgen-core 0.51.0
+- wit-bindgen-rust 0.51.0
+- wit-bindgen-rust-macro 0.51.0
+- wit-component 0.244.0
+- wit-parser 0.244.0
+- writeable 0.6.2
+- yoke 0.8.1
+- yoke-derive 0.8.1
+- zerocopy 0.8.47
+- zerocopy-derive 0.8.47
+- zerofrom 0.1.6
+- zerofrom-derive 0.1.6
+- zeroize 1.8.2
+- zerotrie 0.2.3
+- zerovec 0.11.5
+- zerovec-derive 0.11.2
+- zmij 1.0.21
+- zstd 0.13.3
+- zstd-safe 7.2.4
+- zstd-sys 2.0.16+zstd.1.5.7
+
+## iOS Swift Packages
+
+- confettiswiftui (3.0.0): https://github.com/simibac/ConfettiSwiftUI.git
+- nuke (12.8.0): https://github.com/kean/Nuke.git
+- photobrowser (4.0.3): https://github.com/JiongXing/PhotoBrowser.git
+- plcrashreporter (1.12.2): https://github.com/microsoft/plcrashreporter.git
+
+## iOS Vendored Local Packages
+
+- Texture 3.2.0: native/ios-app/LocalPackages/TextureCore/LICENSE-Texture-3.2.0.txt
+
+## Android Gradle Dependencies
+
+- androidx.activity:activity-ktx:1.10.1
+- androidx.appcompat:appcompat:1.7.1
+- androidx.constraintlayout:constraintlayout:2.2.1
+- androidx.core:core-ktx:1.15.0
+- androidx.datastore:datastore-preferences:1.1.4
+- androidx.fragment:fragment-ktx:1.8.6
+- androidx.lifecycle:lifecycle-livedata-ktx:2.8.7
+- androidx.lifecycle:lifecycle-runtime-ktx:2.8.7
+- androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7
+- androidx.navigation:navigation-fragment-ktx:2.8.9
+- androidx.navigation:navigation-ui-ktx:2.8.9
+- androidx.paging:paging-runtime-ktx:3.3.6
+- androidx.recyclerview:recyclerview:1.4.0
+- androidx.swiperefreshlayout:swiperefreshlayout:1.1.0
+- androidx.webkit:webkit:1.13.0
+- com.google.android.material:material:1.12.0
+- com.google.firebase:firebase-bom:33.15.0
+- com.google.firebase:firebase-messaging-ktx
+- io.coil-kt:coil:2.7.0
+- io.github.panpf.zoomimage:zoomimage-view-coil2:1.4.0
+- junit:junit:4.13.2
+- net.java.dev.jna:jna:5.16.0@aar
+- org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1
+- org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1
+- org.json:json:20240303
+
+## Repository Licenses
+
+- LICENSE
+- third_party/openwire/LICENSE
+
+## Release Review Notes
+
+- Verify transitive Android licenses with Gradle dependency tooling before submission.
+- Verify Swift package license texts before submission.
+- Do not include read-only reference-project dependencies from references/fluxdo in Fire's shipped license list unless they are actually shipped.
