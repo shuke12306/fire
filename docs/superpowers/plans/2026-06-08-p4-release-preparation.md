@@ -8,7 +8,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 
 ## Current Surface Inventory
 
-- `docs/release/` -- release copy, compliance drafts, testing guides, benchmark definitions, accessibility checklist, and license inventory.
+- `docs/release/` -- release copy, compliance drafts, testing guides, benchmark definitions, accessibility checklist, release-gate evidence register, and license inventory.
 - `native/ios-app/marketing/` -- App Store screenshot and preview-video folder structure.
 - `native/android-app/marketing/` -- Play Store screenshot and feature-graphic folder structure.
 - `scripts/ios/archive_release.sh` -- existing iOS archive/upload path used by the TestFlight guide.
@@ -34,6 +34,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 3. **Make benchmark scripts honest about prerequisites.** Android scripts use `adb` when available; iOS scripts print required Instruments/xctrace workflows because reliable iOS FPS/memory/topic measurements require device tooling.
 4. **Generate license inventory from current declarations.** `scripts/collect-licenses.sh` uses `cargo metadata --locked` for Rust crate license fields and resolves Android `releaseRuntimeClasspath` with Gradle before reading Maven POM license metadata. Full legal review and Swift package license-text review remain required.
 5. **Separate repository completion from release acceptance.** P4 acceptance boxes in the roadmap remain unchecked until real store/test/performance/accessibility evidence exists.
+6. **Keep manual gate evidence centralized.** `docs/release/release-gate-evidence.md` is the register for screenshots, store records, legal signoff, release-build benchmarks, accessibility audit runs, and any accepted waivers. It does not satisfy those gates by itself.
 
 ## Phased Implementation
 
@@ -97,10 +98,12 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `docs/release/testflight-setup.md`
 - `docs/release/play-store-testing-setup.md`
 - `docs/release/test-feedback-template.md`
+- `docs/release/release-gate-evidence.md`
 
 - [x] Document TestFlight build/upload flow using existing iOS release scripts.
 - [x] Document Play Store internal/closed/open testing setup.
 - [x] Add a tester feedback template.
+- [x] Add a release-gate evidence register for manual P4 gates.
 - [ ] Create App Store Connect app record.
 - [ ] Create Play Console app record.
 - [ ] Upload release-candidate builds to internal testing tracks.
@@ -142,6 +145,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `references/fluxdo/` and `third_party/` are not edited by this plan.
 - Generated release media is intentionally absent until captured from real release-candidate builds.
 - Privacy and data-safety drafts are conservative working documents, not final legal text.
+- `docs/release/release-gate-evidence.md` tracks manual gate proof, but rows start as `Not started` and must be updated by the humans or release engineers who perform those actions.
 - Roadmap P4 acceptance remains unchecked until manual evidence exists.
 
 ## File Change Summary
@@ -155,6 +159,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `docs/release/play-store-description.md` -- Play Store listing draft.
 - `docs/release/play-store-testing-setup.md` -- Play Store testing guide.
 - `docs/release/privacy-policy.md` -- privacy policy draft aligned to current code.
+- `docs/release/release-gate-evidence.md` -- manual P4 gate evidence register.
 - `docs/release/test-feedback-template.md` -- beta feedback template.
 - `docs/release/testflight-setup.md` -- TestFlight setup guide.
 - `docs/release/third-party-licenses.md` -- generated dependency inventory.
