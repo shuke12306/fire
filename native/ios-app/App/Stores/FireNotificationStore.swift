@@ -238,6 +238,7 @@ final class FireNotificationStore: ObservableObject {
             )
             lastFailedFullOffset = nil
         }
+        appViewModel.updateWidgetData()
     }
 }
 

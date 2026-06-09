@@ -280,6 +280,7 @@ final class FireHomeFeedStore: ObservableObject {
         nextTopicsPage = state.nextPage
         isLoadingTopics = false
         isAppendingTopics = false
+        appViewModel.updateWidgetData()
     }
 
     @discardableResult
@@ -575,6 +576,9 @@ final class FireHomeFeedStore: ObservableObject {
             renderedTopicListScope = requestedScope
             topicLoadErrorMessage = nil
             isOffline = response.isCached
+            if reset && page == nil {
+                appViewModel.updateWidgetData()
+            }
 
             if !usesIncrementalRefresh {
                 moreTopicsUrl = response.moreTopicsUrl

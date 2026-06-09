@@ -15,6 +15,8 @@ struct FireAppRouteDestinationView: View {
             )
         case .profile(let username):
             FirePublicProfileView(viewModel: viewModel, username: username)
+        case .profileTab, .notifications, .search:
+            EmptyView()
         case .badge(let badgeID, _):
             FireBadgeDetailView(viewModel: viewModel, badgeID: badgeID)
         }

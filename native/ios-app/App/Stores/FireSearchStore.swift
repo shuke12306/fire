@@ -64,6 +64,15 @@ final class FireSearchStore: FirePaginatedStore<SearchResultState> {
         submit(reset: true)
     }
 
+    func prepareSearch(query: String) {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            return
+        }
+        self.query = trimmedQuery
+        submit(reset: true)
+    }
+
     func submit(reset: Bool) {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {

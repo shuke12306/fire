@@ -17,11 +17,13 @@ packages:
 fileGroups:
   - Configs/Fire-Debug.xcconfig
   - Configs/Fire-Info.plist
+  - Configs/FireWidget-Info.plist
   - Configs/Fire-Local-Debug.example.xcconfig
   - Configs/Fire-Local-Release.example.xcconfig
   - Configs/Fire-Release.xcconfig
   - Configs/Fire-Shared.xcconfig
   - Fire.entitlements
+  - FireWidget.entitlements
 schemes:
   Fire:
     build:
@@ -48,6 +50,8 @@ targets:
       Release: Configs/Fire-Release.xcconfig
     sources:
       - path: App
+        excludes:
+          - Widgets/**
       - path: Sources/FireAppSession
       - path: Generated/FireUniFfi
         optional: true
@@ -69,6 +73,8 @@ targets:
       - framework: LocalPackages/TextureCore/Artifacts/AsyncDisplayKit.xcframework
         embed: true
         codeSign: true
+      - target: FireWidgetExtension
+        embed: true
     settings:
       base:
         CODE_SIGN_STYLE: $(FIRE_CODE_SIGN_STYLE)
@@ -118,6 +124,30 @@ targets:
           - $(SRCROOT)/Generated/fire_uniffiFFI/fire_uniffiFFI.h
           - $(SRCROOT)/Generated/fire_uniffiFFI/module.modulemap
           - $(SRCROOT)/Generated/lib/$(PLATFORM_NAME)/libfire_uniffi.a
+  FireWidgetExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    configFiles:
+      Debug: Configs/Fire-Debug.xcconfig
+      Release: Configs/Fire-Release.xcconfig
+    sources:
+      - path: App/Widgets
+      - path: App/Shared/FireWidgetData.swift
+    settings:
+      base:
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_STYLE: $(FIRE_CODE_SIGN_STYLE)
+        DEVELOPMENT_TEAM: $(FIRE_DEVELOPMENT_TEAM)
+        CURRENT_PROJECT_VERSION: $(FIRE_BUILD_NUMBER)
+        MARKETING_VERSION: $(FIRE_MARKETING_VERSION)
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIRE_PRODUCT_BUNDLE_IDENTIFIER).widget
+        CODE_SIGN_ENTITLEMENTS: FireWidget.entitlements
+        PRODUCT_NAME: FireWidgetExtension
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Configs/FireWidget-Info.plist
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
   FireTests:
     type: bundle.unit-test
     platform: iOS

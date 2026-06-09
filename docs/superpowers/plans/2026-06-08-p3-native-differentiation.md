@@ -142,97 +142,34 @@ struct FireToastView: View {
 ### Task 2: iOS Widget — Data Sharing Layer
 
 **Files:**
-- Create: `native/ios-app/App/Widget/FireWidgetData.swift`
-- Modify: `native/ios-app/App/ViewModels/FireAppViewModel.swift` (add widget data write after refresh)
-- Modify: Xcode project: add App Group entitlement to main target
+- Create: `native/ios-app/App/Shared/FireWidgetData.swift`
+- Create: `native/ios-app/App/Shared/FireWidgetSnapshotWriter.swift`
+- Modify: `native/ios-app/App/ViewModels/FireAppViewModel.swift`
+- Modify: `native/ios-app/App/Stores/FireHomeFeedStore.swift`
+- Modify: `native/ios-app/App/Stores/FireNotificationStore.swift`
+- Modify: `native/ios-app/Fire.entitlements`
+- Create: `native/ios-app/FireWidget.entitlements`
 
-- [ ] **Step 1: Create shared data types in `native/ios-app/App/Widget/FireWidgetData.swift`**
+- [x] **Step 1: Create shared widget snapshot types**
 
-```swift
-import Foundation
+  `FireWidgetData` and `FireWidgetTopicEntry` live in `App/Shared/FireWidgetData.swift` and are compiled into both the app target and `FireWidgetExtension`. The snapshot is encoded to App Group `UserDefaults` under `group.com.fire.app` with key `fire_widget_data`.
 
-struct FireWidgetTopicEntry: Codable, Identifiable, Hashable {
-    var id: UInt64
-    var title: String
-    var categorySlug: String
-    var categoryColorHex: String
-    var replyCount: Int
-    var likeCount: Int
-    var lastPostedAt: TimeInterval
-    var posterAvatarUrl: String?
-}
+- [x] **Step 2: Add App Group entitlement**
 
-struct FireWidgetData: Codable {
-    var unreadNotificationCount: Int
-    var recentTopics: [FireWidgetTopicEntry]
-    var username: String
-    var updatedAt: TimeInterval
+  Both `Fire.entitlements` and `FireWidget.entitlements` include `com.apple.security.application-groups = group.com.fire.app`.
 
-    static let appGroupName = "group.com.fire.app"
-    static let sharedDefaultsSuite = "group.com.fire.app.defaults"
-    static let widgetDataKey = "fire_widget_data"
+- [x] **Step 3: Add `updateWidgetData()` through an app-only writer**
 
-    static var sharedDefaults: UserDefaults? {
-        UserDefaults(suiteName: sharedDefaultsSuite)
-    }
+  `FireWidgetSnapshotWriter` stays in the app target only. It converts current Rust-backed `FireTopicRowPresentation` rows plus notification count into widget-safe snapshot data, limits topic entries to five, clears snapshots while unauthenticated, and calls `WidgetCenter.shared.reloadAllTimelines()`.
 
-    static func load() -> FireWidgetData? {
-        guard let data = sharedDefaults?.data(forKey: widgetDataKey) else { return nil }
-        return try? JSONDecoder().decode(FireWidgetData.self, from: data)
-    }
+- [x] **Step 4: Refresh snapshots from authoritative stores**
 
-    func save() {
-        guard let defaults = FireWidgetData.sharedDefaults else { return }
-        if let data = try? JSONEncoder().encode(self) {
-            defaults.set(data, forKey: FireWidgetData.widgetDataKey)
-        }
-    }
-}
-```
+  `FireHomeFeedStore` updates widget snapshots after topic-list state changes, including empty first pages. `FireNotificationStore` updates snapshots after notification state changes. Logout and unauthenticated session paths clear shared widget data through `FireAppViewModel.updateWidgetData()`.
 
-- [ ] **Step 2: Add App Group entitlement**
+- [x] **Step 5: Verify**
 
-In the Xcode project editor, add the App Groups capability to both the main app target and the widget extension target (created later). The group identifier is `group.com.fire.app`. This creates an entitlements file at `native/ios-app/App/AppName.entitlements`.
-
-- [ ] **Step 3: Add `updateWidgetData()` method to `FireAppViewModel`**
-
-```swift
-// In FireAppViewModel, add after state refresh:
-func updateWidgetData() {
-    let snapshot = self.snapshot()
-    let rows = self.homeFeedStore.topicRows.prefix(5).map { row in
-        FireWidgetTopicEntry(
-            id: row.id,
-            title: row.title,
-            categorySlug: row.categorySlug,
-            categoryColorHex: row.categoryColorHex,
-            replyCount: row.replyCount,
-            likeCount: row.likeCount,
-            lastPostedAt: row.lastPostedAt.timeIntervalSince1970,
-            posterAvatarUrl: row.posterAvatarUrl
-        )
-    }
-    let data = FireWidgetData(
-        unreadNotificationCount: self.notificationStore.unreadCount,
-        recentTopics: Array(rows),
-        username: snapshot.currentUser?.username ?? "",
-        updatedAt: Date().timeIntervalSince1970
-    )
-    data.save()
-}
-```
-
-- [ ] **Step 4: Call `updateWidgetData()` after topic list refresh and notification state refresh in `FireHomeFeedStore` and `FireNotificationStore`**
-
-After a successful `topicListRefresh` cycle completes, call `appViewModel.updateWidgetData()`. Same for notification state changes.
-
-- [ ] **Step 5: Call `WidgetCenter.shared.reloadAllTimelines()` after `updateWidgetData()`**
-
-```swift
-import WidgetKit
-// After data.save():
-WidgetCenter.shared.reloadAllTimelines()
-```
+  - `cd native/ios-app && xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF,OS=18.3' -derivedDataPath /tmp/fire-ios-widget-build2 CODE_SIGNING_ALLOWED=NO -quiet` — passed
+  - `plutil -p /tmp/fire-ios-widget-build2/Build/Products/Debug-iphonesimulator/Fire.app/PlugIns/FireWidgetExtension.appex/Info.plist` — confirmed `NSExtensionPointIdentifier = com.apple.widgetkit-extension`
 
 **Commit message:** `feat(widget-data): add shared App Group data layer for iOS home screen widgets`
 
@@ -241,174 +178,34 @@ WidgetCenter.shared.reloadAllTimelines()
 ### Task 3: iOS Widget — Small Widget
 
 **Files:**
-- Create: `native/ios-app/App/Widget/FireWidgetBundle.swift`
-- Create: `native/ios-app/App/Widget/FireSmallWidget.swift`
-- Create: `native/ios-app/App/Widget/FireWidgetEntry.swift`
-- Modify: Xcode project: add WidgetExtension target
+- Create: `native/ios-app/App/Widgets/FireWidgetEntry.swift`
+- Create: `native/ios-app/App/Widgets/FireWidgetViews.swift`
+- Create: `native/ios-app/App/Widgets/FireWidgetBundle.swift`
+- Create: `native/ios-app/App/Widgets/FireSmallWidget.swift`
+- Create: `native/ios-app/Configs/FireWidget-Info.plist`
+- Modify: `native/ios-app/Fire.xcodeproj/project.pbxproj`
+- Modify: `native/ios-app/project.yml`
 
-- [ ] **Step 1: Create WidgetExtension target in Xcode**
+- [x] **Step 1: Create `FireWidgetExtension` target**
 
-Add a new Widget Extension target named `FireWidget` to the Xcode project. Set deployment target to iOS 17+. Link against the main app's App Group.
+  The Xcode project and `project.yml` define a `FireWidgetExtension` app-extension target with iOS 17 deployment, App Group entitlement, and an explicit `Configs/FireWidget-Info.plist` containing the WidgetKit `NSExtension` dictionary. The app target embeds the extension in `PlugIns`.
 
-- [ ] **Step 2: Create `FireWidgetEntry.swift` with timeline provider types**
+- [x] **Step 2: Create timeline entry/provider types**
 
-```swift
-import WidgetKit
+  `FireWidgetEntry.swift` defines `FireWidgetEntry` and `FireWidgetProvider`. Timelines read only `FireWidgetData.load()` from the App Group shared container and refresh after 30 minutes; the extension never calls UniFFI or Rust.
 
-struct FireWidgetEntry: TimelineEntry {
-    let date: Date
-    let data: FireWidgetData?
+- [x] **Step 3: Create small widget**
 
-    static var placeholder: FireWidgetEntry {
-        FireWidgetEntry(
-            date: Date(),
-            data: FireWidgetData(
-                unreadNotificationCount: 3,
-                recentTopics: [
-                    FireWidgetTopicEntry(
-                        id: 1, title: "示例话题标题", categorySlug: "general",
-                        categoryColorHex: "#E8663C", replyCount: 12, likeCount: 5,
-                        lastPostedAt: Date().timeIntervalSince1970, posterAvatarUrl: nil
-                    )
-                ],
-                username: "Fire",
-                updatedAt: Date().timeIntervalSince1970
-            )
-        )
-    }
+  `FireSmallWidget.swift` displays the Fire brand, unread count, and latest topic summary. It supports `.systemSmall` and deep-links to `fire://notifications`.
 
-    static var snapshot: FireWidgetEntry { placeholder }
-}
-```
+- [x] **Step 4: Add widget deep link handling in the app**
 
-- [ ] **Step 3: Create `FireSmallWidget.swift`**
+  `FireRouteParser`, `FireNavigationState`, `FireTabRoot`, and `FireHomeView` route `fire://notifications`, `fire://topic/<id>`, and related topic/profile routes through the existing native topic-detail and tab-navigation paths.
 
-```swift
-import WidgetKit
-import SwiftUI
+- [x] **Step 5: Verify**
 
-struct FireSmallWidget: Widget {
-    let kind: String = "FireSmallWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FireWidgetProvider()) { entry in
-            FireSmallWidgetView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(red: 0.08, green: 0.09, blue: 0.10)
-                }
-        }
-        .configurationDisplayName("Fire 未读")
-        .description("查看未读通知数量和最新话题")
-        .supportedFamilies([.systemSmall])
-    }
-}
-
-struct FireSmallWidgetView: View {
-    let entry: FireWidgetEntry
-
-    var body: some View {
-        if let data = entry.data {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Fire")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                    Spacer()
-                    if data.unreadNotificationCount > 0 {
-                        Text("\(data.unreadNotificationCount)")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(red: 0.91, green: 0.39, blue: 0.18))
-                            .clipShape(Capsule())
-                    }
-                }
-                if let topic = data.recentTopics.first {
-                    Text(topic.title)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color(red: 0.96, green: 0.95, blue: 0.93))
-                        .lineLimit(2)
-                    Text(topic.categorySlug)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-                }
-                Spacer()
-                Link(destination: URL(string: "fire://notifications")!) {
-                    Text("查看全部")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                }
-            }
-            .padding(12)
-        } else {
-            VStack {
-                Text("Fire")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                Text("打开应用以加载数据")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-            }
-        }
-    }
-}
-```
-
-- [ ] **Step 4: Create `FireWidgetProvider` with timeline logic**
-
-```swift
-struct FireWidgetProvider: TimelineProvider {
-    func placeholder(in context: Context) -> FireWidgetEntry {
-        .placeholder
-    }
-
-    func getSnapshot(in context: Context, completion: @escaping (FireWidgetEntry) -> Void) {
-        completion(.snapshot)
-    }
-
-    func getTimeline(in context: Context, completion: @escaping (Timeline<FireWidgetEntry>) -> Void) {
-        let data = FireWidgetData.load()
-        let entry = FireWidgetEntry(date: Date(), data: data)
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
-    }
-}
-```
-
-- [ ] **Step 5: Create `FireWidgetBundle.swift`**
-
-```swift
-import WidgetKit
-import SwiftUI
-
-@main
-struct FireWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        FireSmallWidget()
-    }
-}
-```
-
-- [ ] **Step 6: Add widget deep link handler in main app**
-
-In `FireAppViewModel` or the app's `onOpenURL` handler, add:
-
-```swift
-.onOpenURL { url in
-    guard url.scheme == "fire" else { return }
-    switch url.host {
-    case "notifications":
-        // Navigate to notifications tab
-        selectedTab = .notifications
-    case "topic":
-        if let topicId = url.queryParameters["id"].flatMap(UInt64.init) {
-            navigateToTopic(id: topicId)
-        }
-    default: break
-    }
-}
-```
+  - `xcodebuild build -scheme Fire ... CODE_SIGNING_ALLOWED=NO -quiet` — passed
+  - Built extension plist contains `NSExtensionPointIdentifier = com.apple.widgetkit-extension` and bundle ID `com.fire.app.ios.local.debug.widget`
 
 **Commit message:** `feat(widget-small): add iOS small home screen widget with unread count and latest topic`
 
@@ -417,120 +214,25 @@ In `FireAppViewModel` or the app's `onOpenURL` handler, add:
 ### Task 4: iOS Widget — Medium Widget
 
 **Files:**
-- Create: `native/ios-app/App/Widget/FireMediumWidget.swift`
-- Modify: `native/ios-app/App/Widget/FireWidgetBundle.swift`
+- Create: `native/ios-app/App/Widgets/FireMediumWidget.swift`
+- Modify: `native/ios-app/App/Widgets/FireWidgetBundle.swift`
+- Modify: `native/ios-app/App/Widgets/FireWidgetViews.swift`
 
-- [ ] **Step 1: Create `FireMediumWidget.swift`**
+- [x] **Step 1: Create `FireMediumWidget.swift`**
 
-```swift
-import WidgetKit
-import SwiftUI
+  `FireMediumWidget` supports `.systemMedium`, displays unread status and up to three topic rows, and links each row to `fire://topic/<id>`.
 
-struct FireMediumWidget: Widget {
-    let kind: String = "FireMediumWidget"
+- [x] **Step 2: Add shared widget color/view helpers**
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FireWidgetProvider()) { entry in
-            FireMediumWidgetView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(red: 0.08, green: 0.09, blue: 0.10)
-                }
-        }
-        .configurationDisplayName("Fire 热门")
-        .description("查看热门话题")
-        .supportedFamilies([.systemMedium])
-    }
-}
+  `FireWidgetViews.swift` contains shared color parsing, category swatch rendering, empty-state rendering, and compact topic-row rendering used by all widget sizes.
 
-struct FireMediumWidgetView: View {
-    let entry: FireWidgetEntry
+- [x] **Step 3: Register `FireMediumWidget` in `FireWidgetBundle`**
 
-    var body: some View {
-        if let data = entry.data, !data.recentTopics.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Fire 热门话题")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                    Spacer()
-                    Text(data.username)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-                }
-                Divider().overlay(Color(white: 1, opacity: 0.08))
-                ForEach(Array(data.recentTopics.prefix(3))) { topic in
-                    Link(destination: URL(string: "fire://topic?id=\(topic.id)")!) {
-                        HStack(spacing: 8) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(hex: topic.categoryColorHex).opacity(0.6))
-                                .frame(width: 4, height: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(topic.title)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Color(red: 0.96, green: 0.95, blue: 0.93))
-                                    .lineLimit(1)
-                                HStack(spacing: 6) {
-                                    Text(topic.categorySlug)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-                                    if topic.replyCount > 0 {
-                                        Image(systemName: "bubble.right")
-                                            .font(.system(size: 9))
-                                            .foregroundStyle(Color(red: 0.52, green: 0.52, blue: 0.55))
-                                        Text("\(topic.replyCount)")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(Color(red: 0.52, green: 0.52, blue: 0.55))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-        } else {
-            Text("打开 Fire 加载数据")
-                .font(.system(size: 13))
-                .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-        }
-    }
-}
-```
+  `FireWidgetBundle` registers `FireSmallWidget`, `FireMediumWidget`, and `FireLargeWidget`.
 
-- [ ] **Step 2: Add `Color(hex:)` convenience init if not already present**
+- [x] **Step 4: Verify**
 
-```swift
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 6:
-            (a, r, g, b) = (255, (int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
-        case 8:
-            (a, r, g, b) = ((int >> 24) & 0xFF, (int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (255, 0, 0, 0)
-        }
-        self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
-    }
-}
-```
-
-- [ ] **Step 3: Register `FireMediumWidget` in `FireWidgetBundle`**
-
-```swift
-@main
-struct FireWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        FireSmallWidget()
-        FireMediumWidget()
-    }
-}
-```
+  - `xcodebuild build -scheme Fire ... CODE_SIGNING_ALLOWED=NO -quiet` — passed
 
 **Commit message:** `feat(widget-medium): add iOS medium home screen widget with trending topics`
 
@@ -539,111 +241,20 @@ struct FireWidgetBundle: WidgetBundle {
 ### Task 5: iOS Widget — Large Widget
 
 **Files:**
-- Create: `native/ios-app/App/Widget/FireLargeWidget.swift`
-- Modify: `native/ios-app/App/Widget/FireWidgetBundle.swift`
+- Create: `native/ios-app/App/Widgets/FireLargeWidget.swift`
+- Modify: `native/ios-app/App/Widgets/FireWidgetBundle.swift`
 
-- [ ] **Step 1: Create `FireLargeWidget.swift`**
+- [x] **Step 1: Create `FireLargeWidget.swift`**
 
-```swift
-import WidgetKit
-import SwiftUI
+  `FireLargeWidget` supports `.systemLarge`, renders unread summary plus up to five topic rows, and uses the same App Group snapshot as the small/medium widgets.
 
-struct FireLargeWidget: Widget {
-    let kind: String = "FireLargeWidget"
+- [x] **Step 2: Register `FireLargeWidget` in `FireWidgetBundle`**
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FireWidgetProvider()) { entry in
-            FireLargeWidgetView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(red: 0.08, green: 0.09, blue: 0.10)
-                }
-        }
-        .configurationDisplayName("Fire 时间线")
-        .description("查看话题时间线和通知摘要")
-        .supportedFamilies([.systemLarge])
-    }
-}
+  `FireWidgetBundle` includes all three widgets in one WidgetKit extension entry point.
 
-struct FireLargeWidgetView: View {
-    let entry: FireWidgetEntry
+- [x] **Step 3: Verify**
 
-    var body: some View {
-        if let data = entry.data {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Fire")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                    Spacer()
-                    if data.unreadNotificationCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bell.fill")
-                                .font(.system(size: 10))
-                            Text("\(data.unreadNotificationCount) 条未读")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundStyle(Color(red: 0.96, green: 0.45, blue: 0.22))
-                    }
-                }
-                Divider().overlay(Color(white: 1, opacity: 0.08))
-                ForEach(Array(data.recentTopics.prefix(5))) { topic in
-                    Link(destination: URL(string: "fire://topic?id=\(topic.id)")!) {
-                        HStack(spacing: 10) {
-                            VStack(alignment: .center, spacing: 2) {
-                                Circle()
-                                    .fill(Color(hex: topic.categoryColorHex).opacity(0.5))
-                                    .frame(width: 8, height: 8)
-                                Rectangle()
-                                    .fill(Color(white: 1, opacity: 0.06))
-                                    .frame(width: 1)
-                                    .frame(maxHeight: .infinity)
-                            }
-                            .frame(width: 16)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(topic.title)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Color(red: 0.96, green: 0.95, blue: 0.93))
-                                    .lineLimit(1)
-                                HStack(spacing: 8) {
-                                    Text(topic.categorySlug)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-                                    Label("\(topic.replyCount)", systemImage: "bubble.right")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(red: 0.52, green: 0.52, blue: 0.55))
-                                    Label("\(topic.likeCount)", systemImage: "heart")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color(red: 0.52, green: 0.52, blue: 0.55))
-                                }
-                            }
-                        }
-                        .frame(maxHeight: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-        } else {
-            Text("打开 Fire 加载数据")
-                .font(.system(size: 13))
-                .foregroundStyle(Color(red: 0.62, green: 0.63, blue: 0.67))
-        }
-    }
-}
-```
-
-- [ ] **Step 2: Register `FireLargeWidget` in `FireWidgetBundle`**
-
-```swift
-@main
-struct FireWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        FireSmallWidget()
-        FireMediumWidget()
-        FireLargeWidget()
-    }
-}
-```
+  - `xcodebuild build -scheme Fire ... CODE_SIGNING_ALLOWED=NO -quiet` — passed
 
 **Commit message:** `feat(widget-large): add iOS large home screen widget with timeline layout`
 
@@ -949,108 +560,36 @@ Registered `FireUnreadWidgetProvider` and `FireTopicListWidgetProvider` with `AP
 - Create: `native/ios-app/App/Intents/FireViewUnreadIntent.swift`
 - Create: `native/ios-app/App/Intents/FireSearchTopicsIntent.swift`
 - Create: `native/ios-app/App/Intents/FireViewProfileIntent.swift`
+- Modify: `native/ios-app/App/Navigation/FireNavigationState.swift`
+- Modify: `native/ios-app/App/Routing/FireAppRoute.swift`
+- Modify: `native/ios-app/App/Routing/FireRouteParser.swift`
+- Modify: `native/ios-app/App/Views/Other/FireTabRoot.swift`
+- Modify: `native/ios-app/App/Views/Home/FireHomeView.swift`
 
-- [ ] **Step 1: Create `FireViewUnreadIntent` using AppIntents framework**
+- [x] **Step 1: Create `FireViewUnreadIntent` using AppIntents framework**
 
-```swift
-import AppIntents
+  `FireViewUnreadIntent` uses `openAppWhenRun = true` and sets `FireNavigationState.shared.pendingRoute = .notifications` from `perform()`. It intentionally does not use `OpenURLIntent`, which is iOS 18-only while Fire targets iOS 17.
 
-struct FireViewUnreadIntent: AppIntent {
-    static var title: LocalizedStringResource = "查看未读通知"
-    static var description = IntentDescription("打开 Fire 的未读通知列表")
-    static var openAppWhenRun = true
+- [x] **Step 2: Create `FireSearchTopicsIntent`**
 
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        // Navigate to notifications tab via shared URL scheme
-        await UIApplication.shared.open(URL(string: "fire://notifications")!)
-        return .result()
-    }
-}
-```
+  `FireSearchTopicsIntent` defines an optional `@Parameter(title: "Search Query") var query: String?` without an unsupported inline default, then sets `.search(query:)` on `FireNavigationState.shared`.
 
-- [ ] **Step 2: Create `FireSearchTopicsIntent`**
+- [x] **Step 3: Create `FireViewProfileIntent`**
 
-```swift
-import AppIntents
+  `FireViewProfileIntent` opens the app and sets `.profileTab` on `FireNavigationState.shared`.
 
-struct FireSearchTopicsIntent: AppIntent {
-    static var title: LocalizedStringResource = "搜索话题"
-    static var description = IntentDescription("在 Fire 中搜索话题")
-    static var openAppWhenRun = true
+- [x] **Step 4: Create `FireShortcuts` to group intents**
 
-    @Parameter(title: "搜索关键词")
-    var query: String
+  `FireShortcuts` registers unread, search, and profile App Shortcuts with system images `bell.badge`, `magnifyingglass`, and `person.circle`.
 
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        let url = URL(string: "fire://search?query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)")!
-        await UIApplication.shared.open(url)
-        return .result()
-    }
-}
-```
+- [x] **Step 5: Add deep link and shortcut route handling**
 
-- [ ] **Step 3: Create `FireViewProfileIntent`**
+  `FireAppRoute` now models `.notifications`, `.profileTab`, and `.search(query:)`. `FireRouteParser` parses `fire://notifications`, `fire://profile`, and `fire://search?query=...`; `FireTabRoot` selects the notifications/profile tabs or forwards search to `FireHomeView`, and `FireSearchStore.prepareSearch(query:)` preloads the query.
 
-```swift
-import AppIntents
+- [x] **Step 6: Verify**
 
-struct FireViewProfileIntent: AppIntent {
-    static var title: LocalizedStringResource = "查看个人资料"
-    static var description = IntentDescription("打开 Fire 个人资料页")
-    static var openAppWhenRun = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        await UIApplication.shared.open(URL(string: "fire://profile")!)
-        return .result()
-    }
-}
-```
-
-- [ ] **Step 4: Create `FireShortcuts` to group intents**
-
-```swift
-import AppIntents
-
-struct FireShortcuts: AppShortcutsProvider {
-    static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: FireViewUnreadIntent(),
-            phrases: [
-                "查看 \(.applicationName) 未读",
-                "打开 \(.applicationName) 通知",
-                "View unread in \(.applicationName)"
-            ],
-            shortTitle: "查看未读",
-            systemImageName: "bell.badge"
-        )
-        AppShortcut(
-            intent: FireSearchTopicsIntent(),
-            phrases: [
-                "在 \(.applicationName) 搜索",
-                "Search in \(.applicationName)"
-            ],
-            shortTitle: "搜索话题",
-            systemImageName: "magnifyingglass"
-        )
-        AppShortcut(
-            intent: FireViewProfileIntent(),
-            phrases: [
-                "打开 \(.applicationName) 个人资料",
-                "View profile in \(.applicationName)"
-            ],
-            shortTitle: "查看资料",
-            systemImageName: "person.circle"
-        )
-    }
-}
-```
-
-- [ ] **Step 5: Add deep link handler for `fire://search` and `fire://profile` in main app**
-
-Extend the `onOpenURL` handler from Task 3 to handle these schemes.
+  - `cd native/ios-app && xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF,OS=18.3' -derivedDataPath /tmp/fire-ios-widget-build2 CODE_SIGNING_ALLOWED=NO -quiet` — passed
+  - `cd native/ios-app && xcodebuild test -scheme Fire -destination 'platform=iOS Simulator,id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF,OS=18.3' -derivedDataPath /tmp/fire-ios-widget-build2 CODE_SIGNING_ALLOWED=NO -only-testing:FireTests/FireRouteParserTests -quiet` — passed, 23 route parser tests
 
 **Commit message:** `feat(shortcuts): add Siri Shortcuts for unread, search, and profile navigation`
 
@@ -1157,12 +696,14 @@ Extend the `onOpenURL` handler from Task 3 to handle these schemes.
 - `native/ios-app/App/Views/Other/FireReadHistoryView.swift` — Replace notice alert with toast
 - `native/ios-app/App/Views/Messages/FirePrivateMessagesView.swift` — Replace alert with toast
 - `native/ios-app/App/Views/Profile/FirePublicProfileView.swift` — Replace composer notice alert with toast
-- `native/ios-app/App/Widget/FireWidgetData.swift` — Shared data model for widget communication
-- `native/ios-app/App/Widget/FireWidgetEntry.swift` — Timeline entry and provider types
-- `native/ios-app/App/Widget/FireWidgetBundle.swift` — Widget extension entry point
-- `native/ios-app/App/Widget/FireSmallWidget.swift` — Small unread count widget
-- `native/ios-app/App/Widget/FireMediumWidget.swift` — Medium trending topics widget
-- `native/ios-app/App/Widget/FireLargeWidget.swift` — Large timeline widget
+- `native/ios-app/App/Shared/FireWidgetData.swift` — Shared data model for widget communication
+- `native/ios-app/App/Shared/FireWidgetSnapshotWriter.swift` — App-only widget snapshot writer and timeline reload hook
+- `native/ios-app/App/Widgets/FireWidgetEntry.swift` — Timeline entry and provider types
+- `native/ios-app/App/Widgets/FireWidgetBundle.swift` — Widget extension entry point
+- `native/ios-app/App/Widgets/FireWidgetViews.swift` — Shared WidgetKit view helpers
+- `native/ios-app/App/Widgets/FireSmallWidget.swift` — Small unread count widget
+- `native/ios-app/App/Widgets/FireMediumWidget.swift` — Medium trending topics widget
+- `native/ios-app/App/Widgets/FireLargeWidget.swift` — Large timeline widget
 - `native/ios-app/App/ViewModels/FireAppViewModel.swift` — Widget data update, deep link handler
 - `native/android-app/src/main/java/com/fire/app/widget/FireWidgetData.kt` — Android widget shared state
 - `native/android-app/src/main/java/com/fire/app/widget/FireUnreadWidgetProvider.kt` — Unread count `RemoteViews` widget

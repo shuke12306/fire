@@ -347,6 +347,18 @@ final class FireAppViewModel: ObservableObject {
         topicDetailStore = store
     }
 
+    func updateWidgetData() {
+        guard session.readiness.canReadAuthenticatedApi else {
+            FireWidgetSnapshotWriter.clear()
+            return
+        }
+        FireWidgetSnapshotWriter.update(
+            session: session,
+            topicRows: homeFeedStore?.topicRows ?? [],
+            unreadNotificationCount: notificationStore?.unreadCount ?? 0
+        )
+    }
+
     // MARK: - Lifecycle
 
     func loadInitialState() {
@@ -619,6 +631,7 @@ final class FireAppViewModel: ObservableObject {
                 cachedLoginSyncReadiness = nil
                 clearTopicState()
                 notificationStore?.reset()
+                updateWidgetData()
             } catch {
                 do {
                     let loginCoordinator = try await loginCoordinatorValue()
@@ -632,6 +645,7 @@ final class FireAppViewModel: ObservableObject {
                     cachedLoginSyncReadiness = nil
                     clearTopicState()
                     notificationStore?.reset()
+                    updateWidgetData()
                 } catch {
                     errorMessage = error.localizedDescription
                 }
@@ -1491,6 +1505,7 @@ final class FireAppViewModel: ObservableObject {
             await notificationStore?.syncStateFromRuntimeIfAvailable()
         } else {
             notificationStore?.reset()
+            updateWidgetData()
         }
 
         // Reconcile MessageBus lifecycle

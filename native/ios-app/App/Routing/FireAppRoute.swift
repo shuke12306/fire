@@ -140,6 +140,9 @@ struct FireTopicRoutePayload: Hashable {
 enum FireAppRoute: Hashable, Identifiable {
     case topic(payload: FireTopicRoutePayload)
     case profile(username: String)
+    case profileTab
+    case notifications
+    case search(query: String?)
     case badge(id: UInt64, slug: String?)
 
     static func topic(
@@ -190,6 +193,15 @@ enum FireAppRoute: Hashable, Identifiable {
             return "topic:\(payload.topicId):\(payload.postNumber.map(String.init) ?? "nil")"
         case .profile(let username):
             return "profile:\(username.lowercased())"
+        case .profileTab:
+            return "profile-tab"
+        case .notifications:
+            return "notifications"
+        case .search(let query):
+            let normalizedQuery = query?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return "search:\(normalizedQuery ?? "")"
         case .badge(let id, let slug):
             return "badge:\(id):\(slug?.lowercased() ?? "nil")"
         }
@@ -211,7 +223,7 @@ enum FireAppRoute: Hashable, Identifiable {
                 postNumber: payload.postNumber,
                 preview: payload.preview ?? preview
             ))
-        default:
+        case .profile, .profileTab, .notifications, .search, .badge:
             return self
         }
     }

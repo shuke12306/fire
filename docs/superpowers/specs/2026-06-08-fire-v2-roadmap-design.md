@@ -311,14 +311,14 @@ Rust 已有 bookmark reminder API。需要：
 **技术方案：**
 - WidgetKit + SwiftUI
 - 通过 App Group 共享数据
-- Rust 核心定时获取数据写入共享 UserDefaults
+- App Store 进程从 Rust-backed 首页/通知状态写入共享 UserDefaults；Widget 扩展只读取 App Group 快照，不调用 UniFFI
 
 ### 4.2 Android Widget（1.5 周）
 
-**Glance Widget：**
+**RemoteViews Widget：**
 - 未读通知数
 - 热门话题列表
-- Material You 动态颜色适配
+- 使用 `AppWidgetProvider` + `RemoteViews`，避免在 View/XML 宿主中引入 Compose/Glance
 
 ### 4.3 Haptic 反馈全面覆盖（iOS，1 周）
 
@@ -493,11 +493,11 @@ Rust 已有 bookmark reminder API。需要：
 - [ ] 话题内可搜索高亮
 
 ### P3 验收
-- [ ] iOS Widget 至少 2 种尺寸可用
-- [ ] Android Widget 可用
+- [x] iOS Widget 至少 2 种尺寸可用
+- [x] Android Widget 可用
 - [ ] 所有交互操作有 Haptic 反馈
-- [ ] Toast 组件替代非关键 `.alert()`
-- [ ] 离线模式下列表页可展示缓存数据
+- [x] Toast 组件替代非关键 `.alert()`
+- [x] 离线模式下列表页可展示缓存数据
 
 ### P4 验收
 - [ ] App Store / Play Store 素材齐全

@@ -191,12 +191,23 @@ struct FireTabRoot: View {
 
     private func selectTabForPendingRouteIfReady(_ route: FireAppRoute?) {
         guard let route, isAuthenticated else { return }
-        if route.isTopicRoute {
+        switch route {
+        case .topic:
             navigationState.presentTopicRoute(route)
             navigationState.pendingRoute = nil
-            return
+        case .notifications:
+            navigationState.selectedTab = 1
+            navigationState.pendingRoute = nil
+        case .profileTab:
+            navigationState.selectedTab = 2
+            navigationState.pendingRoute = nil
+        case .search(let query):
+            navigationState.pendingSearchQuery = query ?? ""
+            navigationState.selectedTab = 0
+            navigationState.pendingRoute = nil
+        case .profile, .badge:
+            navigationState.selectedTab = 0
         }
-        navigationState.selectedTab = 0
     }
 
     private func scenePhaseLabel(_ phase: ScenePhase) -> String {

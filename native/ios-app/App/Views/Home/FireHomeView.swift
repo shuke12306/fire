@@ -39,6 +39,7 @@ struct FireHomeView: View {
     @State private var showCategoryBrowser = false
     @State private var showTagPicker = false
     @State private var showCreateTopicComposer = false
+    @State private var showSearch = false
     @State private var didPrefetchToFillViewport = false
     @State private var selectedRoute: FireAppRoute?
     @State private var lastTriggeredTopicsPage: UInt32?
@@ -99,11 +100,12 @@ struct FireHomeView: View {
                         }
                         .accessibilityLabel("创建新话题")
 
-                        NavigationLink {
-                            FireSearchView(appViewModel: viewModel, searchStore: searchStore)
+                        Button {
+                            showSearch = true
                         } label: {
                             Image(systemName: "magnifyingglass")
                         }
+                        .buttonStyle(.plain)
                         .accessibilityLabel("搜索")
                     }
                 }
@@ -115,18 +117,29 @@ struct FireHomeView: View {
                         .fireNavigationPush(
                             sourceID: "home-route",
                             namespace: pushTransitionNamespace
-                        )
+                    )
                 }
+            }
+            .navigationDestination(isPresented: $showSearch) {
+                FireSearchView(appViewModel: viewModel, searchStore: searchStore)
             }
         }
         .onAppear {
             consumePendingRouteIfVisible(navigationState.pendingRoute)
+            consumePendingSearchQuery(navigationState.pendingSearchQuery)
         }
         .task {
             await homeFeedStore.refreshTopicsIfPossible(force: false)
         }
         .onChange(of: navigationState.pendingRoute) { _, route in
             consumePendingRouteIfVisible(route)
+        }
+        .onChange(of: navigationState.pendingSearchQuery) { _, query in
+            consumePendingSearchQuery(query)
+        }
+        .onChange(of: navigationState.selectedTab) { _, selectedTab in
+            guard selectedTab == 0 else { return }
+            consumePendingSearchQuery(navigationState.pendingSearchQuery)
         }
         .onChange(of: homeFeedStore.selectedTopicKind) { _, _ in
             resetPaginationTracking()
@@ -281,11 +294,32 @@ struct FireHomeView: View {
         guard navigationState.selectedTab == 0, let route else {
             return
         }
+        switch route {
+        case .topic, .profile, .badge, .search:
+            break
+        case .notifications, .profileTab:
+            return
+        }
         presentRoute(route)
         navigationState.pendingRoute = nil
     }
 
+    private func consumePendingSearchQuery(_ query: String?) {
+        guard navigationState.selectedTab == 0,
+              let query = query?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return
+        }
+        searchStore.prepareSearch(query: query)
+        showSearch = true
+        navigationState.pendingSearchQuery = nil
+    }
+
     private func presentRoute(_ route: FireAppRoute) {
+        if case .search(let query) = route {
+            navigationState.pendingSearchQuery = query ?? ""
+            consumePendingSearchQuery(query)
+            return
+        }
         if topicRoutePresenter.present(route) {
             return
         }

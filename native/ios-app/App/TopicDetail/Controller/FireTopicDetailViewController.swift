@@ -972,6 +972,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             handleTopicLink(payload)
         case .badge:
             modalRouter.push(route: route)
+        case .notifications, .profileTab, .search:
+            break
         }
     }
 

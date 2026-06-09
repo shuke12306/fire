@@ -135,6 +135,8 @@ extension NotificationItemState {
                 url.appendPathComponent(slug)
             }
             return url
+        case .profileTab, .notifications, .search:
+            return nil
         }
     }
 }

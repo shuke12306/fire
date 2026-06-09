@@ -47,6 +47,8 @@ enum FireAppRouteControllerFactory {
                 )
                 .fireTopicRoutePresenter(topicRoutePresenter)
             )
+        case .profileTab, .notifications, .search:
+            return UIHostingController(rootView: EmptyView())
         case .badge(let badgeID, _):
             return UIHostingController(
                 rootView: FireBadgeDetailView(

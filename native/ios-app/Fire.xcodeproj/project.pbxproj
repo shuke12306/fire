@@ -172,9 +172,31 @@
 		FFA9CA2BD6BA97E97C13CCA8 /* FireBookmarkEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989F3E1E2DDB5711DB78EF19 /* FireBookmarkEditorSheet.swift */; };
 		FFCC342F97F349220632A787 /* FireTopicPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9189433D7C9260885742A5BA /* FireTopicPresentationTests.swift */; };
 		FFDB8351400A000000000001 /* FireTopicInteractionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFDB8350400A000000000001 /* FireTopicInteractionService.swift */; };
+
+		F70000000000000000000001 /* FireWidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000011 /* FireWidgetData.swift */; };
+		F70000000000000000000002 /* FireWidgetSnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000012 /* FireWidgetSnapshotWriter.swift */; };
+		F70000000000000000000003 /* FireShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000013 /* FireShortcuts.swift */; };
+		F70000000000000000000004 /* FireSearchTopicsIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000014 /* FireSearchTopicsIntent.swift */; };
+		F70000000000000000000005 /* FireViewProfileIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000015 /* FireViewProfileIntent.swift */; };
+		F70000000000000000000006 /* FireViewUnreadIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000016 /* FireViewUnreadIntent.swift */; };
+		F70000000000000000000021 /* FireLargeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000031 /* FireLargeWidget.swift */; };
+		F70000000000000000000022 /* FireMediumWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000032 /* FireMediumWidget.swift */; };
+		F70000000000000000000023 /* FireSmallWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000033 /* FireSmallWidget.swift */; };
+		F70000000000000000000024 /* FireWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000034 /* FireWidgetBundle.swift */; };
+		F70000000000000000000025 /* FireWidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000011 /* FireWidgetData.swift */; };
+		F70000000000000000000026 /* FireWidgetEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000035 /* FireWidgetEntry.swift */; };
+		F70000000000000000000027 /* FireWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70000000000000000000036 /* FireWidgetViews.swift */; };
+		F70000000000000000000041 /* FireWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F70000000000000000000043 /* FireWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		F70000000000000000000042 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9AB7FC66AC31A04F54C77B79 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F70000000000000000000050;
+			remoteInfo = FireWidgetExtension;
+		};
 		DC8D43819C61EEBADFD56ED4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 9AB7FC66AC31A04F54C77B79 /* Project object */;
@@ -196,9 +218,36 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		F70000000000000000000044 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F70000000000000000000041 /* FireWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F70000000000000000000011 /* FireWidgetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireWidgetData.swift; sourceTree = "<group>"; };
+		F70000000000000000000012 /* FireWidgetSnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireWidgetSnapshotWriter.swift; sourceTree = "<group>"; };
+		F70000000000000000000013 /* FireShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireShortcuts.swift; sourceTree = "<group>"; };
+		F70000000000000000000014 /* FireSearchTopicsIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireSearchTopicsIntent.swift; sourceTree = "<group>"; };
+		F70000000000000000000015 /* FireViewProfileIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireViewProfileIntent.swift; sourceTree = "<group>"; };
+		F70000000000000000000016 /* FireViewUnreadIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireViewUnreadIntent.swift; sourceTree = "<group>"; };
+		F70000000000000000000031 /* FireLargeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireLargeWidget.swift; sourceTree = "<group>"; };
+		F70000000000000000000032 /* FireMediumWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireMediumWidget.swift; sourceTree = "<group>"; };
+		F70000000000000000000033 /* FireSmallWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireSmallWidget.swift; sourceTree = "<group>"; };
+		F70000000000000000000034 /* FireWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireWidgetBundle.swift; sourceTree = "<group>"; };
+		F70000000000000000000035 /* FireWidgetEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireWidgetEntry.swift; sourceTree = "<group>"; };
+		F70000000000000000000036 /* FireWidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireWidgetViews.swift; sourceTree = "<group>"; };
+		F70000000000000000000043 /* FireWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FireWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F70000000000000000000065 /* FireWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FireWidget.entitlements; sourceTree = "<group>"; };
+		F70000000000000000000066 /* FireWidget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "FireWidget-Info.plist"; sourceTree = "<group>"; };
 		00DA04AEF775D5BD01FC23AC /* FireOrderedIDList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireOrderedIDList.swift; sourceTree = "<group>"; };
 		019B4B93D3FDB4C799492775 /* FirePresentationIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirePresentationIdentity.swift; sourceTree = "<group>"; };
 		04449F91CF3EEB51F58E633B /* FireInviteLinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireInviteLinksView.swift; sourceTree = "<group>"; };
@@ -424,6 +473,7 @@
 			children = (
 				48CAB0E38556929FC140E25D /* Fire.app */,
 				0C933069DE6C026030AAB6EF /* FireTests.xctest */,
+				F70000000000000000000043 /* FireWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -568,18 +618,54 @@
 				E9BB7DB78AEF41DA7DA895B3 /* Core */,
 				5490C8448BFCBD09FDBC1287 /* DeveloperTools */,
 				0C39A3E435756F96BA815F54 /* FireMotion */,
+				F70000000000000000000061 /* Intents */,
 				D0467DE75C48A41B6DA94023 /* ListKit */,
 				40E7F020A3CFF859AED86113 /* Navigation */,
 				56BB80A6C2C32FB6128B118C /* Push */,
 				D0D03E8FE66111ECCEC7F2DD /* Routing */,
 				060B8352400A000000000001 /* Services */,
+				F70000000000000000000062 /* Shared */,
 				6D661DB7176AB667F4953BDC /* Startup */,
 				CEB7A4EE131ABA30059C2518 /* Stores */,
 				CEBB259DDDBA31DF0CA406A9 /* TopicDetail */,
 				D51B67464AC9ED8CD647E3AC /* ViewModels */,
 				A51A922EDC53D00DC1A49370 /* Views */,
+				F70000000000000000000063 /* Widgets */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		F70000000000000000000061 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				F70000000000000000000013 /* FireShortcuts.swift */,
+				F70000000000000000000014 /* FireSearchTopicsIntent.swift */,
+				F70000000000000000000015 /* FireViewProfileIntent.swift */,
+				F70000000000000000000016 /* FireViewUnreadIntent.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		F70000000000000000000062 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				F70000000000000000000011 /* FireWidgetData.swift */,
+				F70000000000000000000012 /* FireWidgetSnapshotWriter.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		F70000000000000000000063 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				F70000000000000000000031 /* FireLargeWidget.swift */,
+				F70000000000000000000032 /* FireMediumWidget.swift */,
+				F70000000000000000000033 /* FireSmallWidget.swift */,
+				F70000000000000000000034 /* FireWidgetBundle.swift */,
+				F70000000000000000000035 /* FireWidgetEntry.swift */,
+				F70000000000000000000036 /* FireWidgetViews.swift */,
+			);
+			path = Widgets;
 			sourceTree = "<group>";
 		};
 		7470C1FA2A64AD68B507D005 /* Profile */ = {
@@ -685,6 +771,7 @@
 			isa = PBXGroup;
 			children = (
 				AA736A1F443337C34A6E33D6 /* Fire.entitlements */,
+				F70000000000000000000065 /* FireWidget.entitlements */,
 				73EB36381D2DB9DA74378162 /* App */,
 				BD212BBA5E9DA62F41FF41F4 /* Configs */,
 				32338F9E71B0E67C5112C300 /* FireAppSession */,
@@ -738,6 +825,7 @@
 			children = (
 				A0AFFF5DCC989B801C9DF88E /* Fire-Debug.xcconfig */,
 				3A2D87C396EF471305C2712F /* Fire-Info.plist */,
+				F70000000000000000000066 /* FireWidget-Info.plist */,
 				7337AE7EB0411AC9B53AD853 /* Fire-Local-Debug.example.xcconfig */,
 				0DB69FD096A581A18D9D16C5 /* Fire-Local-Release.example.xcconfig */,
 				97B0FC401C941BC8F73B959A /* Fire-Release.xcconfig */,
@@ -910,10 +998,12 @@
 				043FD04CB8BAE2AA45BABDB6 /* Resources */,
 				1E5D1534135BDBC408E23F3B /* Frameworks */,
 				4A9FC8DFEC9FFF4BC7C594AA /* Embed Frameworks */,
+				F70000000000000000000044 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F70000000000000000000045 /* PBXTargetDependency */,
 			);
 			name = Fire;
 			packageProductDependencies = (
@@ -926,6 +1016,24 @@
 			productReference = 48CAB0E38556929FC140E25D /* Fire.app */;
 			productType = "com.apple.product-type.application";
 		};
+
+		F70000000000000000000050 /* FireWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F70000000000000000000055 /* Build configuration list for PBXNativeTarget "FireWidgetExtension" */;
+			buildPhases = (
+				F70000000000000000000054 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FireWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = FireWidgetExtension;
+			productReference = F70000000000000000000043 /* FireWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -935,6 +1043,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					F70000000000000000000050 = {
+						ProvisioningStyle = "$(FIRE_CODE_SIGN_STYLE)";
+					};
 					87BF3D86E2CA36A3D645AA33 = {
 						DevelopmentTeam = "$(FIRE_DEVELOPMENT_TEAM)";
 						ProvisioningStyle = "$(FIRE_CODE_SIGN_STYLE)";
@@ -963,6 +1074,7 @@
 			targets = (
 				87BF3D86E2CA36A3D645AA33 /* Fire */,
 				3ACA300207EBD80A07FC30BD /* FireTests */,
+				F70000000000000000000050 /* FireWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -1020,6 +1132,20 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		F70000000000000000000054 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F70000000000000000000021 /* FireLargeWidget.swift in Sources */,
+				F70000000000000000000022 /* FireMediumWidget.swift in Sources */,
+				F70000000000000000000023 /* FireSmallWidget.swift in Sources */,
+				F70000000000000000000024 /* FireWidgetBundle.swift in Sources */,
+				F70000000000000000000025 /* FireWidgetData.swift in Sources */,
+				F70000000000000000000026 /* FireWidgetEntry.swift in Sources */,
+				F70000000000000000000027 /* FireWidgetViews.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2FCCC820ECEB057462CC26A9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1065,6 +1191,8 @@
 				C393F32FAD3010FF51E3E7F2 /* FireAppRouteDestinationView.swift in Sources */,
 				060B8351400A000000000001 /* FireAppServiceHost.swift in Sources */,
 				B0AA426C24E27249B4AE2E57 /* FireAppViewModel.swift in Sources */,
+				F70000000000000000000003 /* FireShortcuts.swift in Sources */,
+				F70000000000000000000004 /* FireSearchTopicsIntent.swift in Sources */,
 				5A95F9C29909968BF4B17AD7 /* FireAuthCookieKeychainStore.swift in Sources */,
 				5C94B9ACD52AEF20ED7AC39F /* FireBackgroundNotificationAlert.swift in Sources */,
 				78009659A664B236D8AD3434 /* FireBadgeDetailView.swift in Sources */,
@@ -1141,6 +1269,8 @@
 				E80B8351400A000000000001 /* FireSearchService.swift in Sources */,
 				A04B275253CDF8FAAC9D8C6C /* FireSearchStore.swift in Sources */,
 				75A1614BEE58E22036098E46 /* FireSearchView.swift in Sources */,
+				F70000000000000000000001 /* FireWidgetData.swift in Sources */,
+				F70000000000000000000002 /* FireWidgetSnapshotWriter.swift in Sources */,
 				F7A7E161400A000000000001 /* FireShimmerModifier.swift in Sources */,
 				A29E21413FA011161D518004 /* FireSessionStore.swift in Sources */,
 				C55AB47E8AAB3E7A47EE95FF /* FireTabRoot.swift in Sources */,
@@ -1172,6 +1302,8 @@
 				C6D4775AD6FB33FB87BCC6B4 /* FireTopicRoutePresenter.swift in Sources */,
 				5B1C0F6D416E6870F3B9B865 /* FireTopicRow.swift in Sources */,
 				C1695FEABEA1A67BA6770CD5 /* FireTopicTimingTracker.swift in Sources */,
+				F70000000000000000000005 /* FireViewProfileIntent.swift in Sources */,
+				F70000000000000000000006 /* FireViewUnreadIntent.swift in Sources */,
 				997549C307522F353C2C4354 /* FireWebViewBrowserProfile.swift in Sources */,
 				1F1EEDCE0B4FEAE2880DC061 /* FireWebViewLoginCoordinator.swift in Sources */,
 				7A1883792B3FD63EAEAA8336 /* SessionState+Helpers.swift in Sources */,
@@ -1191,6 +1323,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		F70000000000000000000045 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F70000000000000000000050 /* FireWidgetExtension */;
+			targetProxy = F70000000000000000000042 /* PBXContainerItemProxy */;
+		};
 		FAD67CF76E1A43CF274706B3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 87BF3D86E2CA36A3D645AA33 /* Fire */;
@@ -1444,6 +1581,58 @@
 			};
 			name = Release;
 		};
+		F70000000000000000000056 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A0AFFF5DCC989B801C9DF88E /* Fire-Debug.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FireWidget.entitlements;
+				CODE_SIGN_STYLE = "$(FIRE_CODE_SIGN_STYLE)";
+				CURRENT_PROJECT_VERSION = "$(FIRE_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = "$(FIRE_DEVELOPMENT_TEAM)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Configs/FireWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FIRE_MARKETING_VERSION)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FIRE_PRODUCT_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = FireWidgetExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F70000000000000000000057 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 97B0FC401C941BC8F73B959A /* Fire-Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FireWidget.entitlements;
+				CODE_SIGN_STYLE = "$(FIRE_CODE_SIGN_STYLE)";
+				CURRENT_PROJECT_VERSION = "$(FIRE_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = "$(FIRE_DEVELOPMENT_TEAM)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Configs/FireWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FIRE_MARKETING_VERSION)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FIRE_PRODUCT_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = FireWidgetExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1461,6 +1650,15 @@
 			buildConfigurations = (
 				011FC950603A8869D189F2BD /* Debug */,
 				E900A14E059026239A5E3A91 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F70000000000000000000055 /* Build configuration list for PBXNativeTarget "FireWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F70000000000000000000056 /* Debug */,
+				F70000000000000000000057 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
