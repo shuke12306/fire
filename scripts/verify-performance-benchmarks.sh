@@ -38,7 +38,7 @@ function contains_fake_evidence_marker(value, normalized) {
   normalized = tolower(value)
   return normalized ~ /(^|[^[:alnum:]])(fake|mock|placeholder|dummy|synthetic)([^[:alnum:]]|$)/ ||
     normalized ~ /(^|[^[:alnum:]])(todo|tbd)([^[:alnum:]]|$)/ ||
-    normalized ~ /example[.]com|not real/
+    normalized ~ /example[.]com|not[- ]real/
 }
 
 function normalize_platform(value) {
@@ -145,7 +145,7 @@ in_results_log && /^\|/ {
   }
 
   if ((status == "Pass" || status == "Accepted") && contains_fake_evidence_marker(notes)) {
-    fail(row_label, "benchmark notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers")
+    fail(row_label, "benchmark notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 
   seen[platform SUBSEP metric] = 1

@@ -32,10 +32,11 @@ The verifier is expected to fail while those folders contain only placeholders.
 Passing validation is required before marking the store-media evidence rows
 complete, but it is not a substitute for release-candidate capture and review.
 Final asset filenames must not contain fake, mock, placeholder, dummy,
-synthetic, TODO/TBD, `example.com`, or not-real markers. Screenshot dimensions
-must decode cleanly and be at least 320px on each side; the Play feature graphic
-must be PNG content with exact `1024x500` dimensions. If an App Preview is
-included, `app-preview.mp4` must contain MP4 `ftyp` content.
+synthetic, TODO/TBD, `example.com`, `not-real`, or `not real` markers.
+Screenshot dimensions must decode cleanly and be at least 320px on each side;
+the Play feature graphic must be PNG content with exact `1024x500` dimensions.
+If an App Preview is included, `app-preview.mp4` must contain MP4 `ftyp`
+content.
 
 ## Performance Evidence
 
@@ -115,7 +116,8 @@ The evidence verifier is expected to fail while any evidence row is still
 `Not started`, missing owner/link/date metadata, or out of sync with the exact
 required gate set in `release-gate-evidence.md`. Manual evidence verifiers also
 reject completed rows whose evidence links or notes still contain fake, mock,
-placeholder, dummy, synthetic, TODO/TBD, `example.com`, or not-real markers.
+placeholder, dummy, synthetic, TODO/TBD, `example.com`, `not-real`, or
+`not real` markers.
 
 The roadmap acceptance boxes can also be checked directly:
 

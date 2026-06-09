@@ -210,7 +210,7 @@ P4 is process-heavy and does not require changes to the Rust/native architecture
 - `scripts/verify-privacy-review-evidence.sh` is expected to fail while maintainer/legal review evidence is absent; it is a precondition for privacy evidence closure, not a substitute for legal approval.
 - `scripts/verify-release-readiness.sh` is expected to fail while any lower-level P4 verifier fails; it is the final repo-owned readiness command before changing roadmap P4 acceptance.
 - `scripts/verify-release-gates.sh` is expected to fail until the manual P4 evidence rows are populated, and it also fails if required gate rows are renamed, duplicated, missing, or unknown; this is a release guard, not a development-test failure.
-- Manual evidence verifiers are expected to fail if completed evidence rows still contain fake, mock, placeholder, dummy, synthetic, TODO/TBD, `example.com`, or not-real markers.
+- Manual evidence verifiers are expected to fail if completed evidence rows still contain fake, mock, placeholder, dummy, synthetic, TODO/TBD, `example.com`, `not-real`, or `not real` markers.
 - `scripts/verify-roadmap-plan-contract.sh` is expected to pass while the roadmap document set keeps one spec, four implementation plans, and the agreed 17/14/15/6 top-level task split.
 - `scripts/verify-roadmap-architecture-constraints.sh` is expected to pass while the platform/Rust ownership split, minimum API targets, iOS topic-detail native runtime path, and reference/infrastructure boundaries stay intact.
 - `scripts/verify-roadmap-implementation-evidence.sh` is expected to pass while checked P1-P3 acceptance code paths remain present; it does not prove P4 release readiness.

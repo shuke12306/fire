@@ -55,7 +55,7 @@ function contains_fake_evidence_marker(value, normalized) {
   normalized = tolower(value)
   return normalized ~ /(^|[^[:alnum:]])(fake|mock|placeholder|dummy|synthetic)([^[:alnum:]]|$)/ ||
     normalized ~ /(^|[^[:alnum:]])(todo|tbd)([^[:alnum:]]|$)/ ||
-    normalized ~ /example[.]com|not real/
+    normalized ~ /example[.]com|not[- ]real/
 }
 
 /^## Required Evidence[[:space:]]*$/ {
@@ -112,7 +112,7 @@ in_required_evidence && /^\|/ {
     fail(row_label, "accepted waivers require notes")
   }
   if ((status in allowed) && contains_fake_evidence_marker(link " " notes)) {
-    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers")
+    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 }
 

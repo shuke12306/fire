@@ -45,7 +45,7 @@ validate_asset_filename() {
 
   filename="$(basename "$asset_file")"
   if contains_fake_asset_marker "$filename"; then
-    fail "$label: asset filename must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers: $asset_file"
+    fail "$label: asset filename must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers: $asset_file"
     return 1
   fi
 }

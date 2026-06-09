@@ -63,7 +63,7 @@ function contains_fake_evidence_marker(value, normalized) {
   normalized = tolower(value)
   return normalized ~ /(^|[^[:alnum:]])(fake|mock|placeholder|dummy|synthetic)([^[:alnum:]]|$)/ ||
     normalized ~ /(^|[^[:alnum:]])(todo|tbd)([^[:alnum:]]|$)/ ||
-    normalized ~ /example[.]com|not real/
+    normalized ~ /example[.]com|not[- ]real/
 }
 
 function is_template_row(date, platform, gate, owner, status, link, notes) {
@@ -129,7 +129,7 @@ in_required_evidence && /^\|/ {
   }
 
   if ((status in allowed_status) && contains_fake_evidence_marker(link " " notes)) {
-    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, or not-real markers")
+    fail(row_label, "evidence link/notes must not contain fake, mock, placeholder, dummy, synthetic, TODO, TBD, example.com, not-real, or not real markers")
   }
 
   if (status == "Accepted" && notes !~ /[Aa]pprov|[Ww]aiv|[Aa]ccept/) {
