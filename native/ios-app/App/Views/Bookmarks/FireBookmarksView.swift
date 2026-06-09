@@ -320,12 +320,7 @@ struct FireBookmarksView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         case .loading:
-            HStack {
-                Spacer()
-                ProgressView()
-                    .padding(.vertical, 28)
-                Spacer()
-            }
+            FireTopicSkeletonList(rowCount: 5)
             .padding(.horizontal, 16)
         case .empty:
             VStack(spacing: 12) {

@@ -228,12 +228,12 @@ struct FirePrivateMessagesView: View {
             switch displayState {
             case .loading:
                 Section {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .padding(.vertical, 20)
-                        Spacer()
-                    }
+                    FireTopicSkeletonList(
+                        rowCount: 6,
+                        avatarSize: 34,
+                        subtitleWidth: 112,
+                        showsTrailingMeta: false
+                    )
                 }
             case .blockingError(let errorMessage):
                 Section {

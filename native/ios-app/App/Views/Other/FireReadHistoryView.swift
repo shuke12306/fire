@@ -126,12 +126,7 @@ struct FireReadHistoryView: View {
                     }
                 } else {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding(.vertical, 20)
-                            Spacer()
-                        }
+                        FireTopicSkeletonList(rowCount: 6)
                     }
                 }
             } else if historyViewModel.rows.isEmpty {

@@ -37,7 +37,7 @@ Fully feasible. The Rust `fire-store` crate already has a SQLite migration syste
 
 2. **Widgets read from shared containers, not live FFI calls.** iOS WidgetKit extensions run in a separate process with strict memory limits. Writing topic summaries to an App Group `UserDefaults` from the main app process gives the widget a cheap synchronous read path. The alternative — calling UniFFI from the widget extension — would require bundling the Rust dylib into the extension and exceed memory budgets.
 
-3. **Shimmer replaces `.redacted(reason: .placeholder)` everywhere.** The SwiftUI redaction API produces static gray blocks that look broken, not loading. A custom `FireShimmerView` with an animated gradient sweep matches the visual polish bar set by `FireTheme`. On Android, a custom `ShimmerLayout` wraps existing `RecyclerView` item layouts without changing their structure.
+3. **Shimmer uses one shared platform path.** iOS keeps the existing `FireShimmerModifier` as the single SwiftUI animation implementation and applies it through shared skeleton row components; current first-page loading screens no longer fall back to blocking spinners where row-shaped skeletons are available. On Android, a custom `ShimmerLayout` wraps existing `RecyclerView` item layouts without changing their structure.
 
 4. **Haptic feedback uses the existing `FireMotion` layer.** SwiftUI surfaces prefer declarative `sensoryFeedback` modifiers, while UIKit/Texture surfaces call a small `FireMotionHaptics` bridge at confirmed interaction points. Decorative motion remains Reduce Motion-aware through `FireMotionTokens` and `fireRespectingReduceMotion`.
 
@@ -1198,91 +1198,29 @@ Show the banner above the `RecyclerView` when the PagingSource returns cached da
 ### Task 11: Shimmer Loading Animation (iOS)
 
 **Files:**
-- Create: `native/ios-app/App/Core/FireShimmer.swift`
-- Modify: all list views that currently use `.redacted(reason: .placeholder)`
+- Modify: `native/ios-app/App/Core/FireShimmerModifier.swift`
+- Modify: `native/ios-app/App/Core/FireComponents.swift`
+- Modify: list views with first-page blocking loading states
 
-- [ ] **Step 1: Create `FireShimmer.swift`**
+- [x] **Step 1: Reuse the shared `FireShimmerModifier.swift` shimmer path**
 
-```swift
-import SwiftUI
+  The branch already had a tracked `FireShimmerModifier` from the iOS native rebuild work. Task 11 keeps that as the single animation implementation instead of adding a parallel `FireShimmer.swift` path. The modifier overlays an animated sweep on existing skeleton shapes and respects `accessibilityReduceMotion`.
 
-struct FireShimmerView: View {
-    @State private var phase: CGFloat = 0
-    let cornerRadius: CGFloat
+- [x] **Step 2: Find all `.redacted(reason: .placeholder)` usages**
 
-    init(cornerRadius: CGFloat = FireTheme.smallCornerRadius) {
-        self.cornerRadius = cornerRadius
-    }
+  Verified with `rg "redacted\\(reason: \\.placeholder\\)" native/ios-app/App`: there are no current SwiftUI redacted placeholders. The earlier pseudo-code was stale relative to the native rebuild branch.
 
-    var body: some View {
-        GeometryReader { geo in
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: FireTheme.softSurface, location: 0),
-                            .init(color: FireTheme.track, location: max(0, phase - 0.2)),
-                            .init(color: FireTheme.softSurface, location: min(1, phase + 0.05)),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: geo.size.width, height: geo.size.height)
-                .onAppear {
-                    withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                        phase = 1.3
-                    }
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-    }
-}
+- [x] **Step 3: Keep home loading on the native ListKit skeleton path**
 
-struct FireShimmerRow: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                FireShimmerView(cornerRadius: 20)
-                    .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 6) {
-                    FireShimmerView(cornerRadius: 6).frame(height: 14)
-                    FireShimmerView(cornerRadius: 6).frame(width: 120, height: 12)
-                }
-            }
-            FireShimmerView(cornerRadius: 8)
-                .frame(height: 16)
-                .padding(.trailing, 40)
-            HStack {
-                FireShimmerView(cornerRadius: FireTheme.chipCornerRadius)
-                    .frame(width: 60, height: 24)
-                Spacer()
-                FireShimmerView(cornerRadius: 6).frame(width: 80, height: 12)
-            }
-        }
-        .padding(16)
-        .background(FireTheme.canvasMid)
-    }
-}
-```
+  Home is owned by `FireHomeCollectionView`, not redacted SwiftUI rows. Its existing `loadingRow` already uses `.fireShimmer()` and keeps topic rows on the native collection runtime path.
 
-- [ ] **Step 2: Find all `.redacted(reason: .placeholder)` usages**
+- [x] **Step 4: Replace blocking first-load spinners in notification, search, bookmarks, and secondary list views**
 
-Search across all views in `native/ios-app/App/Views/` for `.redacted(reason: .placeholder)` and replace with `FireShimmerRow`.
+  Added shared `FireTopicSkeletonRow`, configurable `FireTopicSkeletonList`, `FireNotificationSkeletonRow`, and `FireNotificationSkeletonList` in `FireComponents.swift`. Recent notifications now reuse the notification skeleton list; full notification history, search execution, bookmarks, read history, drafts, and private messages use shimmer skeletons for initial page loading while keeping pagination footers as compact `ProgressView`s.
 
-- [ ] **Step 3: Replace redacted placeholders in `FireHomeView.swift`**
+- [x] **Step 5: Verify iOS build**
 
-Where the loading state shows redacted rows, replace with:
-
-```swift
-ForEach(0..<5, id: \.self) { _ in
-    FireShimmerRow()
-}
-```
-
-- [ ] **Step 4: Replace redacted placeholders in `FireNotificationsView.swift`, `FireSearchView.swift`, `FireBookmarksView.swift`**
-
-Same pattern. Use `FireShimmerRow` or a simplified variant appropriate for the row shape.
+  `cd native/ios-app && xcodebuild build -scheme Fire -destination 'platform=iOS Simulator,id=D733CCB1-7B2A-49B5-B3F8-36CB6D0CB2BF,OS=18.3.1' -quiet` passed. Existing unrelated warnings remain around deprecated text interactions, `await` without async operations, and Swift 6 capture diagnostics.
 
 **Commit message:** `feat(shimmer-ios): replace redacted placeholders with animated shimmer loading views`
 
@@ -1609,7 +1547,8 @@ Verify all text-on-background combinations pass WCAG AA (4.5:1 for normal text, 
 - `native/android-app/src/main/java/com/fire/app/core/ui/FireOfflineBanner.kt` — Offline banner view
 - `native/android-app/src/main/java/com/fire/app/core/ui/ShimmerLayout.kt` — Shimmer animation layout
 - `native/android-app/src/main/res/layout/item_topic_shimmer.xml` — Shimmer item layout
-- `native/ios-app/App/Core/FireShimmer.swift` — SwiftUI shimmer animation component
+- `native/ios-app/App/Core/FireShimmerModifier.swift` — SwiftUI shimmer animation modifier
+- `native/ios-app/App/Core/FireComponents.swift` — Shared SwiftUI skeleton row components
 - `native/ios-app/App/Intents/FireShortcuts.swift` — App Shortcuts provider
 - `native/ios-app/App/Intents/FireViewUnreadIntent.swift` — View unread intent
 - `native/ios-app/App/Intents/FireSearchTopicsIntent.swift` — Search intent

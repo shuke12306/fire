@@ -353,37 +353,7 @@ struct FireNotificationsView: View {
     // MARK: - Loading skeleton
 
     private var loadingSkeleton: some View {
-        List {
-            ForEach(0..<8, id: \.self) { _ in
-                HStack(alignment: .top, spacing: 12) {
-                    Circle()
-                        .fill(Color(.tertiarySystemFill))
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 6)
-
-                    Circle()
-                        .fill(Color(.tertiarySystemFill))
-                        .frame(width: 36, height: 36)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.tertiarySystemFill))
-                            .frame(height: 13)
-
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.quaternarySystemFill))
-                            .frame(width: 80, height: 10)
-                    }
-                }
-                .padding(.vertical, 10)
-                .fireShimmer()
-                .accessibilityHidden(true)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-        }
-        .listStyle(.plain)
+        FireNotificationSkeletonList(rowCount: 8)
     }
 
     // MARK: - Empty state

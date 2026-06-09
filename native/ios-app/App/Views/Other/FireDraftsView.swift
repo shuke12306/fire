@@ -124,12 +124,11 @@ struct FireDraftsView: View {
                     }
                 } else {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding(.vertical, 20)
-                            Spacer()
-                        }
+                        FireTopicSkeletonList(
+                            rowCount: 5,
+                            subtitleWidth: 96,
+                            showsTrailingMeta: false
+                        )
                     }
                 }
             } else if draftsViewModel.drafts.isEmpty {

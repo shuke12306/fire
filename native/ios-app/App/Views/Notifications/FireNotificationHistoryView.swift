@@ -18,8 +18,7 @@ struct FireNotificationHistoryView: View {
             if let errorMessage = notificationStore.blockingFullErrorMessage {
                 blockingErrorState(message: errorMessage)
             } else if notificationStore.isLoadingFullPage && notificationStore.fullNotifications.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                FireNotificationSkeletonList(rowCount: 10)
             } else if notificationStore.fullNotifications.isEmpty {
                 emptyState(errorMessage: notificationStore.fullNonBlockingErrorMessage)
             } else {

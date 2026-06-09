@@ -138,16 +138,28 @@ struct FireSearchView: View {
     @ViewBuilder
     private var contentArea: some View {
         if searchStore.isSearching && searchStore.result == nil {
-            VStack(spacing: 8) {
-                Spacer()
-                ProgressView()
-                    .controlSize(.large)
-                Text("搜索中…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            List {
+                Section("话题") {
+                    ForEach(0..<3, id: \.self) { _ in
+                        FireTopicSkeletonRow(
+                            subtitleWidth: 104,
+                            showsTrailingMeta: false
+                        )
+                    }
+                }
+
+                Section("帖子") {
+                    ForEach(0..<3, id: \.self) { _ in
+                        FireTopicSkeletonRow(
+                            avatarSize: 34,
+                            subtitleWidth: 140,
+                            showsTrailingMeta: false
+                        )
+                    }
+                }
             }
-            .frame(maxWidth: .infinity)
+            .listStyle(.plain)
+            .accessibilityLabel("搜索中")
         } else if let result = searchStore.result {
             resultList(result)
         } else if let errorMessage = searchStore.errorMessage {
