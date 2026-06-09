@@ -10,7 +10,12 @@ the shared Rust core at build time.
 - `MainActivity.kt` hosts the `NavHostFragment` and bottom navigation tabs:
   Home, Notifications, and Profile. Tab selection uses Navigation saved-state
   restoration so loaded tab fragments keep their back stack and ViewModel state
-  when switching between the three primary tabs.
+  when switching between the three primary tabs. It enables edge-to-edge
+  rendering and keeps the existing root inset listener as the single content
+  padding authority around system bars.
+- `FireApplication.kt` applies Material You dynamic colors when available and
+  exposes a themed context for programmatic Fire color resolution; XML-heavy
+  branded surfaces keep the Fire palette resources as their fallback identity.
 - `PreheatGateFragment` is the startup authority boundary: it restores the
   persisted Rust session, waits for preloaded data, runs Rust's login-state
   probe, and routes to Home or Onboarding. During that check it reuses the

@@ -1,9 +1,12 @@
 package com.fire.app
 
 import android.app.Application
+import android.content.Context
 import com.fire.app.core.image.FireImageLoader
+import com.fire.app.core.theme.FireColors
 import com.fire.app.push.FirePushNotificationDispatcher
 import com.fire.app.ui.topicdetail.BookmarkReminderScheduler
+import com.google.android.material.color.DynamicColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,6 +18,14 @@ class FireApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        val dynamicColorsAvailable = DynamicColors.isDynamicColorAvailable()
+        if (dynamicColorsAvailable) {
+            DynamicColors.applyToActivitiesIfAvailable(this)
+            dynamicColorContext = DynamicColors.wrapContextIfAvailable(this)
+        } else {
+            dynamicColorContext = this
+        }
+        FireColors.setDynamicColorsEnabled(dynamicColorsAvailable)
         FireImageLoader.initialize(this)
         BookmarkReminderScheduler.createNotificationChannel(this)
         FirePushNotificationDispatcher.createNotificationChannel(this)
@@ -28,9 +39,14 @@ class FireApplication : Application() {
     companion object {
         @Volatile
         private var instance: FireApplication? = null
+        @Volatile
+        private var dynamicColorContext: Context? = null
 
         fun getInstance(): Application =
             instance ?: throw IllegalStateException("FireApplication not initialized")
+
+        fun themedContext(): Context =
+            dynamicColorContext ?: getInstance()
 
         fun applicationScope(): CoroutineScope =
             (getInstance() as FireApplication).applicationScope

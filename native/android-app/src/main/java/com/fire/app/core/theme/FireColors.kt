@@ -1,13 +1,22 @@
 package com.fire.app.core.theme
 
+import android.os.Build
+import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
 import androidx.core.content.ContextCompat
 import com.fire.app.FireApplication
+import com.google.android.material.color.MaterialColors
 
 object FireColors {
-    @ColorInt fun accent() = resolveColor(com.fire.app.R.color.fire_accent)
-    @ColorInt fun accentSoft() = resolveColor(com.fire.app.R.color.fire_accent_soft)
+    private var dynamicColorsEnabled = false
+
+    fun setDynamicColorsEnabled(enabled: Boolean) {
+        dynamicColorsEnabled = enabled
+    }
+
+    @ColorInt fun accent() = resolveDynamicColor(com.google.android.material.R.attr.colorPrimary, com.fire.app.R.color.fire_accent)
+    @ColorInt fun accentSoft() = resolveDynamicColor(com.google.android.material.R.attr.colorSecondaryContainer, com.fire.app.R.color.fire_accent_soft)
     @ColorInt fun textPrimary() = resolveColor(com.fire.app.R.color.fire_text_primary)
     @ColorInt fun textSecondary() = resolveColor(com.fire.app.R.color.fire_text_secondary)
     @ColorInt fun textTertiary() = resolveColor(com.fire.app.R.color.fire_text_tertiary)
@@ -24,5 +33,15 @@ object FireColors {
     @ColorInt
     private fun resolveColor(@ColorRes resId: Int): Int {
         return ContextCompat.getColor(FireApplication.getInstance(), resId)
+    }
+
+    @ColorInt
+    private fun resolveDynamicColor(@AttrRes attr: Int, @ColorRes fallbackResId: Int): Int {
+        val context = FireApplication.themedContext()
+        val fallback = ContextCompat.getColor(context, fallbackResId)
+        if (!dynamicColorsEnabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return fallback
+        }
+        return MaterialColors.getColor(context, attr, fallback)
     }
 }

@@ -1583,82 +1583,35 @@ Extend the `onOpenURL` handler from Task 3 to handle these schemes.
 
 **Files:**
 - Modify: `native/android-app/src/main/java/com/fire/app/core/theme/FireColors.kt`
-- Modify: `native/android-app/src/main/res/values/colors.xml`
-- Create: `native/android-app/src/main/res/values-night/colors.xml` (if not exists)
+- Modify: `native/android-app/src/main/java/com/fire/app/FireApplication.kt`
 - Modify: `native/android-app/src/main/java/com/fire/app/MainActivity.kt`
-- Modify: `native/android-app/src/main/res/values/styles.xml`
+- Modify: `native/android-app/src/main/AndroidManifest.xml`
+- Modify: `native/android-app/src/main/res/values/themes.xml`
+- Create: `native/android-app/src/main/res/values-night/themes.xml`
 
-- [ ] **Step 1: Add Material You dynamic color support to `FireColors.kt`**
+- [x] **Step 1: Add Material You dynamic color support to `FireColors.kt`**
 
-```kotlin
-object FireColors {
-    private var dynamicColorsEnabled = false
+  `FireColors.accent()` and `accentSoft()` now resolve Material theme attributes when dynamic color is available on Android 12+ and fall back to the Fire palette otherwise. Other semantic/text/surface methods remain fixed Fire palette values so XML-heavy branded surfaces keep their existing contrast and identity.
 
-    fun setDynamicColorsEnabled(enabled: Boolean) {
-        dynamicColorsEnabled = enabled
-    }
+- [x] **Step 2: Apply Dynamic Colors in `FireApplication.kt`**
 
-    @ColorInt fun accent(): Int {
-        if (dynamicColorsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return resolveDynamicColor(android.R.attr.colorPrimary)
-        }
-        return resolveColor(R.color.fire_accent)
-    }
+  Startup applies `DynamicColors.applyToActivitiesIfAvailable(this)`, records whether dynamic colors are active, and exposes a wrapped themed context for app-context color resolution.
 
-    @ColorInt fun accentSoft(): Int {
-        if (dynamicColorsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return resolveDynamicColor(com.google.android.material.R.attr.colorPrimaryVariant)
-        }
-        return resolveColor(R.color.fire_accent_soft)
-    }
+- [x] **Step 3: Enable edge-to-edge rendering in `MainActivity.kt`**
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun resolveDynamicColor(@AttrRes attr: Int): Int {
-        val context = FireApplication.getInstance()
-        val typedValue = android.util.TypedValue()
-        context.theme.resolveAttribute(attr, typedValue, true)
-        return typedValue.data
-    }
+  `MainActivity` calls `enableEdgeToEdge()` before `super.onCreate`, while preserving the existing root inset listener that pads content around system bars.
 
-    // ... existing methods unchanged
-}
-```
+- [x] **Step 4: Add Predictive Back Gesture support**
 
-- [ ] **Step 2: Apply Dynamic Colors in `FireApplication.kt`**
+  `AndroidManifest.xml` sets `android:enableOnBackInvokedCallback="true"` on the application tag.
 
-```kotlin
-import com.google.android.material.color.DynamicColors
+- [x] **Step 5: Add Material3 light/night theme attrs**
 
-class FireApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        if (DynamicColors.isDynamicColorAvailable()) {
-            DynamicColors.applyToActivitiesIfAvailable(this)
-            FireColors.setDynamicColorsEnabled(true)
-        }
-    }
-}
-```
+  `values/themes.xml` now declares Fire fallback Material3 color attributes and system-bar colors. `values-night/themes.xml` mirrors those attrs with dark-mode system-bar icon flags.
 
-- [ ] **Step 3: Enable edge-to-edge rendering in `MainActivity.kt`**
+- [x] **Step 6: Verify**
 
-```kotlin
-override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
-    super.onCreate(savedInstanceState)
-    // ...
-}
-```
-
-Requires `import androidx.activity.enableEdgeToEdge`.
-
-- [ ] **Step 4: Add Predictive Back Gesture support**
-
-In `AndroidManifest.xml`, ensure `android:enableOnBackInvokedCallback="true"` is set on the `<application>` tag. This enables the Android 14+ predictive back animation.
-
-- [ ] **Step 5: Add night-mode color resources**
-
-Create `native/android-app/src/main/res/values-night/colors.xml` with dark-mode color overrides that match the `FireTheme` dark values from iOS.
+  - `cd native/android-app && ./gradlew testDebugUnitTest --tests com.fire.app.ui.composer.MarkdownInsertionTest` — passed
 
 **Commit message:** `feat(material-you): add Dynamic Color, edge-to-edge, and predictive back gesture`
 
@@ -1809,7 +1762,7 @@ Verify all text-on-background combinations pass WCAG AA (4.5:1 for normal text, 
 - `native/ios-app/App/Intents/FireViewUnreadIntent.swift` — View unread intent
 - `native/ios-app/App/Intents/FireSearchTopicsIntent.swift` — Search intent
 - `native/ios-app/App/Intents/FireViewProfileIntent.swift` — View profile intent
-- `native/android-app/src/main/java/com/fire/app/core/theme/FireColors.kt` — Dynamic Color + OLED mode
+- `native/android-app/src/main/java/com/fire/app/core/theme/FireColors.kt` — Dynamic Color accent resolution
 - `native/android-app/src/main/java/com/fire/app/FireApplication.kt` — Dynamic Color initialization
 - `native/android-app/src/main/java/com/fire/app/MainActivity.kt` — Edge-to-edge
 - `native/ios-app/App/Core/FireOledTheme.swift` — OLED pure black color overrides
