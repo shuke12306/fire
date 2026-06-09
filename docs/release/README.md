@@ -96,8 +96,8 @@ scripts/verify-release-readiness.sh
 ```
 
 It runs the store-media, performance, accessibility, internal-testing, privacy
-review, and release-gate evidence verifiers. It is expected to fail until all
-manual P4 evidence is complete.
+review, release-gate evidence, and roadmap P4 acceptance verifiers. It is
+expected to fail until all manual P4 evidence is complete.
 
 The final evidence register can also be checked directly:
 
@@ -108,3 +108,13 @@ scripts/verify-release-gates.sh
 The evidence verifier is expected to fail while any evidence row is still
 `Not started`, missing owner/link/date metadata, or out of sync with the exact
 required gate set in `release-gate-evidence.md`.
+
+The roadmap acceptance boxes can also be checked directly:
+
+```bash
+scripts/verify-roadmap-p4-acceptance.sh
+```
+
+This verifier fails if the design document's P4 acceptance rows are renamed,
+duplicated, or missing. If any P4 acceptance box is checked, it also requires
+the release-gate evidence verifier to pass.
