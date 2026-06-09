@@ -184,6 +184,8 @@ def write_marketing(root: Path, include_feature_graphic=True, mutation="valid"):
 
     if mutation == "fake-filename":
         png_file(root, "native/android-app/marketing/screenshots/phone/not-real-phone.png", 320, 320)
+    elif mutation == "screenshot-unexpected-directory":
+        (root / "native/android-app/marketing/screenshots/phone/nested").mkdir(parents=True, exist_ok=True)
     elif mutation == "tiny-screenshot":
         png_file(root, "native/android-app/marketing/screenshots/phone/final-phone.png", 319, 319)
     elif mutation == "malformed-png":
@@ -535,6 +537,7 @@ fixture = tmp / "fixture"
 write_marketing(fixture / "marketing")
 write_marketing(fixture / "marketing-missing-feature", include_feature_graphic=False)
 write_marketing(fixture / "marketing-fake-filename", mutation="fake-filename")
+write_marketing(fixture / "marketing-screenshot-unexpected-directory", mutation="screenshot-unexpected-directory")
 write_marketing(fixture / "marketing-tiny-screenshot", mutation="tiny-screenshot")
 write_marketing(fixture / "marketing-malformed-png", mutation="malformed-png")
 write_marketing(fixture / "marketing-invalid-mp4", mutation="invalid-mp4")
@@ -708,6 +711,17 @@ expect_fail_contains "P4 release evidence suite rejects fake marketing filename"
   "asset filename must not contain" \
   env \
   "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-fake-filename" \
+  "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
+  "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
+  "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \
+  "FIRE_PRIVACY_REVIEW_EVIDENCE_FILE=$fixture/privacy.md" \
+  "FIRE_RELEASE_GATE_EVIDENCE_FILE=$fixture/release-gates.md" \
+  scripts/verify-p4-release-evidence-suite.sh
+
+expect_fail_contains "P4 release evidence suite rejects unexpected screenshot directories" \
+  "unexpected screenshot directory entry" \
+  env \
+  "FIRE_MARKETING_ASSETS_ROOT=$fixture/marketing-screenshot-unexpected-directory" \
   "FIRE_PERFORMANCE_BENCHMARK_FILE=$fixture/performance.md" \
   "FIRE_ACCESSIBILITY_AUDIT_FILE=$fixture/accessibility.md" \
   "FIRE_INTERNAL_TESTING_EVIDENCE_FILE=$fixture/internal.md" \

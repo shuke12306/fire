@@ -371,11 +371,16 @@ validate_screenshot_directory() {
   local asset_count=0
   local valid_count=0
   local image_file
+  local screenshot_entry
 
   if [[ ! -d "$directory" ]]; then
     fail "$label: screenshot directory is missing: $directory"
     return
   fi
+
+  while IFS= read -r screenshot_entry; do
+    fail "$label: unexpected screenshot directory entry $screenshot_entry; use regular image files in $directory"
+  done < <(find "$directory" -maxdepth 1 -mindepth 1 ! -name '.gitkeep' ! -name '.*' ! -type f | sort)
 
   while IFS= read -r image_file; do
     asset_count=$((asset_count + 1))
