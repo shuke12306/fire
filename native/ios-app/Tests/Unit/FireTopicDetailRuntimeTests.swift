@@ -46,8 +46,7 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         let configuration = makeConfiguration(
             detail: detail,
             renderState: renderState,
-            postLookup: [original.id: original, firstReply.id: firstReply, secondReply.id: secondReply],
-            expandedReplyRootPostIDs: [firstReply.id]
+            postLookup: [original.id: original, firstReply.id: firstReply, secondReply.id: secondReply]
         )
 
         let snapshot = configuration.makeSnapshot()
@@ -178,7 +177,7 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         XCTAssertEqual(nestedItem.flatMap(configuration.postContext(for:))?.showsThreadLine, false)
     }
 
-    func testSnapshotHidesSecondaryRepliesBehindRootShortcutByDefault() {
+    func testSnapshotShowsLoadedReplyTreeByDefault() {
         let original = makePost(id: 100, postNumber: 1, username: "alice")
         let rootReply = makePost(
             id: 200,
@@ -225,13 +224,13 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         let snapshot = configuration.makeSnapshot()
         let replyItems = snapshot.items.filter { $0.kind == .reply }
 
-        XCTAssertEqual(replyItems.map(\.postNumber), [2])
-        XCTAssertEqual(replyItems.first?.replyShortcutCount, 5)
-        XCTAssertNil(configuration.scrollItem(for: 3))
+        XCTAssertEqual(replyItems.map(\.postNumber), [2, 3, 4, 5, 6])
+        XCTAssertEqual(configuration.scrollItem(for: 3)?.id, "reply:300:3")
         XCTAssertEqual(configuration.postContext(for: replyItems[0])?.depth, 1)
+        XCTAssertEqual(configuration.postContext(for: replyItems[1])?.depth, 2)
     }
 
-    func testThreadedViewModeShowsAllLoadedRepliesWithoutRootShortcut() {
+    func testSnapshotShowsAllLoadedRepliesWithoutRootShortcut() {
         let original = makePost(id: 100, postNumber: 1, username: "alice")
         let rootReply = makePost(
             id: 200,
@@ -257,15 +256,13 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         let configuration = makeConfiguration(
             detail: makeTopicDetail(posts: posts),
             renderState: renderState,
-            postLookup: Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) }),
-            viewMode: .threaded
+            postLookup: Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
         )
 
         let snapshot = configuration.makeSnapshot()
         let replyItems = snapshot.items.filter { $0.kind == .reply }
 
         XCTAssertEqual(replyItems.map(\.postNumber), [2, 3, 4, 5])
-        XCTAssertTrue(replyItems.allSatisfy { $0.replyShortcutCount == nil })
         XCTAssertEqual(configuration.postContext(for: replyItems[0])?.depth, 1)
         XCTAssertEqual(configuration.postContext(for: replyItems[1])?.depth, 2)
         XCTAssertEqual(configuration.postContext(for: replyItems[2])?.depth, 3)
@@ -304,7 +301,7 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         XCTAssertEqual(configuration.postContext(for: replyItems[2])?.depth, 3)
     }
 
-    func testExpandedReplyThreadShowsAllLoadedSecondaryReplies() {
+    func testLoadedSecondaryRepliesStayVisibleWithoutExpansionState() {
         let original = makePost(id: 100, postNumber: 1, username: "alice")
         let rootReply = makePost(id: 200, postNumber: 2, username: "bob", replyCount: 4, replyToPostNumber: 1)
         let secondaryReplies = [
@@ -328,114 +325,12 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         let configuration = makeConfiguration(
             detail: makeTopicDetail(posts: posts),
             renderState: renderState,
-            postLookup: Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) }),
-            expandedReplyRootPostIDs: [rootReply.id]
+            postLookup: Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
         )
 
         let replyItems = configuration.makeSnapshot().items.filter { $0.kind == .reply }
 
         XCTAssertEqual(replyItems.map(\.postNumber), [2, 3, 4, 5, 6])
-        XCTAssertNil(replyItems.first?.replyShortcutCount)
-    }
-
-    func testReplyShortcutLoadingStateUsesInPlaceUpdateTokenInsteadOfLayoutReload() {
-        let original = makePost(id: 100, postNumber: 1, username: "alice")
-        let rootReply = makePost(id: 200, postNumber: 2, username: "bob", replyCount: 2, replyToPostNumber: 1)
-        let renderState = FireTopicDetailRenderState(
-            originalRow: makeTimelineRow(post: original, depth: 0, isOriginalPost: true),
-            replyRows: [makeTimelineRow(post: rootReply, parentPostNumber: 1, depth: 1)],
-            contentByPostID: [
-                original.id: makeRenderContent("Original"),
-                rootReply.id: makeRenderContent("Root"),
-            ]
-        )
-        let detail = makeTopicDetail(posts: [original, rootReply])
-        let idle = makeConfiguration(
-            detail: detail,
-            renderState: renderState,
-            postLookup: [original.id: original, rootReply.id: rootReply]
-        )
-        let loading = makeConfiguration(
-            detail: detail,
-            renderState: renderState,
-            postLookup: [original.id: original, rootReply.id: rootReply],
-            loadingReplyContextPostIDs: [rootReply.id]
-        )
-
-        let idleItem = idle.makeSnapshot().items.first { $0.kind == .reply }
-        let loadingItem = loading.makeSnapshot().items.first { $0.kind == .reply }
-
-        XCTAssertEqual(idleItem?.replyShortcutCount, 2)
-        XCTAssertEqual(loading.postContext(for: loadingItem!)?.isLoadingReplyContext, true)
-        XCTAssertTrue(fireTopicDetailItemsHaveSameRenderedContent([idleItem!], [loadingItem!]))
-        XCTAssertTrue(loadingItem!.needsVisibleNodeUpdate(comparedTo: idleItem!))
-    }
-
-    func testReplyShortcutErrorStateUsesInPlaceUpdateTokenInsteadOfLayoutReload() {
-        let original = makePost(id: 100, postNumber: 1, username: "alice")
-        let rootReply = makePost(id: 200, postNumber: 2, username: "bob", replyCount: 2, replyToPostNumber: 1)
-        let renderState = FireTopicDetailRenderState(
-            originalRow: makeTimelineRow(post: original, depth: 0, isOriginalPost: true),
-            replyRows: [makeTimelineRow(post: rootReply, parentPostNumber: 1, depth: 1)],
-            contentByPostID: [
-                original.id: makeRenderContent("Original"),
-                rootReply.id: makeRenderContent("Root"),
-            ]
-        )
-        let detail = makeTopicDetail(posts: [original, rootReply])
-        let idle = makeConfiguration(
-            detail: detail,
-            renderState: renderState,
-            postLookup: [original.id: original, rootReply.id: rootReply]
-        )
-        let failed = makeConfiguration(
-            detail: detail,
-            renderState: renderState,
-            postLookup: [original.id: original, rootReply.id: rootReply],
-            postReplyContextErrorsByPostID: [rootReply.id: "offline"]
-        )
-
-        let idleItem = idle.makeSnapshot().items.first { $0.kind == .reply }
-        let failedItem = failed.makeSnapshot().items.first { $0.kind == .reply }
-
-        XCTAssertEqual(failed.postContext(for: failedItem!)?.replyContextError, "offline")
-        XCTAssertTrue(fireTopicDetailItemsHaveSameRenderedContent([idleItem!], [failedItem!]))
-        XCTAssertTrue(failedItem!.needsVisibleNodeUpdate(comparedTo: idleItem!))
-    }
-
-    func testReplyContextLoadPolicySkipsNetworkWhenLocalSecondaryRowsAreComplete() {
-        let original = makePost(id: 100, postNumber: 1, username: "alice")
-        let rootReply = makePost(id: 200, postNumber: 2, username: "bob", replyCount: 2, replyToPostNumber: 1)
-        let child = makePost(id: 300, postNumber: 3, username: "c1", replyToPostNumber: 2)
-        let grandchild = makePost(id: 400, postNumber: 4, username: "c2", replyToPostNumber: 3)
-        let rows = [
-            makeTimelineRow(post: rootReply, parentPostNumber: 1, depth: 1),
-            makeTimelineRow(post: child, parentPostNumber: 2, depth: 2),
-            makeTimelineRow(post: grandchild, parentPostNumber: 3, depth: 3),
-        ]
-        let postLookup = Dictionary(uniqueKeysWithValues: [original, rootReply, child, grandchild].map { ($0.id, $0) })
-
-        XCTAssertFalse(FireTopicDetailReplyContextLoadPolicy.shouldLoadReplyContext(
-            for: rootReply,
-            replyRows: rows,
-            postLookup: postLookup
-        ))
-    }
-
-    func testReplyContextLoadPolicyLoadsWhenLocalSecondaryRowsArePartial() {
-        let rootReply = makePost(id: 200, postNumber: 2, username: "bob", replyCount: 2, replyToPostNumber: 1)
-        let child = makePost(id: 300, postNumber: 3, username: "c1", replyToPostNumber: 2)
-        let rows = [
-            makeTimelineRow(post: rootReply, parentPostNumber: 1, depth: 1),
-            makeTimelineRow(post: child, parentPostNumber: 2, depth: 2),
-        ]
-        let postLookup = Dictionary(uniqueKeysWithValues: [rootReply, child].map { ($0.id, $0) })
-
-        XCTAssertTrue(FireTopicDetailReplyContextLoadPolicy.shouldLoadReplyContext(
-            for: rootReply,
-            replyRows: rows,
-            postLookup: postLookup
-        ))
     }
 
     func testSnapshotShowsLoadMoreFooterForNonEmptyRepliesWhenMoreAvailable() {
@@ -688,7 +583,6 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
     func testComposerDraftChangeDoesNotChangeFeedInvalidationToken() {
         let feedToken = FireTopicDetailFeedInvalidationToken(
             topicID: 42,
-            viewMode: .conversation,
             topicCollectionRevision: 7,
             pendingScrollTarget: nil,
             detailError: "",
@@ -701,7 +595,6 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
             canWriteInteractions: true,
             currentUsername: "alice",
             baseURLString: "https://linux.do",
-            expandedReplyRootPostIDs: [],
             activeSearchPostID: nil
         )
         let firstComposerToken = FireTopicDetailComposerInvalidationToken(
@@ -730,7 +623,6 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
     func testChromeAndSidecarTokensAreIndependentFromFeedToken() {
         let feedToken = FireTopicDetailFeedInvalidationToken(
             topicID: 42,
-            viewMode: .conversation,
             topicCollectionRevision: 3,
             pendingScrollTarget: nil,
             detailError: "",
@@ -743,12 +635,10 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
             canWriteInteractions: true,
             currentUsername: "alice",
             baseURLString: "https://linux.do",
-            expandedReplyRootPostIDs: [],
             activeSearchPostID: nil
         )
         let changedChromeToken = FireTopicDetailChromeInvalidationToken(
             topicID: 42,
-            viewMode: .threaded,
             title: "Fire Native",
             slug: "fire-native",
             bookmarked: true,
@@ -765,17 +655,13 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         )
         let interactionToken = FireTopicDetailInteractionInvalidationToken(
             mutatingPostIDs: [100],
-            loadingPostReplyContextIDs: [200],
-            postReplyContextErrorIDs: [500],
-            expandedPostTextIDs: [300],
-            expandedReplyRootPostIDs: [400]
+            expandedPostTextIDs: [300]
         )
 
         XCTAssertEqual(feedToken.topicCollectionRevision, 3)
         XCTAssertTrue(changedChromeToken.bookmarked)
         XCTAssertTrue(loadingSidecarToken.isLoadingTopicAiSummary)
         XCTAssertEqual(interactionToken.mutatingPostIDs, [100])
-        XCTAssertEqual(interactionToken.postReplyContextErrorIDs, [500])
     }
 
     func testAnimatedUpdatePolicyAllowsOnlySmallIdleAttachedUpdates() {
@@ -901,22 +787,14 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         detailNotice: FireTopicDetailStatusMessage? = nil,
         hasMoreTopicPosts: Bool = false,
         isLoadingMoreTopicPosts: Bool = false,
-        loadMoreTopicPostsError: String? = nil,
-        viewMode: FireTopicDetailViewMode = .conversation,
-        expandedReplyRootPostIDs: Set<UInt64> = [],
-        loadingReplyContextPostIDs: Set<UInt64> = [],
-        postReplyContextErrorsByPostID: [UInt64: String] = [:]
+        loadMoreTopicPostsError: String? = nil
     ) -> FireTopicDetailRuntimeConfiguration {
         let interactionState = FireTopicDetailInteractionState(
             mutatingPostIDs: [],
-            loadingPostReplyContextIDs: loadingReplyContextPostIDs,
-            postReplyContextErrorsByPostID: postReplyContextErrorsByPostID,
-            expandedPostTextIDs: [],
-            expandedReplyRootPostIDs: expandedReplyRootPostIDs
+            expandedPostTextIDs: []
         )
         return FireTopicDetailRuntimeConfiguration(
             viewModel: nil,
-            viewMode: viewMode,
             displayedCategory: nil,
             currentUsername: nil,
             row: makeTopicRow(),
@@ -942,9 +820,6 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
             interactions: FireTopicDetailRuntimeInteractions(
                 isMutatingPost: { _ in false },
                 isPostTextExpanded: { _ in false },
-                isReplyThreadExpanded: { expandedReplyRootPostIDs.contains($0) },
-                isLoadingPostReplyContext: { loadingReplyContextPostIDs.contains($0) },
-                postReplyContextError: { postReplyContextErrorsByPostID[$0] },
                 onVisiblePostNumbersChanged: { _ in },
                 onRefresh: {},
                 onLoadTopicDetail: {},
@@ -953,7 +828,6 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
                 onReloadTopicAiSummary: {},
                 onOpenComposer: { _ in },
                 onOpenPostNumber: { _ in },
-                onOpenPostReplies: { _ in },
                 onLinkTapped: { _ in },
                 onOpenProfile: { _ in },
                 onOpenImage: { _ in },

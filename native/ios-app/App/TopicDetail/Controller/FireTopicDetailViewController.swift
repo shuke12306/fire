@@ -55,9 +55,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             },
             onUpdateNotificationLevel: { [weak self] option in
                 self?.updateTopicNotificationLevel(option)
-            },
-            onChangeViewMode: { [weak self] mode in
-                self?.setTopicViewMode(mode)
             }
         )
     )
@@ -68,15 +65,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         },
         isPostTextExpanded: { [weak self] postID in
             self?.expandedPostTextIDs.contains(postID) ?? false
-        },
-        isReplyThreadExpanded: { [weak self] postID in
-            self?.expandedReplyRootPostIDs.contains(postID) ?? false
-        },
-        isLoadingPostReplyContext: { [weak self] postID in
-            self?.topicDetailStore.isLoadingPostReplyContext(postID: postID) ?? false
-        },
-        postReplyContextError: { [weak self] postID in
-            self?.topicDetailStore.postReplyContextError(for: postID)
         },
         onVisiblePostNumbersChanged: { [weak self] visiblePostNumbers in
             self?.handleVisiblePostNumbersChanged(visiblePostNumbers)
@@ -107,9 +95,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         },
         onOpenPostNumber: { [weak self] postNumber in
             self?.openPostNumber(postNumber)
-        },
-        onOpenPostReplies: { [weak self] post in
-            self?.openPostReplies(for: post)
         },
         onLinkTapped: { [weak self] url in
             self?.handleRichTextLink(url)
@@ -182,8 +167,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private var cancellables = Set<AnyCancellable>()
 
     private var expandedPostTextIDs: Set<UInt64> = []
-    private var expandedReplyRootPostIDs: Set<UInt64> = []
-    private var topicViewMode: FireTopicDetailViewMode = .conversation
     private var composerContext: FireReplyComposerContext?
     private var replyDraft = ""
     private var quickReplyError: String?
@@ -770,7 +753,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func buildCurrentFeedState(topicId: UInt64) -> FireTopicDetailFeedState {
         let store = topicDetailStore
         return FireTopicDetailFeedState(
-            viewMode: topicViewMode,
             detail: store.topicDetail(for: topicId),
             renderState: store.topicRenderState(for: topicId),
             postLookup: store.topicPostLookup(for: topicId),
@@ -787,7 +769,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func buildCurrentChromeState(topicId: UInt64) -> FireTopicDetailChromeState {
         FireTopicDetailChromeState(
-            viewMode: topicViewMode,
             detail: topicDetailStore.topicDetail(for: topicId),
             row: row,
             baseURLString: baseURLString,
@@ -818,10 +799,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func buildCurrentInteractionState() -> FireTopicDetailInteractionState {
         FireTopicDetailInteractionState(
             mutatingPostIDs: topicDetailStore.mutatingPostIDs,
-            loadingPostReplyContextIDs: topicDetailStore.loadingPostReplyContextIDs,
-            postReplyContextErrorsByPostID: topicDetailStore.postReplyContextErrorsByPostID,
-            expandedPostTextIDs: expandedPostTextIDs,
-            expandedReplyRootPostIDs: expandedReplyRootPostIDs
+            expandedPostTextIDs: expandedPostTextIDs
         )
     }
 
@@ -840,7 +818,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func buildRuntimeConfiguration(from state: FireTopicDetailPageState) -> FireTopicDetailRuntimeConfiguration {
         FireTopicDetailRuntimeConfiguration(
             viewModel: viewModel,
-            viewMode: state.feed.viewMode,
             displayedCategory: state.route.displayedCategory,
             currentUsername: state.route.currentUsername,
             row: state.route.row,
@@ -864,7 +841,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             activeSearchPostID: activeTopicSearchMatch?.postID,
             snapshotInvalidationToken: AnyHashable(FireTopicDetailFeedInvalidationToken(
                 topicID: state.topic.id,
-                viewMode: state.feed.viewMode,
                 topicCollectionRevision: state.feed.topicCollectionRevision,
                 pendingScrollTarget: state.feed.pendingScrollTarget,
                 detailError: state.feed.detailError ?? "",
@@ -877,9 +853,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 canWriteInteractions: state.route.canWriteInteractions,
                 currentUsername: state.route.currentUsername ?? "",
                 baseURLString: state.route.baseURLString,
-                expandedReplyRootPostIDs: state.feed.viewMode == .conversation
-                    ? state.interaction.expandedReplyRootPostIDs
-                    : [],
                 activeSearchPostID: activeTopicSearchMatch?.postID
             )),
             interactions: runtimeInteractions
@@ -972,7 +945,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             return
         }
         viewModel.topicDetailLogger()?.debug(
-            "topic detail snapshot apply diagnostic topic_id=\(topic.id) view_mode=\(configuration.viewMode.rawValue) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil) feed_attached=\(feedController.isViewAttached)"
+            "topic detail snapshot apply diagnostic topic_id=\(topic.id) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil) feed_attached=\(feedController.isViewAttached)"
         )
     }
 
@@ -1213,41 +1186,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func updateFeedTopInset() {
         rootNode.updateTopChromeInset(currentSearchBarHeight)
-    }
-
-    private func openPostReplies(for post: TopicPostState) {
-        expandedReplyRootPostIDs.insert(post.id)
-        buildAndApplySnapshot()
-        guard shouldLoadReplyContext(for: post) else {
-            return
-        }
-        Task {
-            await topicDetailStore.loadPostReplyContextIfNeeded(
-                topicID: topic.id,
-                post: post
-            )
-        }
-    }
-
-    private func shouldLoadReplyContext(for post: TopicPostState) -> Bool {
-        let declaredReplyCount = Int(post.replyCount)
-        guard declaredReplyCount > 0 else {
-            return false
-        }
-        guard let renderState = topicDetailStore.topicRenderState(for: topic.id) else {
-            return true
-        }
-        return FireTopicDetailReplyContextLoadPolicy.shouldLoadReplyContext(
-            for: post,
-            replyRows: renderState.replyRows,
-            postLookup: topicDetailStore.topicPostLookup(for: topic.id)
-        )
-    }
-
-    private func setTopicViewMode(_ mode: FireTopicDetailViewMode) {
-        guard topicViewMode != mode else { return }
-        topicViewMode = mode
-        buildAndApplySnapshot()
     }
 
     private func clearComposerTarget() {

@@ -50,7 +50,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         }
         return node
     }()
-    private let replyShortcutNode = ASButtonNode()
     private let reactionContainerNode = ASDisplayNode()
     private let dividerNode = ASDisplayNode()
 
@@ -250,11 +249,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         boostBarrageNode.isHidden = true
         boostBarrageNode.isUserInteractionEnabled = false
 
-        // Reply shortcut
-        replyShortcutNode.isHidden = true
-        replyShortcutNode.addTarget(self, action: #selector(handleReplyShortcutTap), forControlEvents: .touchUpInside)
-        replyShortcutNode.accessibilityLabel = "查看更多回复"
-
         // Reactions
         reactionContainerNode.isHidden = true
 
@@ -299,7 +293,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         configurePolls(payload: payload)
         boostAnimationsEnabled = payload.boostAnimationsEnabled
         configureBoosts(payload: payload)
-        configureReplyShortcut(payload: payload)
         configureReactions(payload: payload)
         configureSearchHighlight(payload.isSearchHighlighted)
         configureDivider(shows: showsDivider)
@@ -712,33 +705,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         pollContainerNode.style.preferredSize = CGSize(width: 1, height: ceil(totalPollHeight))
     }
 
-    private func configureReplyShortcut(payload: FirePostCellRenderPayload) {
-        guard let count = payload.replyShortcutCount else {
-            replyShortcutNode.isHidden = true
-            return
-        }
-        replyShortcutNode.isHidden = false
-        replyShortcutNode.isEnabled = !payload.isLoadingReplyContext
-        let title: String
-        if payload.isLoadingReplyContext {
-            title = "正在加载回复..."
-        } else if payload.replyContextError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            title = "加载失败，点按重试"
-        } else {
-            title = count > 0 ? "查看更多 \(count) 条回复" : "查看更多回复"
-        }
-        replyShortcutNode.setAttributedTitle(NSAttributedString(
-            string: title,
-            attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .caption1),
-                .foregroundColor: payload.replyContextError == nil
-                    ? Self.accentTextColor
-                    : UIColor.systemRed,
-            ]
-        ), for: .normal)
-        replyShortcutNode.accessibilityLabel = title
-    }
-
     private func configureBoosts(payload: FirePostCellRenderPayload) {
         guard !payload.post.boosts.isEmpty else {
             boostContainerNode.isHidden = true
@@ -1098,21 +1064,10 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
         }
 
         var actionRowChildren: [ASLayoutElement] = []
-        if !replyShortcutNode.isHidden {
-            replyShortcutNode.style.flexGrow = 0
-            replyShortcutNode.style.flexShrink = 1.0
-            actionRowChildren.append(replyShortcutNode)
-        }
         if let reactionRow {
-            if !actionRowChildren.isEmpty {
-                let actionSpacer = ASLayoutSpec()
-                actionSpacer.style.flexGrow = 1.0
-                actionRowChildren.append(actionSpacer)
-            }
             actionRowChildren.append(reactionRow)
         }
         if FirePostReactionDisplayPolicy.allowsWrapping(depth: currentDepth),
-           replyShortcutNode.isHidden,
            let reactionRow {
             reactionRow.style.minWidth = ASDimensionMake(max(contentAvailableWidth, 1))
             reactionRow.style.maxWidth = ASDimensionMake(max(contentAvailableWidth, 1))
@@ -1126,7 +1081,7 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
                 children: actionRowChildren
             )
             actionRow.style.flexShrink = 1.0
-            actionRow.style.minHeight = ASDimensionMake(FirePostCellLayoutCalculator.replyShortcutHeight)
+            actionRow.style.minHeight = ASDimensionMake(FirePostCellLayoutCalculator.actionRowHeight)
             contentChildren.append(actionRow)
         }
 
@@ -1201,15 +1156,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             return
         }
         callbacks.onOpenReplyTarget(postNumber)
-    }
-
-    @objc private func handleReplyShortcutTap() {
-        guard let payload = currentPayload,
-              !payload.isLoadingReplyContext,
-              let callbacks = currentCallbacks else {
-            return
-        }
-        callbacks.onOpenReplies(payload.post)
     }
 
     @objc private func handleImageTap(_ sender: FirePostImageNode) {
@@ -1536,7 +1482,6 @@ final class FirePostCellNode: ASCellNode, UIGestureRecognizerDelegate {
             let visibleFrames = [
                 layout.metaFrame,
                 layout.textFrame,
-                layout.replyShortcutFrame,
                 layout.reactionsFrame,
             ].compactMap { $0 } + layout.imageFrames + layout.pollFrames + layout.boostFrames
             let union = visibleFrames.reduce(CGRect.null) { partial, frame in

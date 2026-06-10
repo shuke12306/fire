@@ -26,8 +26,8 @@ enum FirePostCellLayoutCalculator {
     static let fixedBoostManualHeight: CGFloat =
         CGFloat(fixedBoostManualRows) * fixedBoostManualRowHeight
         + CGFloat(fixedBoostManualRows - 1) * fixedBoostManualRowSpacing
-    static let replyShortcutTopSpacing: CGFloat = 8
-    static let replyShortcutHeight: CGFloat = 30
+    static let actionRowTopSpacing: CGFloat = 8
+    static let actionRowHeight: CGFloat = 30
     static let reactionTopSpacing: CGFloat = 0
     static let contentVerticalPadding: CGFloat = 8
     static let menuButtonSize: CGFloat = 20
@@ -220,50 +220,30 @@ enum FirePostCellLayoutCalculator {
             cursorY += fixedBoostManualHeight
         }
 
-        // Action row: nested-reply shortcut and reactions share one compact line.
-        let replyShortcutFrame: CGRect?
+        // Action row: reactions share one compact line below content.
         let reactionsFrame: CGRect?
-        let hasActionRow = key.replyShortcutCount != nil || key.hasReactions
+        let hasActionRow = key.hasReactions
         if hasActionRow {
             if textFrame != nil || !imageFrames.isEmpty || !pollFrames.isEmpty || !boostFrames.isEmpty {
-                cursorY += replyShortcutTopSpacing
+                cursorY += actionRowTopSpacing
             }
 
             let actionRowY = cursorY
-            let actionRowHeight = replyShortcutHeight
-            let actionSpacing: CGFloat = 8
-            var actionX = contentLeading
             let rowMaxX = contentLeading + contentAvailableWidth
-
-            if key.replyShortcutCount != nil {
-                let remaining = max(rowMaxX - actionX, 1)
-                let reservedReactionWidth: CGFloat = key.hasReactions && remaining > 180 ? 96 : 0
-                let width = max(remaining - reservedReactionWidth - actionSpacing, min(remaining, 96))
-                replyShortcutFrame = CGRect(
-                    x: actionX,
-                    y: actionRowY,
-                    width: min(width, remaining),
-                    height: actionRowHeight
-                )
-                actionX = min(actionX + min(width, remaining) + actionSpacing, rowMaxX)
-            } else {
-                replyShortcutFrame = nil
-            }
 
             if key.hasReactions {
                 reactionsFrame = CGRect(
-                    x: actionX,
+                    x: contentLeading,
                     y: actionRowY,
-                    width: max(rowMaxX - actionX, 1),
-                    height: actionRowHeight
+                    width: max(rowMaxX - contentLeading, 1),
+                    height: Self.actionRowHeight
                 )
             } else {
                 reactionsFrame = nil
             }
 
-            cursorY += actionRowHeight
+            cursorY += Self.actionRowHeight
         } else {
-            replyShortcutFrame = nil
             reactionsFrame = nil
         }
 
@@ -307,7 +287,6 @@ enum FirePostCellLayoutCalculator {
             imageFrames: imageFrames,
             pollFrames: pollFrames,
             boostFrames: boostFrames,
-            replyShortcutFrame: replyShortcutFrame,
             reactionsFrame: reactionsFrame,
             menuFrame: nil,
             dividerFrame: dividerFrame

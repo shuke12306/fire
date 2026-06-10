@@ -36,11 +36,6 @@ import uniffi.fire_uniffi_topics.TopicTreePresentationState
 import uniffi.fire_uniffi_topics.TopicTreeRowState
 import uniffi.fire_uniffi_topics.TopicUpdateRequestState
 
-enum class TopicDetailViewMode {
-    FLAT,
-    THREADED,
-}
-
 class TopicDetailViewModel(
     private val topicRepository: TopicRepository,
     private val sessionStore: FireSessionStore,
@@ -61,9 +56,6 @@ class TopicDetailViewModel(
 
     private val _postRows = MutableStateFlow<List<PostRow>>(emptyList())
     val postRows = _postRows.asStateFlow()
-
-    private val _viewMode = MutableStateFlow(TopicDetailViewMode.THREADED)
-    val viewMode = _viewMode.asStateFlow()
 
     private val _topicAiSummary = MutableStateFlow<TopicAiSummaryState?>(null)
     val topicAiSummary = _topicAiSummary.asStateFlow()
@@ -150,12 +142,6 @@ class TopicDetailViewModel(
         }
     }
 
-    fun setViewMode(mode: TopicDetailViewMode) {
-        if (_viewMode.value == mode) return
-        _viewMode.value = mode
-        publishProjectedPostRows()
-    }
-
     private suspend fun fetchTopicDetailPagePayload(
         topicId: ULong,
         targetPostNumber: UInt? = null,
@@ -192,7 +178,6 @@ class TopicDetailViewModel(
         val rows = TopicDetailPostRows.projectRows(
             rows = normalizedReplyRows,
             postsById = postsById,
-            mode = _viewMode.value,
         )
 
         val nextDetail = TopicDetailState(
@@ -773,19 +758,10 @@ class TopicDetailViewModel(
         }
     }
 
-    private fun publishProjectedPostRows() {
-        val detail = _detail.value ?: return
-        val rows = projectedPostRows(TopicDetailPostRows.postsById(detail.postStream.posts))
-        if (_postRows.value != rows) {
-            _postRows.value = rows
-        }
-    }
-
     private fun projectedPostRows(postsById: Map<ULong, TopicPostState>): List<PostRow> {
         return TopicDetailPostRows.projectRows(
             rows = treePresentation?.replyRows.orEmpty(),
             postsById = postsById,
-            mode = _viewMode.value,
         )
     }
 
@@ -985,30 +961,14 @@ object TopicDetailPostRows {
     fun projectRows(
         rows: List<TopicTreeRowState>,
         postsById: Map<ULong, TopicPostState>,
-        mode: TopicDetailViewMode,
     ): List<PostRow> {
-        val orderedRows = when (mode) {
-            TopicDetailViewMode.FLAT -> rows.sortedWith(
-                compareBy<TopicTreeRowState> { it.postNumber }
-                    .thenBy { it.preorderIndex },
-            )
-            TopicDetailViewMode.THREADED -> rows
-        }
-        return orderedRows.mapNotNull { row ->
+        return rows.mapNotNull { row ->
             val post = postsById[row.postId] ?: return@mapNotNull null
-            val depth = when (mode) {
-                TopicDetailViewMode.FLAT -> 0
-                TopicDetailViewMode.THREADED -> row.depth.toInt()
-            }
-            val parentPostNumber = when (mode) {
-                TopicDetailViewMode.FLAT -> post.replyToPostNumber
-                TopicDetailViewMode.THREADED -> row.parentPostNumber
-            }
             PostRow(
                 post = post,
-                depth = depth,
-                parentPostNumber = parentPostNumber,
-                hasChildren = mode == TopicDetailViewMode.THREADED && row.hasChildren,
+                depth = row.depth.toInt(),
+                parentPostNumber = row.parentPostNumber,
+                hasChildren = row.hasChildren,
             )
         }
     }

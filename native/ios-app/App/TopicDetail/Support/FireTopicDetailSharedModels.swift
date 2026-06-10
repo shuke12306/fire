@@ -2,18 +2,6 @@ import Foundation
 
 // MARK: - Composer Contexts
 
-enum FireTopicDetailViewMode: String, CaseIterable, Hashable, Sendable {
-    case conversation
-    case threaded
-
-    var title: String {
-        switch self {
-        case .conversation: "对话"
-        case .threaded: "线程"
-        }
-    }
-}
-
 struct FireReplyComposerContext: Identifiable, Equatable {
     let topicId: UInt64
     let postId: UInt64?
@@ -115,7 +103,6 @@ struct FireTopicFilterRoute: Identifiable, Hashable {
 
 struct FireTopicDetailFeedInvalidationToken: Hashable {
     let topicID: UInt64
-    let viewMode: FireTopicDetailViewMode
     let topicCollectionRevision: UInt64
     let pendingScrollTarget: UInt32?
     let detailError: String
@@ -128,13 +115,11 @@ struct FireTopicDetailFeedInvalidationToken: Hashable {
     let canWriteInteractions: Bool
     let currentUsername: String
     let baseURLString: String
-    let expandedReplyRootPostIDs: Set<UInt64>
     let activeSearchPostID: UInt64?
 }
 
 struct FireTopicDetailChromeInvalidationToken: Hashable {
     let topicID: UInt64
-    let viewMode: FireTopicDetailViewMode
     let title: String
     let slug: String
     let bookmarked: Bool
@@ -163,10 +148,7 @@ struct FireTopicDetailSidecarInvalidationToken: Hashable {
 
 struct FireTopicDetailInteractionInvalidationToken: Hashable {
     let mutatingPostIDs: Set<UInt64>
-    let loadingPostReplyContextIDs: Set<UInt64>
-    let postReplyContextErrorIDs: [UInt64]
     let expandedPostTextIDs: Set<UInt64>
-    let expandedReplyRootPostIDs: Set<UInt64>
 }
 
 // MARK: - Topic Notification Level

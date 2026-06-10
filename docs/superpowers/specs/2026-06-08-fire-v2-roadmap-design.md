@@ -20,7 +20,7 @@
 | 模块 | 完成度 | 关键差距 |
 |------|--------|----------|
 | 首页/话题列表 | ★★★★☆ | Feed kind 中英文标题不一致；`FireFeedKindSelector` 与 `FilteredTopicListView` 使用不同的视觉风格 |
-| 话题详情 | ★★★★★ | AsyncDisplayKit/Texture 原生运行时路径成熟；话题内搜索、线程视图、通知级别控制已实现 |
+| 话题详情 | ★★★★★ | AsyncDisplayKit/Texture 原生运行时路径成熟；回复树展示、话题内搜索、通知级别控制已实现 |
 | 通知 | ★★★★☆ | 缺上下文菜单；`notificationAlert` 事件处理为 no-op |
 | 搜索 | ★★★★☆ | 缺搜索结果上下文菜单 |
 | 编辑器 | ★★★★☆ | Markdown 工具栏、引用插入、共享 `FireComposerTextView` 已实现；独立链接预览卡片仍未作为确认交付项 |
@@ -43,7 +43,7 @@
 | 模块 | 完成度 | 关键差距 |
 |------|--------|----------|
 | 首页/话题列表 | ★★★★☆ | 功能与 iOS 对齐 |
-| 话题详情 | ★★★★★ | 线程视图、话题内搜索、通知级别、Reaction 增强、书签提醒均在 View/XML 原生路径实现 |
+| 话题详情 | ★★★★★ | 回复树展示、话题内搜索、通知级别、Reaction 增强、书签提醒均在 View/XML 原生路径实现 |
 | 通知 | ★★★★☆ | 通知列表和通知历史页可用；FCM 仅处理本地 token/message 事件，后端 token 注册 API 尚不可用 |
 | 搜索 | ★★★★☆ | 功能完整 |
 | 编辑器 | ★★★★★ | Markdown 工具栏、引用插入、预览路径可用 |
@@ -242,15 +242,14 @@ FirePaginatedStore<Item: Identifiable>
 
 - `LDCFragment` / `CDKFragment` 对称实现 iOS 的 LDC/CDK UI
 
-### 3.2 线程视图（iOS + Android，已完成）
+### 3.2 回复树展示（iOS + Android，已完成）
 
-Rust 模型层已有 `TopicThread`、`TopicThreadFlatPost`、`TopicTreeRow`。原生 UI 层已实现：
+Rust 模型层提供 `TopicTreeRow` / `TopicTreePresentation`。原生 UI 层已收口为 Fire 的回复形阅读体验：
 
-**话题详情页新增「线程」视图模式：**
-- 切换入口在话题详情顶部工具栏
-- 线程视图展示帖子回复树结构
-- 支持展开/折叠子线程
-- 保留「树状」视图作为默认，线程视图作为可选项
+**话题详情页固定使用回复树展示：**
+- iOS / Android 均消费 Rust tree presentation 的顺序、depth、parent 元数据
+- 不保留线性/平铺展示选择入口
+- 不维护平台侧第二套 row projection 或数据源
 
 ### 3.3 编辑器增强（iOS + Android，已完成）
 
@@ -458,7 +457,7 @@ Rust 已有 bookmark reminder API，原生层已接入：
 | Android 通知历史/阅读历史 | P1 | 中 | 中 | Android |
 | `FireAppViewModel` 拆分 | P1 | 高 | 中 | iOS |
 | LDC/CDK OAuth | P2 | 高 | 高 | 全栈 |
-| 线程视图 | P2 | 中 | 中 | iOS+Android |
+| 回复树展示 | P2 | 中 | 中 | iOS+Android |
 | 编辑器增强 | P2 | 高 | 中 | iOS+Android |
 | 话题通知级别 | P2 | 中 | 低 | iOS+Android |
 | Reaction 增强 | P2 | 中 | 低 | iOS+Android |
@@ -502,7 +501,7 @@ Rust 已有 bookmark reminder API，原生层已接入：
 ### P2 验收
 - [x] LDC 授权、余额/累计支付字段和用户信息可在 App 内查看；独立支付历史列表未作为已实现 endpoint 声明
 - [x] CDK 授权绑定流程完成
-- [x] 线程视图可切换展示
+- [x] 话题详情固定展示回复树结构
 - [x] 编辑器有 Markdown 工具栏和引用插入
 - [x] 话题通知级别可设置
 - [x] 话题内可搜索高亮

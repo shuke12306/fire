@@ -47,7 +47,7 @@ POST /discourse_templates/{templateId}/use
 GET /n/topic/{topicId}.json
 ```
 
-**场景**：树形视图模式下获取根帖子。
+**场景**：使用 nested/root-children API 获取根帖子列表。
 
 **Query Parameters：**
 
@@ -65,7 +65,7 @@ GET /n/topic/{topicId}.json
 GET /n/topic/{topicId}/children/{postNumber}.json
 ```
 
-**场景**：树形视图模式下展开子回复。
+**场景**：使用 nested/root-children API 获取某个帖子的子回复。
 
 **Query Parameters：**
 

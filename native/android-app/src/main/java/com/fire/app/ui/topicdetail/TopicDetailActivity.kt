@@ -96,7 +96,6 @@ class TopicDetailActivity : AppCompatActivity() {
     private var enabledReactionIds: List<String> = emptyList()
     private var timingTracker: TopicTimingTracker? = null
     private var searchMenuItem: MenuItem? = null
-    private var viewModeMenuItem: MenuItem? = null
     private var notificationMenuItem: MenuItem? = null
     private var topicSearchQuery: String = ""
     private var topicSearchMatches: List<TopicDetailPostRows.SearchMatch> = emptyList()
@@ -150,15 +149,6 @@ class TopicDetailActivity : AppCompatActivity() {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             setOnMenuItemClickListener {
                 showTopicSearch()
-                true
-            }
-        }
-        viewModeMenuItem = binding.topicDetailToolbar.menu.add(
-            R.string.topic_detail_view_mode_threaded,
-        ).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setOnMenuItemClickListener {
-                showViewModeChooser()
                 true
             }
         }
@@ -349,12 +339,6 @@ class TopicDetailActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            vm.viewMode.collectLatest { mode ->
-                updateViewModeToolbar(mode)
-            }
-        }
-
-        lifecycleScope.launch {
             vm.scrollTargetPostNumber.collectLatest { postNumber ->
                 scrollToPostNumber(postNumber)
             }
@@ -427,21 +411,6 @@ class TopicDetailActivity : AppCompatActivity() {
         )
     }
 
-    private fun showViewModeChooser() {
-        val currentMode = viewModel?.viewMode?.value ?: TopicDetailViewMode.THREADED
-        val modes = arrayOf(TopicDetailViewMode.THREADED, TopicDetailViewMode.FLAT)
-        val labels = modes.map(::viewModeLabel).toTypedArray()
-        val checkedItem = modes.indexOf(currentMode).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.topic_detail_view_mode_title)
-            .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
-                viewModel?.setViewMode(modes[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
     private fun updateTopicNotificationToolbar(detail: TopicDetailState?) {
         val item = notificationMenuItem ?: return
         val isPrivateMessageThread = detail?.archetype
@@ -472,19 +441,6 @@ class TopicDetailActivity : AppCompatActivity() {
             2, 3 -> R.drawable.ic_notifications_active
             else -> R.drawable.ic_notifications
         }
-    }
-
-    private fun updateViewModeToolbar(mode: TopicDetailViewMode) {
-        viewModeMenuItem?.title = viewModeLabel(mode)
-    }
-
-    private fun viewModeLabel(mode: TopicDetailViewMode): String {
-        return getString(
-            when (mode) {
-                TopicDetailViewMode.FLAT -> R.string.topic_detail_view_mode_flat
-                TopicDetailViewMode.THREADED -> R.string.topic_detail_view_mode_threaded
-            },
-        )
     }
 
     private fun showTopicSearch() {

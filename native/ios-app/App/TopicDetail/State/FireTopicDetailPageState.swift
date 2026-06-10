@@ -3,7 +3,6 @@ import Foundation
 /// Store-backed data that can change the structural topic-detail feed.
 struct FireTopicDetailFeedState {
 
-    let viewMode: FireTopicDetailViewMode
     let detail: TopicDetailState?
     let renderState: FireTopicDetailRenderState?
     let postLookup: [UInt64: TopicPostState]
@@ -19,7 +18,6 @@ struct FireTopicDetailFeedState {
 
 /// Toolbar-level state. Changes here should not rebuild feed items.
 struct FireTopicDetailChromeState {
-    let viewMode: FireTopicDetailViewMode
     let detail: TopicDetailState?
     let row: FireTopicRowPresentation
     let baseURLString: String
@@ -47,17 +45,11 @@ struct FireTopicDetailSidecarState {
 /// Per-item interaction state used for targeted item refresh and visible-node updates.
 struct FireTopicDetailInteractionState: Equatable {
     let mutatingPostIDs: Set<UInt64>
-    let loadingPostReplyContextIDs: Set<UInt64>
-    let postReplyContextErrorsByPostID: [UInt64: String]
     let expandedPostTextIDs: Set<UInt64>
-    let expandedReplyRootPostIDs: Set<UInt64>
 
     static let empty = FireTopicDetailInteractionState(
         mutatingPostIDs: [],
-        loadingPostReplyContextIDs: [],
-        postReplyContextErrorsByPostID: [:],
-        expandedPostTextIDs: [],
-        expandedReplyRootPostIDs: []
+        expandedPostTextIDs: []
     )
 
     func isMutatingPost(_ postID: UInt64) -> Bool {
@@ -68,17 +60,6 @@ struct FireTopicDetailInteractionState: Equatable {
         expandedPostTextIDs.contains(postID)
     }
 
-    func isReplyThreadExpanded(_ postID: UInt64) -> Bool {
-        expandedReplyRootPostIDs.contains(postID)
-    }
-
-    func isLoadingPostReplyContext(_ postID: UInt64) -> Bool {
-        loadingPostReplyContextIDs.contains(postID)
-    }
-
-    func postReplyContextError(_ postID: UInt64) -> String? {
-        postReplyContextErrorsByPostID[postID]
-    }
 }
 
 /// Route/session constants needed by feed construction.

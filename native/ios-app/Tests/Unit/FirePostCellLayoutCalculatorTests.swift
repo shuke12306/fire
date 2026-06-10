@@ -21,7 +21,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -106,7 +105,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -138,7 +136,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -156,7 +153,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: true,
@@ -196,7 +192,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: true,
-            replyShortcutCount: 3,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -215,15 +210,13 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
 
         XCTAssertEqual(layout.textFrame?.height ?? 0, collapsedHeight, accuracy: 0.01)
         XCTAssertNotNil(layout.textExpansionFrame)
-        XCTAssertNotNil(layout.replyShortcutFrame)
         XCTAssertNotNil(layout.reactionsFrame)
         XCTAssertEqual(layout.textExpansionFrame, layout.textFrame)
         XCTAssertEqual(
-            layout.replyShortcutFrame?.minY ?? 0,
-            (layout.textFrame?.maxY ?? 0) + FirePostCellLayoutCalculator.replyShortcutTopSpacing,
+            layout.reactionsFrame?.minY ?? 0,
+            (layout.textFrame?.maxY ?? 0) + FirePostCellLayoutCalculator.actionRowTopSpacing,
             accuracy: 0.01
         )
-        XCTAssertEqual(layout.replyShortcutFrame?.minY ?? 0, layout.reactionsFrame?.minY ?? 1, accuracy: 0.01)
     }
 
     func testPollFramesSitBetweenMediaAndActionRow() {
@@ -243,7 +236,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: ["poll"],
             boostSignature: [],
             hasReactions: true,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -280,7 +272,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: ["boost-a", "boost-b"],
             hasReactions: true,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -319,7 +310,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: (0..<8).map { "boost-\($0)" },
             hasReactions: true,
-            replyShortcutCount: nil,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -546,7 +536,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -595,7 +584,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: ["poll"],
             boostSignature: ["boost"],
             hasReactions: true,
-            replyShortcutCount: nil,
             textExpansionState: FirePostTextExpansionState(isCollapsible: true, isExpanded: false),
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -618,7 +606,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
         XCTAssertTrue(layout.boostFrames.isEmpty)
         XCTAssertEqual(
             layout.reactionsFrame?.minY ?? 0,
-            (layout.textFrame?.maxY ?? 0) + FirePostCellLayoutCalculator.replyShortcutTopSpacing,
+            (layout.textFrame?.maxY ?? 0) + FirePostCellLayoutCalculator.actionRowTopSpacing,
             accuracy: 0.01
         )
     }
@@ -671,8 +659,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
                 isMutating: false,
                 replyContext: nil,
                 replyTargetPostNumber: nil,
-                replyShortcutCount: nil,
-                isLoadingReplyContext: false,
                 textExpansionState: .disabled,
                 isSearchHighlighted: false,
                 showsDivider: false,
@@ -695,7 +681,7 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
 
     func testTexturePostCellActionRowMatchesLayoutCalculatorHeight() {
         let width: CGFloat = 320
-        let renderContent = fireRenderContentFixture("<p>Fire native detail row with reply shortcut and reactions.</p>")
+        let renderContent = fireRenderContentFixture("<p>Fire native detail row with reactions.</p>")
         let reactions = [
             TopicReactionState(id: "heart", kind: nil, count: 12, canUndo: true),
             TopicReactionState(id: "clap", kind: nil, count: 4, canUndo: true),
@@ -716,8 +702,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
                 isMutating: false,
                 replyContext: nil,
                 replyTargetPostNumber: nil,
-                replyShortcutCount: 3,
-                isLoadingReplyContext: false,
                 textExpansionState: .disabled,
                 isSearchHighlighted: false,
                 showsDivider: false,
@@ -749,7 +733,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: true,
-            replyShortcutCount: 3,
             textExpansionState: .disabled,
             acceptedAnswer: false,
             hasAuthorMetadata: false,
@@ -801,8 +784,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
                 isMutating: false,
                 replyContext: nil,
                 replyTargetPostNumber: nil,
-                replyShortcutCount: nil,
-                isLoadingReplyContext: false,
                 textExpansionState: collapsed,
                 isSearchHighlighted: false,
                 showsDivider: false,
@@ -833,8 +814,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
                 isMutating: false,
                 replyContext: nil,
                 replyTargetPostNumber: nil,
-                replyShortcutCount: nil,
-                isLoadingReplyContext: false,
                 textExpansionState: collapsed,
                 isSearchHighlighted: false,
                 showsDivider: false,
@@ -1027,7 +1006,6 @@ final class FirePostCellLayoutCalculatorTests: XCTestCase {
             onRecoverPost: { _ in },
             onFlagPost: { _ in },
             onOpenReplyTarget: { _ in },
-            onOpenReplies: { _ in },
             onExpandText: { _ in },
             onVotePoll: { _, _, _ in },
             onUnvotePoll: { _, _ in },

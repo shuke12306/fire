@@ -4,7 +4,7 @@
 
 **Goal:** 补齐 API 表面中的未实现功能，LDC/CDK OAuth 优先实现
 
-**Architecture:** LDC/CDK OAuth 从 Rust core 新模块开始，通过 UniFFI 暴露给 iOS/Android 原生 UI。编辑器增强、线程视图、话题搜索等功能在现有 Rust 模型基础上扩展原生 UI 层。
+**Architecture:** LDC/CDK OAuth 从 Rust core 新模块开始，通过 UniFFI 暴露给 iOS/Android 原生 UI。编辑器增强、回复树展示、话题搜索等功能在现有 Rust 模型基础上扩展原生 UI 层。
 
 **Tech Stack:** Rust (fire-core, fire-models, fire-uniffi) / SwiftUI (iOS) / Kotlin + ViewBinding (Android)
 
@@ -31,7 +31,7 @@
 | Create | `App/Views/Profile/FireLDCView.swift` | LDC 信用主页 |
 | Create | `App/Views/Profile/FireCDKView.swift` | CDK 连接页 |
 | Create | `App/Views/FireConnectStatsView.swift` | Connect 统计页 |
-| Modify | `App/TopicDetail/` | 原生 runtime 话题详情视图模式切换 |
+| Modify | `App/TopicDetail/` | 原生 runtime 话题详情回复树展示 |
 | Modify | `App/Views/Composer/FireComposerView.swift` | 集成 Markdown 工具栏和引用插入 |
 | Modify | `App/Views/Composer/FirePostEditorView.swift` | 升级为 FireComposerTextView |
 | Modify | `App/TopicDetail/` 相关文件 | 话题通知级别 UI、话题内搜索 |
@@ -43,8 +43,8 @@
 | Create | `ui/ldc/LDCFragment.kt` | LDC 信用主页 |
 | Create | `ui/ldc/LDCViewModel.kt` | LDC ViewModel |
 | Create | `ui/ldc/CDKFragment.kt` | CDK 连接页 |
-| Modify | `ui/topicdetail/TopicDetailViewModel.kt` | 线程/平铺 row projection |
-| Modify | `ui/topicdetail/TopicDetailActivity.kt` | 话题详情视图模式切换 |
+| Modify | `ui/topicdetail/TopicDetailViewModel.kt` | 回复树 row projection |
+| Modify | `ui/topicdetail/TopicDetailActivity.kt` | 话题详情回复树展示 |
 | Create | `ui/composer/MarkdownToolbarView.kt` | Markdown 工具栏 |
 | Modify | `ui/composer/ReplyComposerSheet.kt` | 集成工具栏 |
 
@@ -311,7 +311,7 @@ git commit -m "feat(android): add LDC Credit and CDK connection screens"
 
 ---
 
-## Task 6: 线程视图 — iOS
+## Task 6: 回复树展示 — iOS
 
 **Files:**
 - Modify: `native/ios-app/App/TopicDetail/Support/FireTopicDetailSharedModels.swift`
@@ -323,20 +323,19 @@ git commit -m "feat(android): add LDC Credit and CDK connection screens"
 - Modify: `native/ios-app/App/TopicDetail/Controller/FireTopicDetailViewController.swift`
 - Modify: `native/ios-app/Tests/Unit/FireTopicDetailRuntimeTests.swift`
 
-- [x] **Step 1: 创建线程视图组件**
+- [x] **Step 1: 收口为回复树展示**
 
-Implemented as a topic-detail native runtime view mode instead of a SwiftUI post-row surface.
+Implemented as the topic-detail native runtime presentation on the authoritative reply-tree reading surface.
 
-- `FireTopicDetailViewMode` adds `conversation` and `threaded`.
 - The existing Texture `ASCollectionNode` feed and `FirePostCellNode` path remain authoritative for original post and reply rows.
-- Conversation mode preserves the existing collapsed root-reply projection.
-- Threaded mode renders every loaded Rust tree row in order, preserves Rust-provided depth, disables root shortcut hiding, and keeps scroll lookup available for loaded nested replies.
+- Topic detail renders every loaded Rust tree row in order, preserves Rust-provided depth, and keeps scroll lookup available for loaded nested replies.
+- No toolbar entry or controller-local state remains for alternate display projections.
 
-- [x] **Step 2: 话题详情工具栏添加视图切换**
+- [x] **Step 2: 移除视图切换入口**
 
-`FireTopicDetailToolbarCoordinator` adds a compact view-mode menu in the navigation bar. Switching modes updates controller-local presentation state and rebuilds the feed snapshot; Rust source snapshots, raw-stream pagination, render documents, and native cell layout remain unchanged.
+`FireTopicDetailToolbarCoordinator` does not expose an alternate display menu. Rust source snapshots, raw-stream pagination, render documents, and native cell layout stay on one authoritative reply-tree path.
 
-Unit coverage in `FireTopicDetailRuntimeTests` asserts the conversation projection still hides secondary replies by default while threaded mode shows all loaded nested replies with the native runtime cell context.
+Unit coverage in `FireTopicDetailRuntimeTests` asserts loaded nested replies are visible by default with native runtime cell context.
 
 - [x] **Step 3: 构建验证**
 
@@ -350,12 +349,12 @@ Result: passed.
 
 ```bash
 git add native/ios-app/App/TopicDetail/ native/ios-app/Tests/Unit/FireTopicDetailRuntimeTests.swift native/ios-app/README.md docs/superpowers/plans/2026-06-08-p2-feature-completion.md
-git commit -m "feat(ios): add threaded view mode for topic detail"
+git commit -m "refactor(ios): keep topic detail on reply tree presentation"
 ```
 
 ---
 
-## Task 7: 线程视图 — Android
+## Task 7: 回复树展示 — Android
 
 **Files:**
 - Modify: `native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt`
@@ -363,20 +362,17 @@ git commit -m "feat(ios): add threaded view mode for topic detail"
 - Modify: `native/android-app/src/main/res/values/strings.xml`
 - Modify: `native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicDetailPostRowsTest.kt`
 
-- [x] **Step 1: 添加 view-mode row projection**
+- [x] **Step 1: 收口 row projection**
 
-Implemented on the existing authoritative topic-detail list path instead of adding
-a second adapter. `TopicDetailViewMode` defaults to `THREADED`, preserving the
-current Rust tree row order, depth, parent post number, and child markers. `FLAT`
-sorts loaded reply rows by floor, removes tree indentation, and keeps reply
-context from the post's `replyToPostNumber`.
+Implemented on the existing authoritative topic-detail list path. Android
+preserves the current Rust tree row order, depth, parent post number, and child
+markers.
 
-- [x] **Step 2: TopicDetailActivity 添加视图模式切换**
+- [x] **Step 2: TopicDetailActivity 使用单一路径**
 
-The toolbar opens a single-choice mode dialog. Both modes continue to use the
-same `ConcatAdapter` / `PostListAdapter`, the same Rust source snapshot, and the
-same Rust tree presentation rows; switching only republishes projected rows from
-the ViewModel.
+The toolbar does not expose an alternate display dialog. Topic detail uses the same
+`ConcatAdapter` / `PostListAdapter`, the same Rust source snapshot, and the same
+Rust tree presentation rows for the reply-shaped reading surface.
 
 - [x] **Step 3: 构建验证**
 
@@ -392,11 +388,11 @@ Result: both commands completed with `BUILD SUCCESSFUL`.
 
 - [x] **Step 4: Commit**
 
-Committed as `31f9216 feat(android): add threaded view mode for topic detail`.
+The Android topic-detail cleanup is committed with the cross-platform reply-tree presentation path.
 
 ```bash
 git add docs/superpowers/plans/2026-06-08-p2-feature-completion.md native/android-app/README.md native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailActivity.kt native/android-app/src/main/java/com/fire/app/ui/topicdetail/TopicDetailViewModel.kt native/android-app/src/main/res/values/strings.xml native/android-app/src/test/java/com/fire/app/ui/topicdetail/TopicDetailPostRowsTest.kt
-git commit -m "feat(android): add threaded view mode for topic detail"
+git commit -m "refactor(android): keep topic detail on reply tree presentation"
 ```
 
 ---

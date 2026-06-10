@@ -18,7 +18,6 @@ struct FirePostCellLayoutKey: Hashable, Sendable {
     let pollSignature: [String]
     let boostSignature: [String]
     let hasReactions: Bool
-    let replyShortcutCount: UInt32?
     let textExpansionState: FirePostTextExpansionState
     let acceptedAnswer: Bool
     let hasAuthorMetadata: Bool
@@ -37,7 +36,6 @@ struct FirePostCellLayout: Equatable, Sendable {
     let imageFrames: [CGRect]
     let pollFrames: [CGRect]
     let boostFrames: [CGRect]
-    let replyShortcutFrame: CGRect?
     let reactionsFrame: CGRect?
     let menuFrame: CGRect?
     let dividerFrame: CGRect?
@@ -262,9 +260,6 @@ struct FirePostCellRenderPayload {
     let isMutating: Bool
     let replyContext: String?
     let replyTargetPostNumber: UInt32?
-    let replyShortcutCount: UInt32?
-    let isLoadingReplyContext: Bool
-    let replyContextError: String?
     let textExpansionState: FirePostTextExpansionState
     let isSearchHighlighted: Bool
     let showsDivider: Bool
@@ -281,9 +276,6 @@ struct FirePostCellRenderPayload {
         isMutating: Bool,
         replyContext: String?,
         replyTargetPostNumber: UInt32?,
-        replyShortcutCount: UInt32?,
-        isLoadingReplyContext: Bool,
-        replyContextError: String? = nil,
         textExpansionState: FirePostTextExpansionState,
         isSearchHighlighted: Bool = false,
         showsDivider: Bool,
@@ -299,9 +291,6 @@ struct FirePostCellRenderPayload {
         self.isMutating = isMutating
         self.replyContext = replyContext
         self.replyTargetPostNumber = replyTargetPostNumber
-        self.replyShortcutCount = replyShortcutCount
-        self.isLoadingReplyContext = isLoadingReplyContext
-        self.replyContextError = replyContextError
         self.textExpansionState = textExpansionState
         self.isSearchHighlighted = isSearchHighlighted
         self.showsDivider = showsDivider
@@ -326,7 +315,6 @@ struct FirePostCellCallbacks {
     let onRecoverPost: (TopicPostState) -> Void
     let onFlagPost: (TopicPostState) -> Void
     let onOpenReplyTarget: (UInt32) -> Void
-    let onOpenReplies: (TopicPostState) -> Void
     let onExpandText: (TopicPostState) -> Void
     let onVotePoll: (TopicPostState, PollState, [String]) -> Void
     let onUnvotePoll: (TopicPostState, PollState) -> Void
