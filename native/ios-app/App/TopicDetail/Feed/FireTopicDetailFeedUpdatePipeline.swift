@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 
 let fireTopicDetailAnimatedUpdateItemDeltaLimit = 4
+let fireTopicDetailCollectionUpdateDiagnosticChangeThreshold = 8
 
 struct FireTopicDetailCollectionUpdatePlan: Equatable {
     let deletions: [IndexPath]
@@ -183,11 +184,19 @@ func fireTopicDetailAllowsAnimatedUpdate(
         && absoluteItemDelta <= fireTopicDetailAnimatedUpdateItemDeltaLimit
 }
 
+func fireTopicDetailShouldBypassTextureReloadCompletion(
+    previousItemsIsEmpty: Bool,
+    isViewAttached: Bool
+) -> Bool {
+    previousItemsIsEmpty || !isViewAttached
+}
+
 @MainActor
 final class FireTopicDetailFeedUpdatePipeline {
     private weak var feedController: FireTopicDetailFeedController?
     private weak var paginationCoordinator: FireTopicDetailPaginationCoordinator?
     private weak var visibilityCoordinator: FireTopicDetailVisibilityCoordinator?
+    private let logger: FireHostLogger?
 
     private(set) var currentSnapshot: FireTopicDetailPageSnapshot?
     private(set) var currentConfiguration: FireTopicDetailRuntimeConfiguration?
@@ -195,18 +204,25 @@ final class FireTopicDetailFeedUpdatePipeline {
     init(
         feedController: FireTopicDetailFeedController,
         paginationCoordinator: FireTopicDetailPaginationCoordinator,
-        visibilityCoordinator: FireTopicDetailVisibilityCoordinator
+        visibilityCoordinator: FireTopicDetailVisibilityCoordinator,
+        logger: FireHostLogger?
     ) {
         self.feedController = feedController
         self.paginationCoordinator = paginationCoordinator
         self.visibilityCoordinator = visibilityCoordinator
+        self.logger = logger
     }
 
     func apply(
         snapshot: FireTopicDetailPageSnapshot,
         configuration: FireTopicDetailRuntimeConfiguration
     ) {
-        guard let feedController else { return }
+        guard let feedController else {
+            logger?.warning(
+                "topic detail feed pipeline apply ignored missing_feed_controller topic_id=\(configuration.row.topic.id) snapshot_item_count=\(snapshot.items.count)"
+            )
+            return
+        }
 
         let previousSnapshot = currentSnapshot
         let previousItems = feedController.currentItems
@@ -248,6 +264,11 @@ final class FireTopicDetailFeedUpdatePipeline {
                 to: snapshot.items
             )
             if !indices.isEmpty {
+                logger?.debug(
+                    "topic detail feed pipeline visible node update topic_id=\(configuration.row.topic.id) visible_update_count=\(indices.count)"
+                )
+            }
+            if !indices.isEmpty {
                 feedController.applyVisibleNodeUpdates(
                     at: indices,
                     nextItems: snapshot.items,
@@ -280,12 +301,28 @@ final class FireTopicDetailFeedUpdatePipeline {
         snapshot: FireTopicDetailPageSnapshot,
         configuration: FireTopicDetailRuntimeConfiguration
     ) {
-        guard let feedController else { return }
+        guard let feedController else {
+            logger?.warning(
+                "topic detail feed pipeline collection update ignored missing_feed_controller topic_id=\(configuration.row.topic.id)"
+            )
+            return
+        }
 
         var updatePlan = fireTopicDetailCollectionUpdatePlan(
             from: previousItems,
             to: snapshot.items
         )
+        let plannedChangeCount =
+            updatePlan.deletions.count
+            + updatePlan.insertions.count
+            + updatePlan.reloads.count
+            + updatePlan.postUpdateReloads.count
+        if plannedChangeCount >= fireTopicDetailCollectionUpdateDiagnosticChangeThreshold
+            || !updatePlan.postUpdateReloads.isEmpty {
+            logger?.debug(
+                "topic detail feed pipeline update plan topic_id=\(configuration.row.topic.id) deletions=\(updatePlan.deletions.count) insertions=\(updatePlan.insertions.count) reloads=\(updatePlan.reloads.count) post_reload_count=\(updatePlan.postUpdateReloads.count)"
+            )
+        }
 
         let inPlacePostRelayouts = fireTopicDetailVisiblePostRelayoutIndexPaths(
             reloads: updatePlan.reloads,
@@ -306,6 +343,11 @@ final class FireTopicDetailFeedUpdatePipeline {
         let finishSnapshotUpdate = { [weak self] in
             guard let self,
                   let feedController = self.feedController else { return }
+            if !inPlacePostRelayouts.isEmpty {
+                self.logger?.debug(
+                    "topic detail feed pipeline in-place relayout topic_id=\(configuration.row.topic.id) count=\(inPlacePostRelayouts.count)"
+                )
+            }
 
             if !inPlacePostRelayouts.isEmpty {
                 feedController.applyVisiblePostRelayouts(
@@ -376,6 +418,12 @@ final class FireTopicDetailFeedUpdatePipeline {
             hasCurrentItems: !previousItems.isEmpty,
             itemDelta: snapshot.items.count - previousItems.count
         )
+        let itemDelta = snapshot.items.count - previousItems.count
+        if abs(itemDelta) >= fireTopicDetailCollectionUpdateDiagnosticChangeThreshold || !animated {
+            logger?.debug(
+                "topic detail feed pipeline apply collection update dispatch topic_id=\(configuration.row.topic.id) animated=\(animated) is_view_attached=\(feedController.isViewAttached) item_delta=\(itemDelta)"
+            )
+        }
 
         feedController.applyCollectionUpdate(
             updatePlan: updatePlan,

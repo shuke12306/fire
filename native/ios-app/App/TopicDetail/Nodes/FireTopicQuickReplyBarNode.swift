@@ -63,6 +63,7 @@ final class FireTopicQuickReplyBarNode: ASDisplayNode {
     }
 
     func updateBottomInset(_ inset: CGFloat) {
+        guard abs(bottomInset - inset) > 0.5 else { return }
         bottomInset = inset
         contentView.updateBottomInset(inset)
         updateMeasuredSize(forWidth: measuredWidth)
@@ -71,7 +72,9 @@ final class FireTopicQuickReplyBarNode: ASDisplayNode {
     }
 
     func updateLayoutWidth(_ width: CGFloat) {
-        updateMeasuredSize(forWidth: width)
+        let targetWidth = max(width, 1)
+        guard abs(measuredWidth - targetWidth) > 0.5 else { return }
+        updateMeasuredSize(forWidth: targetWidth)
         invalidateCalculatedLayout()
         setNeedsLayout()
     }

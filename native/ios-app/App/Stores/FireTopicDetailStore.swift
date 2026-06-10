@@ -608,9 +608,15 @@ final class FireTopicDetailStore: ObservableObject {
     ) async {
         rememberTopicRecoverySlug(topicSlug, topicId: topicId)
         if loadingTopicIDs.contains(topicId) {
+            appViewModel.topicDetailLogger()?.debug(
+                "topic detail load ignored already loading topic_id=\(topicId) force=\(force) target_post=\(targetPostNumber.map(String.init) ?? "nil")"
+            )
             return
         }
         if !appViewModel.session.readiness.canReadAuthenticatedApi {
+            appViewModel.topicDetailLogger()?.notice(
+                "topic detail load paused unauthenticated topic_id=\(topicId) force=\(force) target_post=\(targetPostNumber.map(String.init) ?? "nil")"
+            )
             applySession(appViewModel.session)
             return
         }
@@ -625,6 +631,9 @@ final class FireTopicDetailStore: ObservableObject {
             if !currentForce,
                topicSourceSnapshots[topicId] != nil,
                targetPostNumber == nil || detailContainsPostNumber(topicId: topicId, postNumber: targetPostNumber) {
+                appViewModel.topicDetailLogger()?.debug(
+                    "topic detail load using cached source topic_id=\(topicId) target_post=\(targetPostNumber.map(String.init) ?? "nil")"
+                )
                 updateTopicErrorMessage(nil, topicId: topicId)
                 return
             }

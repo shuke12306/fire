@@ -71,7 +71,8 @@ struct FireHomeView: View {
                 onMuteTopic: muteTopic(_:),
                 onRefresh: refreshTopics,
                 onScrollMetricsChanged: handleTopicListScrollMetricsChange(_: ),
-                baseURLString: baseURLString
+                baseURLString: baseURLString,
+                topicRouteLogger: viewModel.topicRouteLogger()
             )
             .overlay(alignment: .top) {
                 if homeFeedStore.isOffline {
@@ -244,6 +245,7 @@ struct FireHomeView: View {
     }
 
     private func selectTopic(_ route: FireAppRoute) {
+        viewModel.topicRouteLogger()?.info("home selected route \(route.diagnosticsSummary)")
         presentRoute(route)
     }
 
@@ -315,14 +317,19 @@ struct FireHomeView: View {
     }
 
     private func presentRoute(_ route: FireAppRoute) {
+        let logger = viewModel.topicRouteLogger()
+        logger?.debug("home present route requested \(route.diagnosticsSummary)")
         if case .search(let query) = route {
+            logger?.debug("home routing search via pending query query_present=\(query != nil)")
             navigationState.pendingSearchQuery = query ?? ""
             consumePendingSearchQuery(query)
             return
         }
         if topicRoutePresenter.present(route) {
+            logger?.debug("home route handled by topic presenter \(route.diagnosticsSummary)")
             return
         }
+        logger?.debug("home route falling back to local navigation destination \(route.diagnosticsSummary)")
         selectedRoute = route
     }
 }

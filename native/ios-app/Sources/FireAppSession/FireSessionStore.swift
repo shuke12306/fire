@@ -1233,7 +1233,34 @@ public actor FireSessionStore {
             withIntermediateDirectories: true,
             attributes: nil
         )
+        try repairDiagnosticsDirectoryIfNeeded(
+            workspaceDirectory: fireDirectory,
+            fileManager: fileManager
+        )
         return fireDirectory.path
+    }
+
+    private static func repairDiagnosticsDirectoryIfNeeded(
+        workspaceDirectory: URL,
+        fileManager: FileManager
+    ) throws {
+        let diagnosticsDirectory = workspaceDirectory.appendingPathComponent(
+            "diagnostics",
+            isDirectory: true
+        )
+        let diagnosticsPath = diagnosticsDirectory.path
+        guard fileManager.fileExists(atPath: diagnosticsPath) else {
+            return
+        }
+        guard fileManager.isWritableFile(atPath: diagnosticsPath) == false else {
+            return
+        }
+        try fileManager.removeItem(at: diagnosticsDirectory)
+        try fileManager.createDirectory(
+            at: diagnosticsDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
     }
 
     public static func defaultSessionFilePath(fileManager: FileManager = .default) throws -> String {

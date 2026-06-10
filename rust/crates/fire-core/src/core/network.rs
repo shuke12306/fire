@@ -230,7 +230,7 @@ impl HttpLogger for FireOpenWireHttpLogger {
 }
 
 fn fire_openwire_logger_interceptor() -> LoggerInterceptor {
-    LoggerInterceptor::with_logger(OpenWireLogLevel::Headers, FireOpenWireHttpLogger)
+    LoggerInterceptor::with_logger(OpenWireLogLevel::Basic, FireOpenWireHttpLogger)
         .redact_header(HeaderName::from_static("x-csrf-token"))
 }
 

@@ -72,7 +72,10 @@ struct FireTabRoot: View {
                 .toolbarBackground(.visible, for: .tabBar)
                 .environmentObject(homeFeedStore)
                 .environmentObject(topicDetailStore)
-                .fireTopicRoutePresenter(.appRoot(navigationState: navigationState))
+                .fireTopicRoutePresenter(.appRoot(
+                    navigationState: navigationState,
+                    logger: viewModel.topicRouteLogger()
+                ))
                 .fireSelectionFeedback(trigger: tabSelectionFeedbackPulse)
             } else {
                 FireOnboardingView(

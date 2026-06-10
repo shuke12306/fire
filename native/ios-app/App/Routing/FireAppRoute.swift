@@ -214,6 +214,24 @@ enum FireAppRoute: Hashable, Identifiable {
         return false
     }
 
+    var diagnosticsSummary: String {
+        switch self {
+        case .topic(let payload):
+            return "route_id=\(id) route_kind=topic topic_id=\(payload.topicId) post_number=\(payload.postNumber.map(String.init) ?? "nil") has_preview=\(payload.preview != nil)"
+        case .profile(let username):
+            return "route_id=\(id) route_kind=profile username_length=\(username.count)"
+        case .profileTab:
+            return "route_id=\(id) route_kind=profile_tab"
+        case .notifications:
+            return "route_id=\(id) route_kind=notifications"
+        case .search(let query):
+            let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return "route_id=\(id) route_kind=search query_length=\(trimmed.count)"
+        case .badge(let badgeID, let slug):
+            return "route_id=\(id) route_kind=badge badge_id=\(badgeID) has_slug=\(slug != nil)"
+        }
+    }
+
     func overlayPreview(_ preview: FireTopicRoutePreview?) -> FireAppRoute {
         guard let preview else { return self }
         switch self {

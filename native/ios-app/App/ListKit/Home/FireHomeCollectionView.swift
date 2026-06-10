@@ -53,6 +53,7 @@ struct FireHomeCollectionView: View {
     let onRefresh: () async -> Void
     let onScrollMetricsChanged: (FireCollectionScrollMetrics) -> Void
     let baseURLString: String
+    let topicRouteLogger: FireHostLogger?
 
     private var parentCategories: [FireTopicCategoryPresentation] {
         homeFeedStore.allCategories.filter { $0.parentCategoryId == nil }
@@ -172,8 +173,19 @@ struct FireHomeCollectionView: View {
     }
 
     private func handleSelection(_ item: FireHomeCollectionItem) {
-        guard case let .topic(topicID) = item,
-              let row = homeFeedStore.topicRow(for: topicID) else { return }
+        guard case let .topic(topicID) = item else {
+            topicRouteLogger?.debug("home collection ignored selection item=\(String(describing: item))")
+            return
+        }
+        guard let row = homeFeedStore.topicRow(for: topicID) else {
+            topicRouteLogger?.warning(
+                "home collection selected missing topic row topic_id=\(topicID) visible_topic_count=\(homeFeedStore.visibleTopicIDs.count) row_count=\(homeFeedStore.topicRows.count)"
+            )
+            return
+        }
+        topicRouteLogger?.info(
+            "home collection selected topic topic_id=\(topicID) selected_kind=\(String(describing: homeFeedStore.selectedTopicKind)) selected_category_id=\(homeFeedStore.selectedHomeCategoryId.map(String.init) ?? "nil") selected_tag_count=\(homeFeedStore.selectedHomeTags.count) row_count=\(homeFeedStore.topicRows.count)"
+        )
         onSelectTopic(.topic(row: row))
     }
 
@@ -233,6 +245,9 @@ struct FireHomeCollectionView: View {
                         row: row,
                         shareURL: row.fireTopicURL(baseURL: baseURLString),
                         onOpen: {
+                            topicRouteLogger?.info(
+                                "home collection context menu open topic topic_id=\(row.topic.id) selected_kind=\(String(describing: homeFeedStore.selectedTopicKind))"
+                            )
                             onSelectTopic(.topic(row: row))
                         },
                         onBookmark: {

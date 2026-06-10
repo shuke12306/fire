@@ -9,6 +9,7 @@ final class FireAppViewModel: ObservableObject {
     private static let messageBusErrorPrefix = "实时同步连接失败："
     private static let loginRequiredMessage = "登录状态已失效，请重新登录。"
     private static let authDiagnosticsLogTarget = "ios.auth"
+    private static let topicRouteLogTarget = "ios.topic-route"
     private static let topicDetailLogTarget = "ios.topic-detail"
     static let diagnosticsLifecycleLogTarget = "ios.lifecycle"
 
@@ -1309,6 +1310,10 @@ final class FireAppViewModel: ObservableObject {
 
     func topicDetailLogger() -> FireHostLogger? {
         sessionStore?.makeLogger(target: Self.topicDetailLogTarget)
+    }
+
+    func topicRouteLogger() -> FireHostLogger? {
+        sessionStore?.makeLogger(target: Self.topicRouteLogTarget)
     }
 
     func currentSessionStore() -> FireSessionStore? {

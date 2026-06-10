@@ -1,6 +1,9 @@
 import Combine
 import UIKit
 
+private let fireTopicDetailSnapshotBuildDiagnosticThresholdMs: Int64 = 50
+private let fireTopicDetailSnapshotApplyDiagnosticThresholdMs: Int64 = 16
+
 @MainActor
 final class FireTopicDetailViewController: UIViewController, UIGestureRecognizerDelegate {
     let viewModel: FireAppViewModel
@@ -28,7 +31,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private lazy var feedUpdatePipeline = FireTopicDetailFeedUpdatePipeline(
         feedController: feedController,
         paginationCoordinator: paginationCoordinator,
-        visibilityCoordinator: visibilityCoordinator
+        visibilityCoordinator: visibilityCoordinator,
+        logger: viewModel.topicDetailLogger()
     )
 
     private lazy var modalRouter = FireTopicDetailModalRouter(
@@ -188,6 +192,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private var topicSearchQuery = ""
     private var topicSearchMatches: [FireTopicSearchMatch] = []
     private var topicSearchIndex = -1
+    private var lastLayoutDiagnosticsSignature: String?
+    private var repeatedLayoutDiagnosticsCount = 0
     private var activeTopicSearchMatch: FireTopicSearchMatch? {
         guard topicSearchIndex >= 0,
               topicSearchIndex < topicSearchMatches.count else {
@@ -217,6 +223,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         self.detailOwnerToken = "ios.topic-detail.\(row.topic.id).\(UUID().uuidString.lowercased())"
         self.timingTracker = FireTopicTimingTracker(topicId: row.topic.id)
         super.init(nibName: nil, bundle: nil)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller init topic_id=\(row.topic.id) post_number=\(scrollToPostNumber.map(String.init) ?? "nil") owner_token=\(detailOwnerToken) row_title_length=\(row.topic.title.count)"
+        )
     }
 
     @available(*, unavailable)
@@ -231,11 +240,17 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     }
 
     override func loadView() {
+        viewModel.topicDetailLogger()?.debug("topic detail loadView start topic_id=\(row.topic.id)")
         view = rootNode.view
+        viewModel.topicDetailLogger()?.debug("topic detail loadView complete topic_id=\(row.topic.id)")
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidLoad start topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         view.backgroundColor = .systemBackground
         view.tintColor = FireTopicDetailCellColors.accent
         configureRuntime()
@@ -246,14 +261,30 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         view.addGestureRecognizer(pageBackEdgePanGestureRecognizer)
         beginPageLifecycle()
         buildAndApplySnapshot()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidLoad complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let startedAt = Date()
+        let diagnosticsSignature = layoutDiagnosticsSignature()
+        let shouldLogLayout = shouldLogLayoutDiagnostics(signature: diagnosticsSignature)
+        if shouldLogLayout {
+            viewModel.topicDetailLogger()?.debug(
+                "topic detail viewDidLayoutSubviews start topic_id=\(row.topic.id) signature=\(diagnosticsSignature) repeated_count=\(repeatedLayoutDiagnosticsCount)"
+            )
+        }
         layoutTopicSearchBar()
         quickReplyBarNode.updateLayoutWidth(view.bounds.width)
         updateBottomChromeInset()
         feedController.invalidateLayoutIfWidthChanged()
+        if shouldLogLayout {
+            viewModel.topicDetailLogger()?.debug(
+                "topic detail viewDidLayoutSubviews complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) signature=\(diagnosticsSignature)"
+            )
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -263,13 +294,25 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewWillAppear topic_id=\(row.topic.id) animated=\(animated) navigation_stack_count=\(navigationController?.viewControllers.count ?? 0)"
+        )
+        viewModel.topicDetailLogger()?.debug("topic detail viewWillAppear configure navigation start topic_id=\(row.topic.id)")
         configureNavigationAppearance()
         updateDismissButtonIfNeeded()
+        viewModel.topicDetailLogger()?.debug("topic detail viewWillAppear configure navigation complete topic_id=\(row.topic.id)")
         viewModel.setAPMRoute("topic.detail.\(row.topic.id)")
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewWillAppear complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidAppear topic_id=\(row.topic.id) animated=\(animated) view_attached=\(feedController.isViewAttached)"
+        )
         navigationController?.interactivePopGestureRecognizer?.isEnabled =
             (navigationController?.viewControllers.count ?? 0) > 1
         pageBackEdgePanGestureRecognizer.isEnabled = canNavigateBackFromTopicDetail
@@ -280,6 +323,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidDisappear topic_id=\(row.topic.id) animated=\(animated) moving_from_parent=\(isMovingFromParent) being_dismissed=\(isBeingDismissed)"
+        )
         if isMovingFromParent || isBeingDismissed {
             endPageLifecycle()
         }
@@ -376,9 +422,12 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     }
 
     private func configureRuntime() {
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.debug("topic detail configure runtime start topic_id=\(row.topic.id)")
         feedController.paginationCoordinator = paginationCoordinator
         feedController.visibilityCoordinator = visibilityCoordinator
         feedController.layoutManager = layoutManager
+        feedController.diagnosticsLogger = viewModel.topicDetailLogger()
         feedController.onRefresh = { [weak self] in
             await self?.performRefresh()
         }
@@ -431,6 +480,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 self?.handleQuickReplyFocusChanged(focused)
             }
         )
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail configure runtime complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
     }
 
     private func configureTopicSearchBar() {
@@ -452,6 +504,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     }
 
     private func beginPageLifecycle() {
+        viewModel.topicDetailLogger()?.info(
+            "topic detail lifecycle begin topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         topicDetailStore.beginTopicDetailLifecycle(
             topicId: row.topic.id,
             ownerToken: detailOwnerToken
@@ -470,9 +525,15 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         subscribeToStoreRevisions()
         kickOffInitialLoad()
         kickOffMessageBusSubscription()
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail lifecycle begin scheduled tasks topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
     }
 
     private func endPageLifecycle() {
+        viewModel.topicDetailLogger()?.info(
+            "topic detail lifecycle end topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         initialLoadTask?.cancel()
         initialLoadTask = nil
         subscriptionTask?.cancel()
@@ -495,9 +556,19 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func kickOffInitialLoad() {
         initialLoadTask?.cancel()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail initial load task scheduled topic_id=\(row.topic.id) target_post=\(scrollToPostNumber.map(String.init) ?? "nil")"
+        )
         initialLoadTask = Task { [weak self] in
             guard let self else { return }
+            let startedAt = Date()
+            self.viewModel.topicDetailLogger()?.info(
+                "topic detail initial load task start topic_id=\(self.row.topic.id) target_post=\(self.scrollToPostNumber.map(String.init) ?? "nil")"
+            )
             await self.loadTopicDetail(targetPostNumber: self.scrollToPostNumber)
+            self.viewModel.topicDetailLogger()?.info(
+                "topic detail initial load task complete topic_id=\(self.row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) cancelled=\(Task.isCancelled)"
+            )
         }
     }
 
@@ -598,11 +669,20 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func kickOffMessageBusSubscription() {
         subscriptionTask?.cancel()
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail messagebus subscription task scheduled topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         subscriptionTask = Task { [weak self] in
             guard let self else { return }
+            self.viewModel.topicDetailLogger()?.debug(
+                "topic detail messagebus subscription task start topic_id=\(self.row.topic.id) owner_token=\(self.detailOwnerToken)"
+            )
             await self.topicDetailStore.maintainTopicDetailSubscription(
                 topicId: self.row.topic.id,
                 ownerToken: self.detailOwnerToken
+            )
+            self.viewModel.topicDetailLogger()?.debug(
+                "topic detail messagebus subscription task complete topic_id=\(self.row.topic.id) cancelled=\(Task.isCancelled)"
             )
         }
     }
@@ -612,11 +692,18 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         force: Bool = false
     ) async {
         let topicSlug = displayedTopicSlug
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller load request start topic_id=\(row.topic.id) force=\(force) target_post=\(targetPostNumber.map(String.init) ?? "nil") slug_present=\(!topicSlug.isEmpty)"
+        )
         await topicDetailStore.loadTopicDetail(
             topicId: row.topic.id,
             topicSlug: topicSlug.isEmpty ? nil : topicSlug,
             targetPostNumber: targetPostNumber,
             force: force
+        )
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller load request complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) has_detail=\(topicDetailStore.topicDetail(for: row.topic.id) != nil) is_loading=\(topicDetailStore.isLoadingTopic(topicId: row.topic.id)) error_present=\(topicDetailStore.errorMessage(for: row.topic.id) != nil)"
         )
     }
 
@@ -815,10 +902,16 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         applyChromeState(chrome: pageState.chrome, composer: pageState.composer)
 
         snapshotBuildTask?.cancel()
-        snapshotBuildTask = Task.detached(priority: .userInitiated) { [weak self, snapshotAssembler, input, configuration, generation] in
+        let logger = viewModel.topicDetailLogger()
+        snapshotBuildTask = Task.detached(priority: .userInitiated) { [weak self, snapshotAssembler, input, configuration, generation, logger] in
             let buildStartedAt = Date()
             let snapshot = snapshotAssembler.buildSnapshot(from: input)
             let buildDurationMs = Self.elapsedMilliseconds(since: buildStartedAt)
+            if buildDurationMs >= fireTopicDetailSnapshotBuildDiagnosticThresholdMs {
+                logger?.debug(
+                    "topic detail snapshot build slow topic_id=\(configuration.row.topic.id) generation=\(generation) build_ms=\(buildDurationMs) item_count=\(snapshot.items.count)"
+                )
+            }
 
             await MainActor.run { [weak self] in
                 guard let self,
@@ -873,13 +966,36 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         buildDurationMs: Int64,
         applyDurationMs: Int64
     ) {
+        guard buildDurationMs >= fireTopicDetailSnapshotBuildDiagnosticThresholdMs
+                || applyDurationMs >= fireTopicDetailSnapshotApplyDiagnosticThresholdMs
+                || !feedController.isViewAttached else {
+            return
+        }
         viewModel.topicDetailLogger()?.debug(
-            "topic detail snapshot apply topic_id=\(topic.id) view_mode=\(configuration.viewMode.rawValue) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil)"
+            "topic detail snapshot apply diagnostic topic_id=\(topic.id) view_mode=\(configuration.viewMode.rawValue) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil) feed_attached=\(feedController.isViewAttached)"
         )
     }
 
     nonisolated private static func elapsedMilliseconds(since startedAt: Date) -> Int64 {
         Int64((Date().timeIntervalSince(startedAt) * 1_000).rounded())
+    }
+
+    nonisolated private static func formatSize(_ size: CGSize) -> String {
+        "\(Int(size.width.rounded()))x\(Int(size.height.rounded()))"
+    }
+
+    private func layoutDiagnosticsSignature() -> String {
+        "bounds=\(Self.formatSize(view.bounds.size)) safe_bottom=\(Int(view.safeAreaInsets.bottom.rounded())) feed_attached=\(feedController.isViewAttached)"
+    }
+
+    private func shouldLogLayoutDiagnostics(signature: String) -> Bool {
+        guard lastLayoutDiagnosticsSignature == signature else {
+            lastLayoutDiagnosticsSignature = signature
+            repeatedLayoutDiagnosticsCount = 0
+            return true
+        }
+        repeatedLayoutDiagnosticsCount += 1
+        return repeatedLayoutDiagnosticsCount.isMultiple(of: 500)
     }
 
     private func handleLayoutRevisionChanged() {
@@ -1084,17 +1200,19 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func layoutTopicSearchBar() {
         let height: CGFloat = topicSearchBar.isHidden ? 0 : 56
-        topicSearchBar.frame = CGRect(
+        let targetFrame = CGRect(
             x: 0,
             y: view.safeAreaInsets.top,
             width: view.bounds.width,
             height: height
         )
+        if topicSearchBar.frame != targetFrame {
+            topicSearchBar.frame = targetFrame
+        }
     }
 
     private func updateFeedTopInset() {
         rootNode.updateTopChromeInset(currentSearchBarHeight)
-        rootNode.setNeedsLayout()
     }
 
     private func openPostReplies(for post: TopicPostState) {

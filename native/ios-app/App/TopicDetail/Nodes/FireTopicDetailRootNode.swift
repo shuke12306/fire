@@ -54,7 +54,8 @@ final class FireTopicDetailRootNode: ASDisplayNode {
         } else {
             insets.bottom = bottomSafeAreaInset
         }
-        if abs(scrollView.contentInset.bottom - insets.bottom) > 0.5 {
+        if abs(scrollView.contentInset.top - insets.top) > 0.5
+            || abs(scrollView.contentInset.bottom - insets.bottom) > 0.5 {
             scrollView.contentInset = insets
             scrollView.scrollIndicatorInsets = insets
         }

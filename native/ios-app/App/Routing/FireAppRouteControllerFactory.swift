@@ -8,6 +8,7 @@ enum FireAppRouteControllerFactory {
         topicDetailStore: FireTopicDetailStore,
         route: FireAppRoute
     ) -> UINavigationController {
+        viewModel.topicRouteLogger()?.info("route factory make navigation controller start \(route.diagnosticsSummary)")
         let navigationControllerBox = FireWeakNavigationControllerBox()
         let topicRoutePresenter = makeTopicRoutePresenter(
             viewModel: viewModel,
@@ -22,6 +23,9 @@ enum FireAppRouteControllerFactory {
         )
         let navigationController = UINavigationController(rootViewController: rootViewController)
         navigationControllerBox.navigationController = navigationController
+        viewModel.topicRouteLogger()?.info(
+            "route factory make navigation controller complete \(route.diagnosticsSummary) view_controller_count=\(navigationController.viewControllers.count)"
+        )
         return navigationController
     }
 
@@ -31,8 +35,12 @@ enum FireAppRouteControllerFactory {
         route: FireAppRoute,
         topicRoutePresenter: FireTopicRoutePresenter = .local
     ) -> UIViewController {
+        viewModel.topicRouteLogger()?.debug("route factory make view controller \(route.diagnosticsSummary)")
         switch route {
         case .topic(let payload):
+            viewModel.topicDetailLogger()?.info(
+                "route factory make topic detail controller topic_id=\(payload.topicId) post_number=\(payload.postNumber.map(String.init) ?? "nil") has_preview=\(payload.preview != nil)"
+            )
             return FireTopicDetailViewController(
                 viewModel: viewModel,
                 topicDetailStore: topicDetailStore,
@@ -68,8 +76,14 @@ enum FireAppRouteControllerFactory {
         FireTopicRoutePresenter { route in
             guard route.isTopicRoute,
                   let navigationController = navigationControllerProvider() else {
+                viewModel.topicRouteLogger()?.debug(
+                    "nested topic route presenter ignored route navigation_controller_available=\(navigationControllerProvider() != nil) \(route.diagnosticsSummary)"
+                )
                 return false
             }
+            viewModel.topicRouteLogger()?.info(
+                "nested topic route presenter pushing route \(route.diagnosticsSummary) current_stack_count=\(navigationController.viewControllers.count)"
+            )
             let controller = makeViewController(
                 viewModel: viewModel,
                 topicDetailStore: topicDetailStore,
@@ -81,6 +95,9 @@ enum FireAppRouteControllerFactory {
                 )
             )
             navigationController.pushViewController(controller, animated: true)
+            viewModel.topicRouteLogger()?.debug(
+                "nested topic route presenter push requested \(route.diagnosticsSummary) new_stack_count=\(navigationController.viewControllers.count)"
+            )
             return true
         }
     }

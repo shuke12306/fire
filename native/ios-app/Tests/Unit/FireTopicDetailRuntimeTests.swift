@@ -817,6 +817,21 @@ final class FireTopicDetailRuntimeTests: XCTestCase {
         ))
     }
 
+    func testColdReloadPolicyBypassesTextureCompletionUntilFeedIsEstablished() {
+        XCTAssertTrue(fireTopicDetailShouldBypassTextureReloadCompletion(
+            previousItemsIsEmpty: true,
+            isViewAttached: true
+        ))
+        XCTAssertTrue(fireTopicDetailShouldBypassTextureReloadCompletion(
+            previousItemsIsEmpty: false,
+            isViewAttached: false
+        ))
+        XCTAssertFalse(fireTopicDetailShouldBypassTextureReloadCompletion(
+            previousItemsIsEmpty: false,
+            isViewAttached: true
+        ))
+    }
+
     func testImageRequestBuilderUsesSharedAvatarResolution() {
         let request = FireTopicImageRequestBuilder.avatarRequest(
             avatarTemplate: "/user_avatar/linux.do/alice/{size}/1_2.png",

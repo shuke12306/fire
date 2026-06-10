@@ -20,6 +20,9 @@ final class FireNavigationState: ObservableObject {
         guard route.isTopicRoute else {
             return
         }
+        guard presentedTopicRoute == nil else {
+            return
+        }
         presentedTopicRoute = route
     }
 
