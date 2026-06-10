@@ -97,15 +97,41 @@ struct FireTabRoot: View {
                 preheatComplete = true
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .firePreheatGateDidRequestLogin)) { notification in
+            Task { @MainActor in
+                let message = notification.object as? String
+                viewModel.completeStartupAfterPreheatFailure(message: message)
+                preheatComplete = true
+                viewModel.openLogin()
+            }
+        }
         .fullScreenCover(item: $viewModel.authPresentationState) { presentationState in
             FireAuthScreen(
                 viewModel: viewModel,
                 presentationState: presentationState
             )
         }
-        .fullScreenCover(item: $navigationState.presentedTopicRoute) { route in
+        .fullScreenCover(
+            item: $navigationState.presentedTopicRoute,
+            onDismiss: {
+                viewModel.topicRouteLogger()?.info(
+                    "presented topic route cover dismissed current_presented_route_id=\(navigationState.presentedTopicRoute?.id ?? "nil")"
+                )
+                navigationState.dismissPresentedTopicRoute()
+            }
+        ) { route in
             FirePresentedTopicRouteHost(viewModel: viewModel, route: route)
-            .environmentObject(topicDetailStore)
+                .environmentObject(topicDetailStore)
+                .onAppear {
+                    viewModel.topicRouteLogger()?.info(
+                        "presented topic route cover appeared \(route.diagnosticsSummary)"
+                    )
+                }
+                .onDisappear {
+                    viewModel.topicRouteLogger()?.info(
+                        "presented topic route cover disappeared \(route.diagnosticsSummary)"
+                    )
+                }
         }
         .task {
             viewModel.loadInitialState()

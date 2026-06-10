@@ -87,12 +87,12 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - owns app-level URL opening and routes both `fire://...` custom schemes and LinuxDo universal links into the shared typed in-app route model before SwiftUI screens load
 - `App/Routing/`
   - defines the typed `FireAppRoute` model, route parser, and shared destination view used by external URL opens, notification taps, and in-app search / notification navigation
-  - topic routes opened from the authenticated tab shell are now promoted to an app-root full-screen `UINavigationController` presentation instead of pushing inside a tab-owned `NavigationStack`, so topic detail is a separate page that preserves controller-owned back/share/navigation chrome without inheriting or hiding the current tab bar/navigation bar
+  - topic routes opened from the authenticated tab shell are promoted to a single-flight app-root full-screen `UINavigationController` presentation instead of pushing inside a tab-owned `NavigationStack`, so topic detail is a separate page that preserves controller-owned back/share/navigation chrome without inheriting or hiding the current tab bar/navigation bar
 - `App/FireAppViewModel.swift`
   - presents the login browser immediately, then runs a lightweight best-effort network warm-up in the background
   - still tries to move the first system-level network prompt, when one appears on-device, out of the in-page login interaction itself, without blocking WebView presentation
   - restores the persisted session cache, replays Keychain cookies through Rust on cold start, repairs incomplete authenticated session identity through bootstrap refresh when needed, and leaves CSRF repair to the shared authenticated-write preflight
-  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, the login action is hidden, and the button slot shows the current verification state until PreheatGate finishes or exposes a retryable failure
+  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, and PreheatGate failures show a login action without clearing the local session cache
   - now builds `FireSessionStore` lazily on a detached task so Rust/logging initialization does not block the first SwiftUI render on the main actor
   - syncs authenticated LinuxDo cookies into native `HTTPCookieStorage` so inline media/image requests can reuse the restored session, while leaving the persistent WebKit cookie store as the authoritative browser session owned by login and Cloudflare WebViews
   - now also owns native private-message inbox/sent loading plus private-message creation on top of the shared Rust mailbox and `/posts.json` PM surfaces
@@ -123,7 +123,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - now defers MessageBus-driven source-snapshot refresh apply work while the detail feed is actively scrolling, then applies the latest deferred source snapshot + tree presentation once scrolling stops so live topic/reaction updates do not interrupt the scroll path
   - now keeps quick-reply typing / submit-state invalidation off the feed snapshot path, so those chrome-only changes no longer force a Texture feed snapshot rebuild
   - now splits topic-detail refresh domains into feed, chrome, composer, sidecar, and interaction state so AI summary loading/error, mutation flags, reply-context loading, and toolbar-only changes publish through their own revision paths instead of reusing the feed collection revision
-  - now builds topic-detail runtime snapshot items from a sendable snapshot input on a background task and returns to the main actor only to apply Texture/collection updates, with timing logs for snapshot build/apply and loaded item counts
+  - now builds topic-detail runtime snapshot items from a sendable snapshot input on a background task and returns to the main actor only to apply Texture/collection updates, with timing logs for snapshot build/apply and loaded item counts; cold/empty feed reloads do not wait on Texture reload completion before finishing the snapshot pipeline
   - renders poll option titles from Rust-provided `PollOptionState.plainText`, avoiding synchronous HTML parsing on cell configure and layout paths
   - renders Rust-owned `TopicPostBoostState` short replies as a native Texture body overlay/barrage for original posts with visible body text, and as a fixed-height two-row manual horizontal chip scroller for replies or posts without a body text target; the cell consumes Rust-derived `displayText` and `renderDocument` for emoji-capable chip content, caps visible overlay boosts to five display lines in a normalized once-per-batch five-lane barrage with pause/resume during scroll, keeps only fixed scroller height/signature in `FirePostCellLayoutKey` instead of parsing Boost `cooked` in Swift, and only runs Boost animations for visible original-post barrage cells while the detail feed is idle
   - keeps topic-detail subscription, presence heartbeat, quick reply, reaction toggles, and post-edit refresh reconciliation out of `FireAppViewModel`
@@ -309,7 +309,7 @@ Build prerequisites:
 - Rust targets:
   - `aarch64-apple-ios`
   - `aarch64-apple-ios-sim`
-  - `x86_64-apple-ios` when building Intel simulator slices
+- Simulator builds are arm64-only; x86_64 simulator slices and Intel Mac simulator builds are not supported.
 
 Verified local commands:
 

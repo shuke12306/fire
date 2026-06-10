@@ -23,8 +23,10 @@ A client startup should establish:
 2. Request `GET https://linux.do/` with `Accept: text/html`.
 3. Parse bootstrap metadata and `data-preloaded`.
 4. If `currentUser` is present, treat it as the current user hint.
-5. If session cookies exist but no current user is present, verify with
-   `GET /session/current.json`.
+5. If session cookies exist but no current user is present, treat the startup
+   state as ambiguous without clearing cookies. A client may verify later with
+   `GET /session/current.json`, but startup UI should not loop on the same
+   failing verification.
 6. If site metadata is incomplete, fetch `GET /site.json`.
 7. Configure MessageBus using bootstrap `long_polling_base_url`,
    `shared_session_key`, and topic-tracking metadata.
@@ -97,9 +99,9 @@ Recommended session decision matrix:
 |---|---|---|
 | `currentUser` exists in bootstrap | Cookies are valid enough for startup | Use the user object and refresh in background if needed |
 | No `currentUser`, no `_t` cookie | Anonymous session | Continue logged out |
-| No `currentUser`, `_t` cookie exists | Ambiguous | Call `GET /session/current.json` |
+| No `currentUser`, `_t` cookie exists | Ambiguous | Preserve local cookies and offer login/challenge flow |
 | Probe returns `current_user` | Authenticated | Use returned user |
-| Probe returns `404`, `not_logged_in`, or no `current_user` | Invalid session | Clear Discourse identity cookies |
+| Probe returns `404`, `not_logged_in`, or no `current_user` | Invalid session | Treat as expired only in an explicit verification path; avoid destructive clearing from a failed startup gate |
 | Probe fails due to network/Cloudflare/timeout | Inconclusive | Preserve local session and retry later |
 
 Do not clear a user session based only on `BAD CSRF`, ordinary permission
@@ -145,7 +147,7 @@ Typical initial subscriptions:
 | Order | Request | Required | Trigger |
 |---:|---|---:|---|
 | 1 | `GET /` | Yes | Startup bootstrap |
-| 2 | `GET /session/current.json` | Conditional | Cookies exist but bootstrap has no current user |
+| 2 | `GET /session/current.json` | Optional | Explicit verification after startup or recovery from ambiguous cookie state |
 | 3 | `GET /site.json` | Conditional | Missing site metadata |
 | 4 | `POST /message-bus/{client_id}/poll` | Conditional | Authenticated or tracking-capable session with subscriptions |
 | 5 | `GET /u/{username}.json` | Optional | Profile refresh or user page |
@@ -154,6 +156,8 @@ Typical initial subscriptions:
 ## 9. Error Handling
 
 - Bootstrap HTML network failure should not erase cookies.
+- Startup verification failure should surface a login/challenge path and preserve
+  local session state instead of trapping the user in a deterministic retry loop.
 - Cloudflare challenge HTML should be routed to the login/challenge browser flow.
 - CSRF extraction failure can be recovered by `GET /session/csrf`.
 - Malformed `data-preloaded` should degrade to explicit JSON API requests.

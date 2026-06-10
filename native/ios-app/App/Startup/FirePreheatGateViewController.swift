@@ -1,6 +1,8 @@
 import UIKit
 
 final class FirePreheatGateViewController: UIViewController {
+    private static let startupLoginErrorMessage = "网络异常，请重新登录"
+
     private let statusView = FireStartupOnboardingStatusView()
 
     private let sessionStore: FireSessionStore
@@ -42,7 +44,7 @@ final class FirePreheatGateViewController: UIViewController {
                 let _ = try await sessionStore.awaitPreloadedData()
                 onPreloadedDataReady()
             } catch {
-                showErrorPage(error.localizedDescription)
+                showErrorPage(Self.startupLoginErrorMessage)
             }
         }
     }
@@ -53,14 +55,18 @@ final class FirePreheatGateViewController: UIViewController {
     }
 
     private func showErrorPage(_ message: String) {
-        statusView.showError(message, onRetry: { [weak self] in
-            self?.awaitPreloadedData()
+        statusView.showLoginError(message, onLogin: {
+            NotificationCenter.default.post(
+                name: .firePreheatGateDidRequestLogin,
+                object: message
+            )
         })
     }
 }
 
 extension Notification.Name {
     static let firePreheatGateDidComplete = Notification.Name("firePreheatGateDidComplete")
+    static let firePreheatGateDidRequestLogin = Notification.Name("firePreheatGateDidRequestLogin")
 }
 
 enum FireStartupOnboardingPalette {
@@ -82,7 +88,7 @@ final class FireStartupOnboardingStatusView: UIView {
     private let errorBanner = UIView()
     private let errorLabel = UILabel()
     private let actionButton = UIButton(type: .system)
-    private var onRetry: (() -> Void)?
+    private var onAction: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -92,10 +98,10 @@ final class FireStartupOnboardingStatusView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func showLoading(_ message: String) {
-        onRetry = nil
+        onAction = nil
         errorBanner.isHidden = true
         actionButton.isEnabled = false
-        actionButton.removeTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        actionButton.removeTarget(self, action: #selector(actionTapped), for: .touchUpInside)
 
         var configuration = UIButton.Configuration.filled()
         configuration.title = message
@@ -113,17 +119,17 @@ final class FireStartupOnboardingStatusView: UIView {
         actionButton.configuration = configuration
     }
 
-    func showError(_ message: String, onRetry: @escaping () -> Void) {
-        self.onRetry = onRetry
+    func showLoginError(_ message: String, onLogin: @escaping () -> Void) {
+        self.onAction = onLogin
         errorLabel.text = message
         errorBanner.isHidden = false
         actionButton.isEnabled = true
-        actionButton.removeTarget(self, action: #selector(retryTapped), for: .touchUpInside)
-        actionButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        actionButton.removeTarget(self, action: #selector(actionTapped), for: .touchUpInside)
+        actionButton.addTarget(self, action: #selector(actionTapped), for: .touchUpInside)
 
         var configuration = UIButton.Configuration.filled()
-        configuration.title = "重试登录态校验"
-        configuration.image = UIImage(systemName: "arrow.clockwise")
+        configuration.title = "登录 LinuxDo"
+        configuration.image = UIImage(systemName: "person.badge.key")
         configuration.imagePadding = 8
         configuration.baseBackgroundColor = FireStartupOnboardingPalette.accent
         configuration.baseForegroundColor = .white
@@ -209,7 +215,7 @@ final class FireStartupOnboardingStatusView: UIView {
         ])
     }
 
-    @objc private func retryTapped() {
-        onRetry?()
+    @objc private func actionTapped() {
+        onAction?()
     }
 }

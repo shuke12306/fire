@@ -178,7 +178,7 @@ final class FireAppViewModel: ObservableObject {
             let sessionStore = try await sessionStoreValue()
             guard self.initialStateLoadGeneration == generation else { return }
             self.errorMessage = nil
-            let loginState = try await sessionStore.determineLoginStateWithProbe()
+            let loginState = await sessionStore.determineLoginState()
             guard self.initialStateLoadGeneration == generation else { return }
             switch loginState {
             case .loggedIn:
@@ -208,6 +208,20 @@ final class FireAppViewModel: ObservableObject {
                 await self.applySession(snapshot, activateMessageBus: false)
             }
             self.errorMessage = error.localizedDescription
+        }
+    }
+
+    func completeStartupAfterPreheatFailure(message: String?) {
+        initialStateLoadGeneration &+= 1
+        initialStateTask?.cancel()
+        initialStateTask = nil
+        initialStateLoadingDelayTask?.cancel()
+        initialStateLoadingDelayTask = nil
+        isBootstrappingSession = false
+        isStartupLoadingVisible = false
+        FireCfClearanceRefreshService.shared.setLoginStateConfirmed(false)
+        if let message, !message.isEmpty {
+            errorMessage = message
         }
     }
 
