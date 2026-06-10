@@ -17,18 +17,19 @@ the shared Rust core at build time.
   exposes a themed context for programmatic Fire color resolution; XML-heavy
   branded surfaces keep the Fire palette resources as their fallback identity.
 - `PreheatGateFragment` is the startup authority boundary: it restores the
-  persisted Rust session, waits for preloaded data, runs Rust's login-state
-  probe, and routes to Home or Onboarding. During that check it reuses the
-  onboarding visual shell, keeps the login action hidden, and leaves failures on
-  the same screen with a retry action. `OnboardingFragment` is only the explicit
+  persisted Rust session, waits for preloaded data, makes a non-destructive
+  login-state decision, and routes to Home or Onboarding. During that check it
+  reuses the onboarding visual shell, and failures expose a login action without
+  clearing the local session cache. `OnboardingFragment` is only the explicit
   login entry, and `LoginWebViewFragment` owns interactive login.
 - `HomeFragment` renders the Rust-backed topic feed with feed-kind, category,
   tag filtering, pull refresh, and debounced MessageBus-triggered Paging
   refresh. Topic-scoped latest events are coalesced for rate limiting, but the
   Android host still refreshes the active Paging source rather than merging
-  `topic_ids` rows in place. New Topic opens `TopicComposerSheet`; successful
-  creation opens the native topic detail screen. Topic compose supports Rust-backed tag
-  suggestions, `@mention` suggestions, image upload insertion, selection-aware
+  `topic_ids` rows in place. Topic row opens are single-flight until the user
+  returns from native topic detail. New Topic opens `TopicComposerSheet`;
+  successful creation opens the native topic detail screen. Topic compose supports
+  Rust-backed tag suggestions, `@mention` suggestions, image upload insertion, selection-aware
   Markdown formatting, shared Rust draft restore/autosave/delete, and local
   Markdown preview with upload-image preview. Reply compose also accepts quote
   prefill from topic detail while preserving restored drafts. Empty initial
@@ -206,7 +207,8 @@ Android now keeps request-failure handling single-path:
   `FireSessionStoreRepository.get(context)` IO path before returning to UI
   work, including startup preheat and other Fragment/Activity entry points.
   Startup preheat logs timing fields for session-store get/create,
-  startup-session preparation, preloaded-data wait, and the login probe.
+  startup-session preparation, preloaded-data wait, and the non-destructive
+  login-state decision.
 - `LoginRequired` no longer auto-opens login UI and no longer triggers local
   logout side effects during ordinary request handling; navigation back to
   onboarding still depends on the authoritative Rust session snapshot.

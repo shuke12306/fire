@@ -18,6 +18,11 @@
             app:destination="@id/onboardingFragment"
             app:popUpTo="@id/preheatGateFragment"
             app:popUpToInclusive="true" />
+        <action
+            android:id="@+id/action_preheatGate_to_loginWebView"
+            app:destination="@id/loginWebViewFragment"
+            app:popUpTo="@id/preheatGateFragment"
+            app:popUpToInclusive="true" />
     </fragment>
 
     <fragment
@@ -36,7 +41,7 @@
         <action
             android:id="@+id/action_loginWebView_to_home"
             app:destination="@id/homeFragment"
-            app:popUpTo="@id/onboardingFragment"
+            app:popUpTo="@id/fire_nav_graph"
             app:popUpToInclusive="true" />
     </fragment>
 

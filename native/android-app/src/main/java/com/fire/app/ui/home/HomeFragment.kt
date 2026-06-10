@@ -48,6 +48,7 @@ class HomeFragment : Fragment() {
 
     private var viewModel: HomeViewModel? = null
     private var pendingAutoRefresh = false
+    private val topicNavigationGate = HomeTopicNavigationGate()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -78,6 +79,9 @@ class HomeFragment : Fragment() {
 
             adapter = TopicListAdapter(
                 onTopicClick = { row ->
+                    if (!topicNavigationGate.tryBeginOpeningTopicDetail()) {
+                        return@TopicListAdapter
+                    }
                     TopicDetailActivity.start(
                         context = requireContext(),
                         topicId = row.topic.id.toLong(),
@@ -185,6 +189,11 @@ class HomeFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        topicNavigationGate.reset()
     }
 
     private fun setupCategoryBar() {
