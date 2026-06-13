@@ -1,6 +1,7 @@
 use std::{fs, io, path::Path};
 
 use tracing::{debug, warn};
+use url::Url;
 
 use super::{notifications, presence, update_session_persistence_revisions, FireCore};
 use crate::{
@@ -19,7 +20,8 @@ impl FireCore {
     }
 
     pub fn export_redacted_session_json(&self) -> Result<String, FireCoreError> {
-        self.export_session_json()
+        let envelope = PersistedSessionEnvelope::redacted(self.snapshot());
+        serde_json::to_string_pretty(&envelope).map_err(FireCoreError::PersistSerialize)
     }
 
     pub fn restore_session_json(
@@ -61,7 +63,12 @@ impl FireCore {
         &self,
         path: impl AsRef<Path>,
     ) -> Result<(), FireCoreError> {
-        self.save_session_to_path(path)
+        let path = path.as_ref();
+        let payload = self.export_redacted_session_json()?;
+        write_atomic(path, payload.as_bytes()).map_err(|source| FireCoreError::PersistIo {
+            path: path.to_path_buf(),
+            source,
+        })
     }
 
     pub fn load_session_from_path(
@@ -127,7 +134,9 @@ impl FireCore {
         auth_cookies_redacted: bool,
     ) -> Result<fire_models::SessionSnapshot, FireCoreError> {
         let persisted_base_url = snapshot.bootstrap.base_url.clone();
-        if !persisted_base_url.is_empty() && persisted_base_url != self.base_url() {
+        if !persisted_base_url.is_empty()
+            && !base_urls_match_after_parsing(self.base_url(), &persisted_base_url)
+        {
             return Err(FireCoreError::PersistBaseUrlMismatch {
                 expected: self.base_url().to_string(),
                 found: persisted_base_url,
@@ -137,4 +146,14 @@ impl FireCore {
         snapshot = sanitize_snapshot_for_restore(self.base_url(), snapshot, auth_cookies_redacted);
         Ok(snapshot)
     }
+}
+
+fn base_urls_match_after_parsing(expected: &str, found: &str) -> bool {
+    let Ok(expected) = Url::parse(expected) else {
+        return false;
+    };
+    let Ok(found) = Url::parse(found) else {
+        return false;
+    };
+    expected == found
 }

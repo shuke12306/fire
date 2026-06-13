@@ -1,27 +1,21 @@
 # 话题 API
 
-> 对应 FluxDO 源文档第 6 节
+## 1. 最新话题列表
 
----
-
-## 6.1 获取最新话题列表
-
-```
+```http
 GET /latest.json
 ```
 
-**场景**：首页加载话题列表。
-
-**Query Parameters：**
+### Query Parameters
 
 | 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码（从 0 开始） |
-| `order` | string | 否 | 排序方式 |
-| `ascending` | string | 否 | "true"/"false" |
-| `topic_ids` | string | 否 | 逗号分隔的 topic ID 列表（批量查询） |
+|---|---|---:|---|
+| `page` | integer | 否 | 页码；通常从 `0` 开始，首屏可省略 |
+| `order` | string | 否 | 排序字段 |
+| `ascending` | boolean/string | 否 | 是否升序 |
+| `topic_ids` | string | 否 | 逗号分隔 topic id；用于按 ID 批量刷新话题卡片 |
 
-**Response (200)：**
+### Response
 
 ```json
 {
@@ -30,6 +24,7 @@ GET /latest.json
       {
         "id": 123,
         "title": "话题标题",
+        "fancy_title": "话题标题",
         "slug": "topic-slug",
         "category_id": 1,
         "tags": ["tag1"],
@@ -39,131 +34,174 @@ GET /latest.json
         "views": 100,
         "created_at": "2024-01-01T00:00:00.000Z",
         "last_posted_at": "2024-01-02T00:00:00.000Z",
-        "poster_count": 3,
+        "highest_post_number": 10,
         "unseen": false,
         "new_posts": 2,
         "unread_posts": 1,
-        "highest_post_number": 10,
-        "fancy_title": "...",
         "bookmarked": false,
         "liked": false,
         "pinned": false,
         "closed": false,
         "archived": false,
-        "thumbnails": [...],
         "posters": [
           {
             "user_id": 1,
-            "description": "Original Poster",
-            "avatar_template": "...",
-            "username": "user1"
+            "username": "user1",
+            "avatar_template": "/user_avatar/...",
+            "description": "Original Poster"
           }
         ]
       }
     ],
     "more_topics_url": "/latest?page=1"
+  },
+  "users": [],
+  "primary_groups": [],
+  "flair_groups": []
+}
+```
+
+The `users`, `primary_groups`, and `flair_groups` arrays may be present and should be used to resolve compact topic/poster references when needed.
+
+## 2. Filtered Topic Lists
+
+```http
+GET /{filter}.json
+GET /c/{category_slug}/{category_id}/l/{filter}.json
+GET /c/{parent_category_slug}/{category_slug}/{category_id}/l/{filter}.json
+GET /tag/{tag_name}/l/{filter}.json
+```
+
+Common filters include `latest`, `top`, `new`, `unread`, `unseen`, and `hot`.
+
+### Query Parameters
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `page` | integer | 否 | 页码 |
+| `period` | string | 否 | `top` 等筛选使用的时间范围，如 `daily`/`weekly`/`monthly`/`yearly` |
+| `order` | string | 否 | 排序字段 |
+| `ascending` | boolean/string | 否 | 是否升序 |
+| `subset` | string | 否 | 子过滤，例如新话题列表的二级过滤 |
+| `tags[]` | string[] | 否 | 分类内标签筛选，或多标签筛选时除第一个标签外的其余标签 |
+| `match_all_tags` | boolean/string | 否 | 多标签筛选时设为 `true`，表示同时匹配所有标签 |
+
+Response shape is the same as `GET /latest.json`.
+
+## 3. Common Topic List Shortcuts
+
+| Purpose | Endpoint | Notes |
+|---|---|---|
+| New topics | `GET /new.json` | Supports `page`, `order`, `ascending`, `subset` |
+| Unread topics | `GET /unread.json` | Supports `page`, `order`, `ascending` |
+| Unseen topics | `GET /unseen.json` | Supports `page`, `order`, `ascending` |
+| Hot topics | `GET /hot.json` | Supports `page`, `order`, `ascending` |
+| Top topics | `GET /top.json` | Can also be represented by filtered list paths |
+| Category topics | `GET /c/{category_slug}.json` | Lightweight category topic list |
+
+## 4. Topic Detail
+
+```http
+GET /t/{topic_id}.json
+GET /t/{topic_id}/{post_number}.json
+GET /t/{slug}.json
+GET /t/{slug}/{post_number}.json
+```
+
+`post_number` anchors the initial detail response around a specific floor. Access by slug returns the real topic id in the response payload.
+
+### Query Parameters
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `track_visit` | boolean | 否 | Whether to record a topic visit |
+| `filter` | string | 否 | Server-side post filter |
+| `username_filters` | string | 否 | Username filter string |
+| `filter_top_level_replies` | boolean | 否 | Filter top-level replies |
+
+When `track_visit=true`, browser requests also send:
+
+```http
+Discourse-Track-View: 1
+Discourse-Track-View-Topic-Id: <topic_id>
+```
+
+The topic-id header is only possible when the client already knows the numeric topic id.
+
+### Response
+
+The response is a topic object with metadata and a `post_stream`:
+
+```json
+{
+  "id": 123,
+  "title": "话题标题",
+  "slug": "topic-slug",
+  "posts_count": 42,
+  "highest_post_number": 42,
+  "last_read_post_number": 12,
+  "post_stream": {
+    "posts": [
+      {
+        "id": 1001,
+        "post_number": 1,
+        "post_type": 1,
+        "username": "user1",
+        "name": "User One",
+        "avatar_template": "/user_avatar/...",
+        "cooked": "<p>HTML</p>",
+        "created_at": "2024-01-01T00:00:00.000Z",
+        "updated_at": "2024-01-01T00:00:00.000Z",
+        "reply_to_post_number": null,
+        "reply_count": 2,
+        "reads": 10,
+        "score": 1,
+        "yours": false,
+        "can_edit": false,
+        "can_delete": false,
+        "actions_summary": []
+      }
+    ],
+    "stream": [1001, 1002, 1003]
+  },
+  "details": {
+    "can_reply_as_new_topic": true,
+    "can_flag_topic": true
   }
 }
 ```
 
----
+Post payloads may include additional display and plugin fields. Preserve unknown fields when possible. Common useful fields include author flair data (`user_title`, `primary_group_name`, `flair_url`, `flair_name`, `flair_bg_color`, `flair_color`, `flair_group_id`), moderator/admin booleans, `user_status`, polls, reactions, accepted-answer data, and Boost plugin data such as `boosts` and `can_boost`.
 
-## 6.2 获取筛选话题列表
+## 5. Batch Load Posts
 
-```
-GET /{filter}.json
-GET /c/{categorySlug}/{categoryId}/l/{filter}.json
-GET /c/{parentCategorySlug}/{categorySlug}/{categoryId}/l/{filter}.json
-GET /tag/{tagName}/l/{filter}.json
+```http
+GET /t/{topic_id}/posts.json
 ```
 
-**场景**：按分类/标签/时间维度筛选话题。
+Used to load post payloads after a topic detail response exposes post IDs in `post_stream.stream`.
 
-**Path Parameters：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `filter` | string | `latest`/`top`/`new`/`unread`/`unseen`/`hot` 等 |
-| `categorySlug` | string | 分类 URL slug |
-| `categoryId` | int | 分类 ID |
-| `parentCategorySlug` | string | 父分类 slug（子分类时使用） |
-| `tagName` | string | 标签名 |
-
-**Query Parameters：**
+### Query Parameters
 
 | 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码 |
-| `period` | string | 否 | 时间范围（如 `weekly`/`monthly`/`yearly`） |
-| `order` | string | 否 | 排序方式 |
-| `ascending` | string | 否 | "true"/"false" |
-| `subset` | string | 否 | 子集过滤 |
-| `tags[]` | string[] | 否 | 额外标签过滤（分类+标签或纯多标签时使用） |
-| `match_all_tags` | string | 否 | "true"（多标签时使用，匹配全部标签） |
+|---|---|---:|---|
+| `post_ids[]` | integer[] | 条件必填 | Repeated post IDs to load |
+| `post_number` | integer | 条件必填 | Anchor post number for number-based loading |
+| `asc` | boolean | 否 | Sort direction when using `post_number` |
 
-**Response：** 同 6.1 `TopicListResponse` 结构。
+Use one mode per request:
 
----
-
-## 6.3 获取新话题 / 未读 / 未见 / 热门 / Top
-
-| 接口 | URL |
-|------|-----|
-| 新话题 | `GET /new.json` |
-| 未读 | `GET /unread.json` |
-| 未见 | `GET /unseen.json` |
-| 热门 | `GET /hot.json` |
-| Top | `GET /top.json` |
-
-**Query Parameters：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 页码 |
-| `order` | string | 否 | 排序 |
-| `ascending` | string | 否 | "true"/"false" |
-| `subset` | string | 否 | 仅 `/new.json` |
-
-**Response：** 同 `TopicListResponse`。
-
----
-
-## 6.4 获取话题详情
-
-```
-GET /t/{id}.json
-GET /t/{id}/{postNumber}.json
-GET /t/{slug}.json
-GET /t/{slug}/{postNumber}.json
+```text
+post_ids[]=1001&post_ids[]=1002
 ```
 
-**场景**：进入话题详情页。`postNumber` 用于定位到特定楼层。
+or:
 
-**Path Parameters：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `id` | int | 话题 ID |
-| `slug` | string | 话题 slug（通过 URL 分享的链接） |
-| `postNumber` | int | 目标帖子楼层号 |
-
-**Query Parameters：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `track_visit` | bool | 否 | 是否记录访问 |
-| `filter` | string | 否 | 帖子过滤 |
-| `username_filters` | string | 否 | 用户名过滤 |
-| `filter_top_level_replies` | bool | 否 | 仅显示顶层回复 |
-
-**Request Headers（track_visit=true 时额外添加）：**
-
-```
-Discourse-Track-View: 1
-Discourse-Track-View-Topic-Id: <topicId>  （仅通过 ID 访问时）
+```text
+post_number=20&asc=true
 ```
 
-**Response (200)：** `TopicDetail` 对象，包含 `post_stream`（含 posts 列表）、topic 元数据等。
+### Response Variants
 
 ### Fire authoritative topic-detail contract
 
@@ -177,184 +215,153 @@ Fire 当前主详情页不再把 `GET /t/{id}.json` 或 `GET /t/{id}/posts.json`
   - Rust 基于已加载的 raw posts 生成 `reply_rows`、`depth`、`parent_post_number`、`root_post_number`
   - 树状 rows 只属于呈现层，不能反向决定下一批网络边界
   - Fire 的 UniFFI tree presentation 只传 post id / post number / hierarchy 元数据，完整 post payload 仍只来自 source snapshot
+  - iOS/Android 可以在同一份 tree presentation 上默认只展示根回复，把二级及更深回复折叠到根回复的“查看更多 N 条回复”入口；显式跳转目标位于折叠层级时，只临时展示目标的祖先链路，不能为了折叠另建 source 或重新定义分页边界
   - 当没有显式 `target_post_number` 且查询显式允许首次未读根帖建议时，Rust 会依据 detail header 的 `last_read_post_number` / `highest_post_number` 和已加载根帖计算 `first_unread_root_post_number`；如果首批尚未覆盖首个未读根帖，`fetchTopicDetailPage` 会按现有自动 batch 限额继续拉 source batch，直到找到该根帖、source exhausted，或达到自动补批上限
   - iOS/Android 只在首次打开且没有通知、书签、搜索、分享链接等显式 target 时把该查询开关设为允许并消费 `first_unread_root_post_number`，刷新、load-more、MessageBus 更新不得触发自动补批或自动跳转
 
 每个 raw post 还会保留作者展示元数据：`user_id`、`user_title`、`primary_group_name`、`flair_url`、`flair_name`、`flair_bg_color`、`flair_color`、`flair_group_id`、`admin`、`moderator`、`group_moderator`，以及 `user_status.emoji` / `user_status.description`。Fire 在 Rust 模型中将这些字段收敛为 `TopicPostAuthorMetadata`，通过 UniFFI 暴露给 iOS/Android 原生 runtime cell；平台只负责展示，不重新解析 `post.cooked` 或从 profile API 拼装这些字段。
 
-带有 Boost 插件数据的 raw post 会暴露 `boosts` 与 `can_boost`。Fire 在 Rust 中解析每个 Boost 的 `id`、`cooked`、用户 `id` / `username` / `name` / `avatar_template`、`can_delete`、`can_flag`、`user_flag_status`、`available_flags`，生成去 HTML 的 `display_text`，并通过 UniFFI 暴露同一段 `cooked` 生成的 `render_document`，让原生端能展示 emoji 等富文本附件。iOS/Android 消费 UniFFI 的 `TopicPostBoostState`：原帖且正文可见时可以把 Boost 作为正文 overlay/弹幕展示，回复或无正文目标时使用固定高度的两行手动横向滑动 chips，不做自动 ticker；overlay 展示固定取最多 5 条可见 Boost，最多 5 条 lane，滑动期间暂停并在滑动结束后恢复，避免 Boost 之间重叠或大面积遮挡正文。平台不得重新解析 Boost `cooked` 或把 Boost 与 quote/blockquote preview 混用。
+带有 Boost 插件数据的 raw post 会暴露 `boosts` 与 `can_boost`。Fire 在 Rust 中解析每个 Boost 的 `id`、`cooked`、用户 `id` / `username` / `name` / `avatar_template`、`can_delete`、`can_flag`、`user_flag_status`、`available_flags`，生成去 HTML 且去掉开头 `@username:` / `username:` / display name 前缀的正文-only `display_text`，并通过 UniFFI 暴露同一段 `cooked` 生成的 `render_document`，让原生端能展示 emoji 等富文本附件。iOS/Android 消费 UniFFI 的 `TopicPostBoostState`：原帖且正文可见时可以把 Boost 作为正文 overlay/弹幕展示，回复或无正文目标时使用固定高度的两行手动横向滑动 chips，不做自动 ticker；overlay 展示固定取最多 5 条可见 Boost，最多 5 条 lane，每个 post/Boost 批次只播放一次，运行中可以随滚动暂停并在滚动结束后恢复，播放完成后隐藏，避免 Boost 之间重叠或大面积遮挡正文。平台不得重新解析 Boost `cooked`、不得重新添加作者前缀，或把 Boost 与 quote/blockquote preview 混用。
 
 `forceLoad` 当前仍保留在 Fire 主路径查询参数中，用于显式跳过当前 source session 缓存并重新拉取 source snapshot；它属于 Fire 运行时契约，不是 Discourse 原始端点字段。
 
----
-
-## 6.5 批量获取帖子
-
-```
-GET /t/{topicId}/posts.json
-```
-
-**场景**：话题详情页滚动加载更多帖子。
-
-**Query Parameters：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `post_ids[]` | int[] | 是 | 帖子 ID 列表 |
-| `post_number` | int | 否 | 按楼层号获取 |
-| `asc` | bool | 否 | 升序排列 |
-
-两种模式：
-1. 按 ID 列表：`post_ids[]=1&post_ids[]=2&post_ids[]=3`
-2. 按楼层号：`post_number=5&asc=true`
-
-**Response (200)：**
+Wrapped response:
 
 ```json
 {
   "post_stream": {
-    "posts": [...]
+    "posts": []
   },
-  "badges": {...}
+  "badges": {}
 }
 ```
 
-### Fire 主路径约束
+Bare post-stream response:
 
-- `GET /t/{topicId}/posts.json` 在 Fire 主详情页中只作为 raw-source append 接口使用
-- 平台不得自己切 `post_stream.posts` 窗口当主分页，也不得用 root-level rows 反推 `post_ids[]`
-- `postNumber` deep link 只影响首包 anchor，不改变后续 load-more 的 raw stream 线性分页模型
-- 显式 `target_post_number` 优先于 Rust 的首个未读根帖建议；平台不得用 `first_unread_root_post_number` 覆盖通知、书签、搜索或分享链接定位
-
----
-
-## 6.6 获取话题第一楼内容
-
-```
-GET /t/{topicId}/1.json
+```json
+{
+  "posts": []
+}
 ```
 
-**场景**：轻量获取话题首帖 HTML 内容。
+Clients should accept both shapes. Top-level topic metadata such as `badges` can accompany the wrapped shape and may be needed to enrich post/user presentation.
 
-**Response (200)：**
+## 6. First Post Cooked HTML
+
+```http
+GET /t/{topic_id}/1.json
+```
+
+This is a detail request anchored at the first post. A lightweight client can read:
 
 ```json
 {
   "post_stream": {
     "posts": [
       {
-        "cooked": "<p>HTML 内容</p>"
+        "post_number": 1,
+        "cooked": "<p>HTML content</p>"
       }
     ]
   }
 }
 ```
 
----
+## 7. Create Topic
 
-## 6.7 获取分类话题
-
-```
-GET /c/{categorySlug}.json
-```
-
-**场景**：获取指定分类的话题列表。
-
-**Response：** 同 `TopicListResponse`。
-
----
-
-## 6.8 创建话题
-
-```
+```http
 POST /posts.json
 Content-Type: application/x-www-form-urlencoded
 ```
 
-**场景**：用户发布新话题。
-
-**Request Body（form-urlencoded）：**
+### Form Fields
 
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `title` | string | 是 | 话题标题 |
-| `raw` | string | 是 | 正文内容（Markdown） |
-| `category` | int | 是 | 分类 ID |
-| `archetype` | string | 是 | 固定值 `"regular"` |
-| `tags[]` | string[] | 否 | 标签列表 |
+|---|---|---:|---|
+| `title` | string | 是 | Topic title |
+| `raw` | string | 是 | Markdown body |
+| `category` | integer | 是 | Category id |
+| `archetype` | string | 是 | Usually `regular` |
+| `tags[]` | string[] | 否 | Repeated tag values |
 
-**Response (200)：**
+### Response Variants
+
+Nested post envelope:
 
 ```json
 {
   "post": {
-    "topic_id": 12345,
-    "id": 67890,
-    ...
+    "id": 1001,
+    "topic_id": 123,
+    "post_number": 1
   }
 }
 ```
 
-**特殊响应 - 审核队列：**
+Root topic id:
+
+```json
+{
+  "topic_id": 123
+}
+```
+
+Queued for moderation:
 
 ```json
 {
   "action": "enqueued",
-  "pending_count": 3
+  "pending_count": 1
 }
 ```
 
-此时客户端抛出 `PostEnqueuedException`。
+Validation failure:
 
----
-
-## 6.9 更新话题元数据
-
+```json
+{
+  "success": false,
+  "errors": ["Title is too short"]
+}
 ```
-PUT /t/-/{topicId}.json
+
+Clients should derive the created topic id from `post.topic_id` first, then root `topic_id`.
+
+## 8. Update Topic Metadata
+
+```http
+PUT /t/-/{topic_id}.json
 Content-Type: application/x-www-form-urlencoded
 ```
 
-**场景**：编辑话题标题、分类、标签。
-
-**Request Body（form-urlencoded）：**
+### Form Fields
 
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `title` | string | 否 | 新标题 |
-| `category_id` | int | 否 | 新分类 ID |
-| `tags[]` | string[] | 否 | 新标签列表 |
+|---|---|---:|---|
+| `title` | string | 否 | New title |
+| `category_id` | integer | 否 | New category id |
+| `tags[]` | string[] | 否 | Repeated tag values |
 
----
+## 9. Dismiss New Topics
 
-## 6.10 忽略新话题
-
-```
+```http
 PUT /topics/reset-new.json
 Content-Type: application/x-www-form-urlencoded
 ```
 
-**场景**：一键忽略所有新话题。
-
-**Request Body（form-urlencoded）：**
+### Form Fields
 
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `dismiss_topics` | bool | 是 | 是否忽略话题 |
-| `dismiss_posts` | bool | 是 | 是否忽略帖子 |
-| `category_id` | int | 否 | 限定分类 ID |
+|---|---|---:|---|
+| `dismiss_topics` | boolean | 是 | Mark new topics as seen |
+| `dismiss_posts` | boolean | 是 | Also dismiss new posts |
+| `category_id` | integer | 否 | Limit to a category |
 
----
+## 10. Dismiss Unread Topics
 
-## 6.11 忽略未读话题
-
-```
+```http
 PUT /topics/bulk.json
+Content-Type: application/json
 ```
-
-**场景**：一键忽略所有未读话题。
-
-**Request Body（JSON）：**
 
 ```json
 {
@@ -366,48 +373,41 @@ PUT /topics/bulk.json
 }
 ```
 
----
+`category_id` is optional.
 
-## 6.12 设置话题通知级别
+## 11. Topic Notification Level
 
-```
-POST /t/{topicId}/notifications
+```http
+POST /t/{topic_id}/notifications
 Content-Type: application/x-www-form-urlencoded
 ```
 
-**场景**：订阅/取消订阅话题通知。
-
-**Request Body（form-urlencoded）：**
-
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `notification_level` | int | 是 | 通知级别（0=静默, 1=普通, 2=追踪, 3=关注） |
+|---|---|---:|---|
+| `notification_level` | integer | 是 | Discourse notification level, commonly `0` muted, `1` regular, `2` tracking, `3` watching |
 
----
+## 12. Topic AI Summary
 
-## 6.13 获取话题 AI 摘要
-
-```
-GET /discourse-ai/summarization/t/{topicId}
+```http
+GET /discourse-ai/summarization/t/{topic_id}
 ```
 
-**场景**：获取话题的 AI 生成摘要。
-
-**Query Parameters：**
+### Query Parameters
 
 | 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `skip_age_check` | string | 否 | "true" 跳过年龄检查 |
+|---|---|---:|---|
+| `skip_age_check` | boolean/string | 否 | Request a summary even when the topic age check would normally skip it |
 
-**Response (200)：**
+### Response
 
 ```json
 {
   "ai_topic_summary": {
-    "summarized_text": "AI 生成的摘要文本...",
-    "topic_id": 123
+    "summarized_text": "...",
+    "algorithm": "...",
+    "created_at": "2024-01-01T00:00:00.000Z"
   }
 }
 ```
 
-**Response (403/404)：** 返回 `null`（无摘要或无权限）。
+`404` or `403` can mean the summary capability is unavailable or not visible to the current user.

@@ -293,6 +293,7 @@ impl FireCore {
 
     pub fn logout_local(&self, preserve_cf_clearance: bool) -> SessionSnapshot {
         info!(preserve_cf_clearance, "clearing local login state");
+        self.clear_current_auth_scope_list_caches();
         self.stop_message_bus(true);
         self.clear_notification_state();
         self.clear_topic_presence_state();
@@ -312,6 +313,18 @@ impl FireCore {
         self.reset_preloaded_data_cache();
         self.reset_current_home_topic_list_scope();
         snapshot
+    }
+
+    fn clear_current_auth_scope_list_caches(&self) {
+        let auth_scope_hash = self.current_auth_scope_hash();
+        let result = self
+            .shared_store
+            .lock()
+            .expect("shared store mutex poisoned")
+            .clear_list_caches(&auth_scope_hash);
+        if let Err(error) = result {
+            tracing::warn!(error = %error, "failed to clear offline list caches during logout");
+        }
     }
 
     pub fn has_login_session(&self) -> bool {

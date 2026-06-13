@@ -24,12 +24,14 @@ data class PostRow(
     val parentPostNumber: UInt? = null,
     val hasChildren: Boolean = false,
     val usesTitleWidthBody: Boolean = false,
+    val hiddenReplyCount: UInt = 0u,
 )
 
 data class PostRowCallbacks(
     val reactionIds: () -> List<String> = { emptyList() },
     val onPostClick: (TopicPostState) -> Unit = {},
     val onReplyClick: (TopicPostState) -> Unit = {},
+    val onQuoteClick: (TopicPostState) -> Unit = {},
     val onHeartClick: (TopicPostState) -> Unit = {},
     val onReactClick: (TopicPostState) -> Unit = {},
     val onBookmarkClick: (TopicPostState) -> Unit = {},
@@ -37,6 +39,7 @@ data class PostRowCallbacks(
     val onUnvotePoll: (TopicPostState, PollState) -> Unit = { _, _ -> },
     val onReactionsClick: (TopicPostState) -> Unit = {},
     val onReplyContextClick: (TopicPostState) -> Unit = {},
+    val onMoreRepliesClick: (TopicPostState) -> Unit = {},
     val onDeletePostClick: (TopicPostState) -> Unit = {},
     val onRecoverPostClick: (TopicPostState) -> Unit = {},
     val onFlagPostClick: (TopicPostState) -> Unit = {},
@@ -52,13 +55,25 @@ class PostListAdapter(
     private val attachedHolders = mutableSetOf<PostViewHolder>()
     private var boostAnimationsEnabled = true
 
+    var highlightedPostId: ULong? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            refreshRows()
+        }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PostViewHolder {
         return PostViewHolder.create(parent)
     }
 
     override fun onBindViewHolder(holder: PostViewHolder, position: Int) {
+        val row = getItem(position)
         holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
-        holder.bind(getItem(position), callbacks)
+        holder.bind(
+            row = row,
+            callbacks = callbacks,
+            isSearchHighlighted = row.post.id == highlightedPostId,
+        )
     }
 
     override fun onViewAttachedToWindow(holder: PostViewHolder) {
@@ -101,11 +116,16 @@ class HeaderAdapter(
     private val onToggleTopicVote: () -> Unit,
     private val onShowTopicVoters: (TopicDetailState) -> Unit,
     private val onEditTopicClick: (TopicDetailState) -> Unit,
-    private val onTopicBookmarkClick: (TopicDetailState) -> Unit,
-    private val onTopicNotificationClick: (TopicDetailState) -> Unit,
 ) : RecyclerView.Adapter<HeaderAdapter.HeaderViewHolder>() {
     private val attachedHolders = mutableSetOf<HeaderViewHolder>()
     private var boostAnimationsEnabled = true
+
+    var highlightedPostId: ULong? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyHeaderChanged()
+        }
 
     var detail: TopicDetailState? = null
         set(value) {
@@ -153,14 +173,20 @@ class HeaderAdapter(
             onToggleTopicVote = onToggleTopicVote,
             onShowTopicVoters = onShowTopicVoters,
             onEditTopicClick = onEditTopicClick,
-            onTopicBookmarkClick = onTopicBookmarkClick,
-            onTopicNotificationClick = onTopicNotificationClick,
         )
     }
 
     override fun onBindViewHolder(holder: HeaderViewHolder, position: Int) {
         holder.setBoostAnimationsEnabled(boostAnimationsEnabled)
-        detail?.let { holder.bind(it, aiSummary, isAiSummaryLoading, aiSummaryError) }
+        detail?.let {
+            holder.bind(
+                detail = it,
+                aiSummary = aiSummary,
+                isAiSummaryLoading = isAiSummaryLoading,
+                aiSummaryError = aiSummaryError,
+                highlightedPostId = highlightedPostId,
+            )
+        }
     }
 
     override fun onViewAttachedToWindow(holder: HeaderViewHolder) {
@@ -229,12 +255,9 @@ class HeaderAdapter(
         private val onToggleTopicVote: () -> Unit,
         private val onShowTopicVoters: (TopicDetailState) -> Unit,
         private val onEditTopicClick: (TopicDetailState) -> Unit,
-        private val onTopicBookmarkClick: (TopicDetailState) -> Unit,
-        private val onTopicNotificationClick: (TopicDetailState) -> Unit,
     ) : RecyclerView.ViewHolder(itemView) {
         private val titleText: TextView = itemView.findViewById(R.id.topic_title)
         private val chips: ChipGroup = itemView.findViewById(R.id.topic_chips)
-        private val topicNotificationButton: TextView = itemView.findViewById(R.id.topic_notification_button)
         private val topicEditButton: TextView = itemView.findViewById(R.id.topic_edit_button)
         private val topicBookmarkButton: TextView = itemView.findViewById(R.id.topic_bookmark_button)
         private val aiSummaryContainer: View = itemView.findViewById(R.id.ai_summary_container)
@@ -270,6 +293,7 @@ class HeaderAdapter(
             aiSummary: TopicAiSummaryState?,
             isAiSummaryLoading: Boolean,
             aiSummaryError: String?,
+            highlightedPostId: ULong?,
         ) {
             titleText.text = detail.title.trim()
             val tagNames = TopicPresentation.tagNames(detail.tags)
@@ -277,31 +301,16 @@ class HeaderAdapter(
                 chips.visibility = View.VISIBLE
                 chips.removeAllViews()
                 detail.categoryId?.let { cid ->
-                    val chip = Chip(itemView.context).apply {
-                        text = "分类 $cid"
-                        isClickable = false
-                        isCheckable = false
-                        setChipBackgroundColorResource(R.color.fire_accent_soft)
-                        setTextColor(itemView.context.getColor(R.color.fire_accent))
-                    }
-                    chips.addView(chip)
+                    chips.addView(topicChip("分类 $cid", isCategory = true))
                 }
                 for (tagName in tagNames) {
-                    val chip = Chip(itemView.context).apply {
-                        text = "#$tagName"
-                        isClickable = false
-                        isCheckable = false
-                        setChipBackgroundColorResource(R.color.fire_accent_soft)
-                        setTextColor(itemView.context.getColor(R.color.fire_accent))
-                    }
-                    chips.addView(chip)
+                    chips.addView(topicChip("#$tagName", isCategory = false))
                 }
             } else {
                 chips.visibility = View.GONE
             }
-            bindTopicNotification(detail)
             bindTopicEdit(detail)
-            bindTopicBookmark(detail)
+            bindTopicBookmark()
             bindAiSummary(aiSummary, isAiSummaryLoading, aiSummaryError)
             statReplies.text = "${detail.replyCount}"
             statViews.text = "${detail.views}"
@@ -318,31 +327,12 @@ class HeaderAdapter(
                     originalPostContainer.paddingBottom,
                 )
                 originalPostHolder.bind(
-                    PostRow(post = originalPost, depth = 0, usesTitleWidthBody = true),
-                    callbacks,
+                    row = PostRow(post = originalPost, depth = 0, usesTitleWidthBody = true),
+                    callbacks = callbacks,
+                    isSearchHighlighted = originalPost.id == highlightedPostId,
                 )
             } else {
                 originalPostContainer.visibility = View.GONE
-            }
-        }
-
-        private fun bindTopicNotification(detail: TopicDetailState) {
-            val isPrivateMessageThread = detail.archetype
-                ?.trim()
-                ?.equals("private_message", ignoreCase = true) == true
-            topicNotificationButton.visibility = if (isPrivateMessageThread) View.GONE else View.VISIBLE
-            if (isPrivateMessageThread) {
-                topicNotificationButton.setOnClickListener(null)
-                return
-            }
-
-            val title = topicNotificationTitle(detail.details.notificationLevel ?: 1)
-            topicNotificationButton.text = itemView.context.getString(
-                R.string.topic_detail_notification_button,
-                title,
-            )
-            topicNotificationButton.setOnClickListener {
-                onTopicNotificationClick(detail)
             }
         }
 
@@ -359,27 +349,51 @@ class HeaderAdapter(
             }
         }
 
-        private fun bindTopicBookmark(detail: TopicDetailState) {
-            topicBookmarkButton.text = itemView.context.getString(
-                if (detail.bookmarked) {
-                    R.string.topic_detail_bookmark_topic_active
-                } else {
-                    R.string.topic_detail_bookmark_topic
-                },
-            )
-            topicBookmarkButton.setOnClickListener {
-                onTopicBookmarkClick(detail)
+        private fun bindTopicBookmark() {
+            topicBookmarkButton.visibility = View.GONE
+            topicBookmarkButton.setOnClickListener(null)
+            topicBookmarkButton.text = null
+        }
+
+        private fun topicChip(label: String, isCategory: Boolean): Chip {
+            val context = itemView.context
+            return Chip(context).apply {
+                text = label
+                isClickable = false
+                isCheckable = false
+                isFocusable = false
+                minHeight = 0
+                minimumHeight = 0
+                chipMinHeight = dp(26).toFloat()
+                setEnsureMinTouchTargetSize(false)
+                includeFontPadding = false
+                textSize = 12f
+                setChipBackgroundColorResource(
+                    if (isCategory) R.color.fire_chip_accent_background else R.color.fire_background_surface,
+                )
+                setChipStrokeColorResource(
+                    if (isCategory) R.color.fire_accent_soft else R.color.fire_divider,
+                )
+                chipStrokeWidth = dp(1).toFloat()
+                setTextColor(context.getColor(if (isCategory) R.color.fire_accent else R.color.fire_text_secondary))
+                chipStartPadding = dp(9).toFloat()
+                chipEndPadding = dp(9).toFloat()
+                textStartPadding = 0f
+                textEndPadding = 0f
+                closeIconStartPadding = 0f
+                closeIconEndPadding = 0f
+                layoutParams = ChipGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dp(28),
+                ).apply {
+                    marginEnd = dp(6)
+                    bottomMargin = dp(6)
+                }
             }
         }
 
-        private fun topicNotificationTitle(level: Int): String {
-            val context = itemView.context
-            return when (level) {
-                0 -> context.getString(R.string.topic_detail_notification_muted)
-                2 -> context.getString(R.string.topic_detail_notification_tracking)
-                3 -> context.getString(R.string.topic_detail_notification_watching)
-                else -> context.getString(R.string.topic_detail_notification_regular)
-            }
+        private fun dp(value: Int): Int {
+            return (itemView.resources.displayMetrics.density * value).toInt()
         }
 
         private fun bindTopicVote(detail: TopicDetailState) {

@@ -7,9 +7,10 @@ The generated artifacts are written into
 `native/ios-app/Generated/` at build time:
 
 - `FireUniFfi/<namespace>.swift` (one file per UniFFI namespace:
-  `fire_uniffi`, `fire_uniffi_diagnostics`, `fire_uniffi_messagebus`,
-  `fire_uniffi_notifications`, `fire_uniffi_search`, `fire_uniffi_session`,
-  `fire_uniffi_topics`, `fire_uniffi_types`, `fire_uniffi_user`)
+  `fire_uniffi`, `fire_uniffi_diagnostics`, `fire_uniffi_ldc`,
+  `fire_uniffi_messagebus`, `fire_uniffi_notifications`, `fire_uniffi_search`,
+  `fire_uniffi_session`, `fire_uniffi_topics`, `fire_uniffi_types`,
+  `fire_uniffi_user`)
 - `fire_uniffiFFI/fire_uniffiFFI.h`
 - `fire_uniffiFFI/module.modulemap`
 - `lib/<platform>/libfire_uniffi.a`
@@ -38,6 +39,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - persists the latest Rust session snapshot as a full `Application Support/Fire/session.json`; routine internal write paths mirror `session.json` and Keychain only when the corresponding Rust revision changes, while explicit `persistCurrentSession()` force-refreshes both from the current snapshot
   - lets Rust initialize shared logs under `Application Support/Fire/logs`
   - wraps `syncLoginContext`, async `refreshBootstrap`, async `refreshCsrfToken`, async topic fetches including `fetchTopicAiSummary`, and async logout
+  - wraps the Rust-owned LDC/CDK OAuth handle surface for profile screens: authorization URL, approval-link extraction, approve redirect, callback, user-info refresh, and logout
 - `Sources/FireAppSession/APM/*`
   - owns the beta-phase iOS crash/APM runtime
   - installs `PLCrashReporter` at launch, harvests pending crash reports on next cold start, and persists raw `.plcrash` payloads under `Application Support/Fire/ios-apm/crashes`
@@ -85,12 +87,12 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - owns app-level URL opening and routes both `fire://...` custom schemes and LinuxDo universal links into the shared typed in-app route model before SwiftUI screens load
 - `App/Routing/`
   - defines the typed `FireAppRoute` model, route parser, and shared destination view used by external URL opens, notification taps, and in-app search / notification navigation
-  - topic routes opened from the authenticated tab shell are now promoted to an app-root full-screen `UINavigationController` presentation instead of pushing inside a tab-owned `NavigationStack`, so topic detail is a separate page that preserves controller-owned back/share/navigation chrome without inheriting or hiding the current tab bar/navigation bar
+  - topic routes opened from the authenticated tab shell are promoted to a single-flight app-root full-screen `UINavigationController` presentation instead of pushing inside a tab-owned `NavigationStack`, so topic detail is a separate page that preserves controller-owned back/share/navigation chrome without inheriting or hiding the current tab bar/navigation bar
 - `App/FireAppViewModel.swift`
   - presents the login browser immediately, then runs a lightweight best-effort network warm-up in the background
   - still tries to move the first system-level network prompt, when one appears on-device, out of the in-page login interaction itself, without blocking WebView presentation
   - restores the persisted session cache, replays Keychain cookies through Rust on cold start, repairs incomplete authenticated session identity through bootstrap refresh when needed, and leaves CSRF repair to the shared authenticated-write preflight
-  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, the login action is hidden, and the button slot shows the current verification state until PreheatGate finishes or exposes a retryable failure
+  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, and PreheatGate failures show a login action without clearing the local session cache
   - now builds `FireSessionStore` lazily on a detached task so Rust/logging initialization does not block the first SwiftUI render on the main actor
   - syncs authenticated LinuxDo cookies into native `HTTPCookieStorage` so inline media/image requests can reuse the restored session, while leaving the persistent WebKit cookie store as the authoritative browser session owned by login and Cloudflare WebViews
   - now also owns native private-message inbox/sent loading plus private-message creation on top of the shared Rust mailbox and `/posts.json` PM surfaces
@@ -101,8 +103,11 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - now attempts a single-flight host cookie resync on passive reads (home feed, topic detail): if the WebKit cookie store has already rotated `_t` / `_forum_session` past the shared Rust epoch, the resync rotates the shared session in place and the read retries once; otherwise the original request failure is surfaced unchanged
   - now probes login sync readiness from the embedded `WKWebView` and keeps the `完成登录` button disabled until the shared login prerequisites are actually satisfied
   - now also emits host-owned APM spans for cold-start restore, login sync, bootstrap refresh, latest-feed load, topic-detail load, reply submit, notification refresh, and MessageBus start
+  - now forwards LDC/CDK profile commands through `FireSessionStore`, keeping OAuth API orchestration in Rust while the profile views own only native UI state
 - `App/FireMessageBusCoordinator.swift`
   - buffers and coalesces foreground MessageBus bursts before MainActor delivery so topic/detail/notification spikes no longer spawn one task per event on iOS
+- `App/FireMotion/`
+  - centralizes SwiftUI motion and haptic feedback through `FireMotionEffects`, including success/error/selection/impact sensory feedback modifiers plus a small UIKit bridge for Texture topic-detail cells
 - `App/Stores/FireHomeFeedStore.swift`
   - owns selected feed kind, selected category/tags, paginated home rows, and bootstrap-derived category/tag metadata for the authenticated home shell
   - applies MessageBus-driven home refreshes only as incremental entity patching while the home list surface is actually foreground-visible and the app scene is active, instead of falling back to whole-array replacement or pulling from background/off-screen pages
@@ -114,19 +119,23 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - only enables and consumes `firstUnreadRootPostNumber` for the first topic-detail open when there is no explicit notification/bookmark/search/share target, preserving explicit target priority and avoiding refresh or MessageBus scroll jumps and extra unread-root auto-batch requests
   - now compares compact topic-detail content tokens instead of full `TopicDetailState` values on the main actor, so identical refreshes and late-row changes avoid deep cooked/render-document equality scans
   - now caches Rust-fetched per-post reply context from `fetchPostReplyIds` / batched `fetchTopicPosts` plus `fetchPostReplyHistory`, and hydrates any returned posts back into the active topic detail cache when they belong to the current stream
+  - now keeps secondary and deeper replies folded behind the root reply's in-row “查看更多 N 条回复” shortcut by default, while preserving explicit target ancestry and expanding/hydrating the selected root thread on demand
   - now loads Rust-fetched topic AI summaries non-blockingly when the detail payload advertises `summarizable`, `hasCachedSummary`, or `hasSummary`, caching success/unavailable/error state per topic without blocking the main detail body
   - now defers MessageBus-driven source-snapshot refresh apply work while the detail feed is actively scrolling, then applies the latest deferred source snapshot + tree presentation once scrolling stops so live topic/reaction updates do not interrupt the scroll path
   - now keeps quick-reply typing / submit-state invalidation off the feed snapshot path, so those chrome-only changes no longer force a Texture feed snapshot rebuild
   - now splits topic-detail refresh domains into feed, chrome, composer, sidecar, and interaction state so AI summary loading/error, mutation flags, reply-context loading, and toolbar-only changes publish through their own revision paths instead of reusing the feed collection revision
-  - now builds topic-detail runtime snapshot items from a sendable snapshot input on a background task and returns to the main actor only to apply Texture/collection updates, with timing logs for snapshot build/apply and loaded item counts
+  - now builds topic-detail runtime snapshot items from a sendable snapshot input on a background task and returns to the main actor only to apply Texture/collection updates, with timing logs for snapshot build/apply and loaded item counts; cold/empty feed reloads do not wait on Texture reload completion before finishing the snapshot pipeline
   - renders poll option titles from Rust-provided `PollOptionState.plainText`, avoiding synchronous HTML parsing on cell configure and layout paths
-  - renders Rust-owned `TopicPostBoostState` short replies as a native Texture body overlay/barrage for original posts with visible body text, and as a fixed-height two-row manual horizontal chip scroller for replies or posts without a body text target; the cell consumes Rust-derived `displayText` and `renderDocument` for emoji-capable chip content, caps visible overlay boosts to five display lines in a normalized once-per-batch five-lane barrage with pause/resume during scroll, keeps only fixed scroller height/signature in `FirePostCellLayoutKey` instead of parsing Boost `cooked` in Swift, and only runs Boost animations for visible original-post barrage cells while the detail feed is idle
+  - keeps topic-detail author metadata in the header column to the right of the avatar, lets only the original post body content use the avatar-leading full row width, and keeps reply body content in the column to the right of the avatar; original-post inline images fill the post body width with proportional height, while reply images stay compact
+  - renders Rust-owned `TopicPostBoostState` short replies as body-only native Texture content without the leading `@username:` attribution, using a body overlay/barrage for original posts with visible body text and a compact one-or-two-row manual horizontal chip scroller for replies or posts without a body text target; manual chips fill the first row left-to-right, expand to the second row only when needed, then continue as the next two-row horizontal page under user swipes; the cell consumes Rust-derived `displayText` and `renderDocument` for emoji-capable chip content, caps visible overlay boosts to five display lines in a normalized once-per-batch five-lane barrage with pause/resume during scroll, keeps only fixed scroller height/signature in `FirePostCellLayoutKey` instead of parsing Boost `cooked` in Swift, and only runs Boost animations for visible original-post barrage cells while the detail feed is idle
   - keeps topic-detail subscription, presence heartbeat, quick reply, reaction toggles, and post-edit refresh reconciliation out of `FireAppViewModel`
 - `App/Stores/FireSearchStore.swift`
   - owns the search screen's query, scope, result, paging, loading, and error state
+  - inherits the shared `FirePaginatedStore<SearchResultState>` load/reset/error state machine while preserving the search screen's aggregate result API
   - keeps the actual `/search.json` call path on `FireAppViewModel` so session ownership and recoverable-auth handling stay centralized during the W2 split
 - `App/Stores/FireNotificationStore.swift`
   - owns unread count, recent notifications, full-history paging, and notification-specific loading state
+  - delegates full-history pagination to `FirePaginatedStore<NotificationItemState>` while keeping recent notification and unread-count state explicit
   - keeps MessageBus-triggered runtime refresh and notification read mutations outside `FireAppViewModel`, while still delegating Rust calls and recoverable-auth handling back through the shared app/session facade
 - `App/Stores/Shared/FireEntityIndex.swift` and `App/Stores/Shared/FireOrderedIDList.swift`
   - provide the minimal entity-by-id and stable-order primitives used by the home feed to support incremental list patching
@@ -138,6 +147,8 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
 - `App/FireComposerView.swift`
   - now supports native private-message compose alongside create-topic and advanced-reply flows, including recipient token editing, PM-specific draft restore/save, and PM-specific validation lengths from bootstrap
   - now keeps create-topic category/tag requirements visible inline, shows category-aware recommended tags, and surfaces the current disabled-submit reason directly above the submit bar
+  - now shares a Markdown toolbar and selection-aware `UITextView` insertion path across create-topic, private-message, advanced-reply, and post-edit flows
+  - now accepts topic-detail quote prefill for advanced replies, preserving restored drafts and positioning the cursor after the inserted quote block
 - `App/FirePrivateMessagesView.swift`
   - provides the native private-message workspace with inbox/sent switching, participant-aware rows, compose entry, and route handoff into topic detail after successful send
 - `App/TopicDetail/`
@@ -169,6 +180,7 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
 - `App/ListKit/`
   - now contains the W3 collection-host foundation built around `UICollectionView`, diffable data source snapshots, and `UIHostingConfiguration`
   - `FireCollectionHost.swift` bridges SwiftUI into a reusable collection-backed host while `FireDiffableListController.swift` preserves the top visible item and relative offset across snapshot applies, forwards scroll metrics, supports native pull-to-refresh, and defers anchor restoration through the entire refresh-control rebound (including the post-`endRefreshing()` deceleration window) so large-title shells like Home keep UIKit's native rebound behavior and the navigation chrome stays in sync with contentOffset
+  - `FireDiffableListController.swift` also owns pull-to-refresh completion feedback, keeping refresh haptics on the same UIKit controller path as the refresh gesture
   - topic detail now bypasses the generic diffable ListKit host and uses the dedicated `App/TopicDetail/` module, where `FireTopicDetailViewController` owns page lifecycle, `FireTopicDetailFeedController` owns the Texture `ASCollectionNode` runtime, and the controller-local snapshot pipeline coordinates toolbar, quick reply, pagination, visibility, and modal ownership without routing those concerns back through SwiftUI page state
   - `FireListSectionModel.swift` provides the section/item shape shared by later home/notification/topic-detail migrations
   - `Home/FireHomeCollectionView.swift` is the first W3 migration slice and now drives the authenticated home feed through diffable collection snapshots instead of SwiftUI `List`
@@ -190,6 +202,9 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - keeps the top bar title fixed to `首页` so the authenticated home shell does not echo the current profile name in the navigation chrome
   - now renders its feed/category/tag state from `FireHomeFeedStore`, so home pagination and filter changes no longer flow through the app-wide root observable
   - now routes the home feed through `FireHomeCollectionView`, keeping toolbar/sheet/navigation ownership in SwiftUI while moving the hot-path list mechanics to the W3 diffable collection host
+  - surfaces non-critical composer and topic-action feedback through the shared `FireToast` overlay instead of blocking notice alerts
+- `App/Core/FireComponents.swift`
+  - contains the shared SwiftUI `FireToast` presentation primitive for transient success/error/info/warning feedback, with identity-aware auto-dismiss and FireTheme styling
 - `App/FireCategoriesView.swift` and `App/FireTagPickerSheet.swift`
   - now read category/tag bootstrap metadata and selected home filters from `FireHomeFeedStore`
 - `App/TopicDetail/`
@@ -270,12 +285,13 @@ Current UX note:
 - Topic detail now renders its authoritative reading surface through `App/TopicDetail/FireTopicDetailViewController` plus `FireTopicDetailFeedController`, bridged into app navigation only by `FireTopicDetailControllerHost`. UIKit owns the page lifecycle, toolbar, quick-reply bar, modal routing, and route-anchor handling; Texture `ASCollectionNode` owns the scrolling surface and native runtime cells. The controller skips no-op snapshot updates, coalesces scroll-driven visible-post reports, keeps already-appended reply rows stable across partial topic-screen refreshes, and relayouts visible rows from `FirePostLayoutManager` publications instead of re-running precise rich-text overflow measurement on the hot scroll path. Header/category chips, AI summary, stats, topic vote, body-state, replies header, reply-footer, notice, original post, and reply rows all use native Texture/runtime cells. The old `FireTopicDetailCollectionView`/`FirePostRow` SwiftUI post-row fallback has been removed.
 - Topic detail now opens from tab-owned surfaces as an app-root full-screen route hosted by `FireTabRoot` through a real `UINavigationController`, so the detail page no longer relies on hiding the active tab bar or mutating the source tab's navigation bar state, and controller-owned back/share/more chrome remains intact. The active detail controller path still runs through `App/TopicDetail/FireTopicDetailViewController` and `FireTopicDetailFeedController`, and its request path is now aligned with Android: initial load, explicit force refresh, mutation refresh, and MessageBus-triggered refresh all use Rust-owned source snapshots plus tree presentation. Reply-context hydration still uses targeted `fetchTopicPosts` / `fetchPostReplyIds` / `fetchPostReplyHistory`, but no longer drives main pagination.
 - Topic-detail rich text and post images now render from Rust-owned `RenderDocumentState` through Texture nodes inside native cells: `FirePostCellNode` uses `ASTextNode` for collapsed text, selectable `UITextView` content after expansion, and Nuke-backed `ASImageNode` avatar/post image nodes with inline RenderBlock ordering, Rust attachment-backed image URL selection, loading/error retry states, display-size thumbnail preparation, and a JXPhotoBrowser full-screen preview backed by the same Nuke image request. If a Rust image attachment is not represented by a render-tree image block, iOS appends the missing image segment from `RenderDocument.imageAttachments` instead of reparsing cooked HTML. iOS does not parse `post.cooked` or synthesize a render document when `renderDocument` is missing. Texture is consumed as a checked-in `AsyncDisplayKit.xcframework` linked directly by the app target, not through CocoaPods or a local SwiftPM package product.
-- The app now also exposes a full-screen native composer for create-topic, private-message, and advanced-reply flows, with server-backed draft restore/save, recipient search, image uploads, upload URL resolution, tag search, and `@mention` autocomplete on top of shared Rust APIs.
-- Topic detail now supports per-post reply targeting, post likes, custom emoji reactions, post-level bookmarks, edit/delete/recover, and flag reporting through the shared Rust write APIs; the flag sheet uses server-provided post action types when available and falls back to the common LinuxDo / Discourse flag types only if that metadata is unavailable.
-- Topic detail now shows clickable reply targets using shared `replyToUser` metadata when available, and collapsed inline reply branches can expand the already loaded child replies in place. The native reply-context sheet remains available for reply-context loading flows that need Rust-backed recursive reply IDs, batched `fetchTopicPosts`, fallback `fetchPostReplies`, and floor jumps.
+- The app now also exposes a full-screen native composer for create-topic, private-message, and advanced-reply flows, with server-backed draft restore/save, recipient search, image uploads, upload URL resolution, tag search, selection-aware Markdown formatting, quote prefill from topic detail, and `@mention` autocomplete on top of shared Rust APIs.
+- Topic detail now supports per-post reply targeting, quote reply insertion from Rust-provided `RenderDocumentState.plainText`, post likes, in-topic search over already loaded Rust `RenderDocumentState.plainText` with active-result highlight/navigation, a searchable Rust-bootstrap-backed reaction picker with reaction-user lookup, post-level bookmarks with native reminder scheduling and local notifications, edit/delete/recover, and flag reporting through the shared Rust write APIs; the flag sheet uses server-provided post action types when available and falls back to the common LinuxDo / Discourse flag types only if that metadata is unavailable.
+- Topic detail now shows clickable reply targets using shared `replyToUser` metadata when available, and secondary/deeper reply branches stay folded behind a root-row shortcut until opened. The native reply-context sheet remains available for reply-context loading flows that use Rust-backed recursive reply IDs, batched `fetchTopicPosts`, reply history, and floor jumps.
+- Topic detail keeps a single reply-tree presentation path over Rust tree rows with native Texture post cells; folding is a projection over that tree, not a second source. The toolbar does not expose an alternate display projection, and the controller runtime does not duplicate the Rust source/tree data path.
 - Topic detail now also reports native visible-post reading timings through the shared Rust `/topics/timings` API instead of keeping that reporting path host-specific.
 - Topic detail now also listens to the shared MessageBus reaction/presence channels, refreshes live post state from Rust on matching events, and shows shared reply-presence users in the quick-reply area.
-- Topic detail now also recognizes `private_message` threads, renders participant chips in the header, and hides public-topic-only controls such as vote panels, topic editing, category/tag navigation, and topic notification settings.
+- Topic detail now also recognizes `private_message` threads, renders participant chips in the header, and hides public-topic-only controls such as vote panels, topic editing, category/tag navigation, and the toolbar bell topic notification settings.
 - Topic detail now prepares reply rows plus Rust `RenderDocument` text/image payloads in the store layer, so runtime collection updates reuse cached render content instead of repeating timeline joins or platform HTML parsing.
 - Topic detail post rows now consume Rust-owned `TopicPostAuthorMetadata` for display name, username, title, group/flair name, staff markers, and status text inside the native Texture runtime cell. The metadata row participates in `FirePostCellLayoutKey` precomputed heights and update tokens, so author badge changes relayout without reintroducing SwiftUI post-row fallbacks.
 - Topic detail pagination now treats the Rust source cursor as authoritative, triggers automatic loading when the collection is within five items of the end, lets one user gesture chain multiple raw-source batches inside Rust before the host re-renders, and keeps diff/layout tokens lightweight so large cooked HTML bodies are neither copied nor re-hashed during collection updates.
@@ -295,11 +311,10 @@ Build prerequisites:
 - Rust targets:
   - `aarch64-apple-ios`
   - `aarch64-apple-ios-sim`
-  - `x86_64-apple-ios` when building Intel simulator slices
+- Simulator builds are arm64-only; x86_64 simulator slices and Intel Mac simulator builds are not supported.
 
 Verified local commands:
 
-- `./scripts/check_clean_submodules.sh`
 - `xcodegen generate --spec native/ios-app/project.yml`
 - `xcodebuild -project native/ios-app/Fire.xcodeproj -scheme Fire -destination 'generic/platform=iOS Simulator' build`
 - `xcodebuild -project native/ios-app/Fire.xcodeproj -scheme Fire -destination 'platform=iOS Simulator,OS=18.2,name=iPhone 16' -derivedDataPath /tmp/fire-ios-unit CODE_SIGNING_ALLOWED=NO test`
@@ -326,7 +341,7 @@ Release artifact note:
 
 Current build note:
 
-- The clean verification baseline requires `third_party/openwire` to be initialized and free of local modifications. Run `./scripts/check_clean_submodules.sh` from the repository root before trusting local build/test results.
+- `openwire` resolves from crates.io through the root lockfile, so local iOS builds no longer require an openwire source checkout.
 - `FireTests` contains only pure-logic cases and is the single iOS test bundle. It still boots an iOS Simulator because the bundle remains app-hosted with `Fire.app` as `TEST_HOST`.
 - The simulator/unit-test path above is verified locally after the iOS logic-unit test cleanup.
 - The device `Release` Xcode path is also verified locally.

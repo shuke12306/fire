@@ -6,5 +6,9 @@
 	<array>
 		<string>applinks:linux.do</string>
 	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.fire.app</string>
+	</array>
 </dict>
 </plist>

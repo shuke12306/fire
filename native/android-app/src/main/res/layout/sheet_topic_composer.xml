@@ -35,6 +35,12 @@
         android:background="@null"
         android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
 
+    <com.fire.app.ui.composer.MarkdownToolbarView
+        android:id="@+id/topic_markdown_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp" />
+
     <LinearLayout
         android:id="@+id/topic_mention_suggestions"
         android:layout_width="match_parent"

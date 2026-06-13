@@ -48,8 +48,12 @@ struct FireHomeCollectionView: View {
     let onShowCategoryBrowser: () -> Void
     let onShowTagPicker: () -> Void
     let onSelectTopic: (FireAppRoute) -> Void
+    let onEditTopicBookmark: (FireTopicRowPresentation) -> Void
+    let onMuteTopic: (FireTopicRowPresentation) -> Void
     let onRefresh: () async -> Void
     let onScrollMetricsChanged: (FireCollectionScrollMetrics) -> Void
+    let baseURLString: String
+    let topicRouteLogger: FireHostLogger?
 
     private var parentCategories: [FireTopicCategoryPresentation] {
         homeFeedStore.allCategories.filter { $0.parentCategoryId == nil }
@@ -169,8 +173,19 @@ struct FireHomeCollectionView: View {
     }
 
     private func handleSelection(_ item: FireHomeCollectionItem) {
-        guard case let .topic(topicID) = item,
-              let row = homeFeedStore.topicRow(for: topicID) else { return }
+        guard case let .topic(topicID) = item else {
+            topicRouteLogger?.debug("home collection ignored selection item=\(String(describing: item))")
+            return
+        }
+        guard let row = homeFeedStore.topicRow(for: topicID) else {
+            topicRouteLogger?.warning(
+                "home collection selected missing topic row topic_id=\(topicID) visible_topic_count=\(homeFeedStore.visibleTopicIDs.count) row_count=\(homeFeedStore.topicRows.count)"
+            )
+            return
+        }
+        topicRouteLogger?.info(
+            "home collection selected topic topic_id=\(topicID) selected_kind=\(String(describing: homeFeedStore.selectedTopicKind)) selected_category_id=\(homeFeedStore.selectedHomeCategoryId.map(String.init) ?? "nil") selected_tag_count=\(homeFeedStore.selectedHomeTags.count) row_count=\(homeFeedStore.topicRows.count)"
+        )
         onSelectTopic(.topic(row: row))
     }
 
@@ -225,6 +240,24 @@ struct FireHomeCollectionView: View {
                     category: homeFeedStore.categoryPresentation(for: row.topic.categoryId)
                 )
                 .padding(.horizontal, 16)
+                .contextMenu {
+                    FireTopicContextMenu(
+                        row: row,
+                        shareURL: row.fireTopicURL(baseURL: baseURLString),
+                        onOpen: {
+                            topicRouteLogger?.info(
+                                "home collection context menu open topic topic_id=\(row.topic.id) selected_kind=\(String(describing: homeFeedStore.selectedTopicKind))"
+                            )
+                            onSelectTopic(.topic(row: row))
+                        },
+                        onBookmark: {
+                            onEditTopicBookmark(row)
+                        },
+                        onMute: {
+                            onMuteTopic(row)
+                        }
+                    )
+                }
             } else {
                 Color.clear
                     .frame(height: 0)
@@ -426,7 +459,8 @@ struct FireHomeCollectionView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 16)
-        .redacted(reason: .placeholder)
+        .fireShimmer()
+        .accessibilityHidden(true)
     }
 
     private var emptyStateRow: some View {

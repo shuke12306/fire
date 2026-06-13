@@ -82,6 +82,7 @@ struct FireDraftsView: View {
     @ObservedObject var viewModel: FireAppViewModel
     @StateObject private var draftsViewModel: FireDraftsViewModel
     @State private var composerNotice: String?
+    @State private var toast: FireToast?
 
     init(viewModel: FireAppViewModel) {
         self.viewModel = viewModel
@@ -123,18 +124,18 @@ struct FireDraftsView: View {
                     }
                 } else {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding(.vertical, 20)
-                            Spacer()
-                        }
+                        FireTopicSkeletonList(
+                            rowCount: 5,
+                            subtitleWidth: 96,
+                            showsTrailingMeta: false
+                        )
                     }
                 }
             } else if draftsViewModel.drafts.isEmpty {
                 Section {
                     VStack(spacing: 10) {
                         Image(systemName: "tray.full")
+                            .accessibilityHidden(true)
                             .font(.title2)
                             .foregroundStyle(FireTheme.subtleInk)
                         Text("草稿箱是空的")
@@ -208,18 +209,15 @@ struct FireDraftsView: View {
         .refreshable {
             await draftsViewModel.refresh()
         }
-        .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    composerNotice = nil
-                }
+        .onChange(of: composerNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
             }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(composerNotice ?? "")
+            toast = FireToast(message: message, style: .info)
+            composerNotice = nil
         }
+        .fireToast($toast)
     }
 
     private func composerRoute(for draft: DraftState) -> FireComposerRoute? {
@@ -260,6 +258,7 @@ struct FireDraftsView: View {
                     Image(systemName: draftIcon(for: draft))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(supported ? FireTheme.accent : FireTheme.subtleInk)
+                        .accessibilityHidden(true)
                 }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -302,6 +301,8 @@ struct FireDraftsView: View {
             }
         }
         .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(draftAccessibilityLabel(for: draft, supported: supported))
     }
 
     private func draftTitle(for draft: DraftState) -> String {
@@ -342,5 +343,19 @@ struct FireDraftsView: View {
         default:
             return "arrowshape.turn.up.left"
         }
+    }
+
+    private func draftAccessibilityLabel(for draft: DraftState, supported: Bool) -> String {
+        var parts = [draftTitle(for: draft), draftKindLabel(for: draft)]
+        if let excerpt = draftExcerpt(for: draft) {
+            parts.append(excerpt)
+        }
+        if let updatedAt = FireTopicPresentation.compactTimestamp(draft.updatedAt) {
+            parts.append(updatedAt)
+        }
+        if !supported {
+            parts.append("暂不支持")
+        }
+        return parts.joined(separator: "，")
     }
 }

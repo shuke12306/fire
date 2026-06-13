@@ -77,12 +77,20 @@ struct FireReadHistoryView: View {
     @ObservedObject var viewModel: FireAppViewModel
     @StateObject private var historyViewModel: FireReadHistoryViewModel
     @State private var selectedRoute: FireAppRoute?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
+    @State private var toast: FireToast?
 
     init(viewModel: FireAppViewModel) {
         self.viewModel = viewModel
         _historyViewModel = StateObject(
             wrappedValue: FireReadHistoryViewModel(appViewModel: viewModel)
         )
+    }
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     var body: some View {
@@ -118,12 +126,7 @@ struct FireReadHistoryView: View {
                     }
                 } else {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding(.vertical, 20)
-                            Spacer()
-                        }
+                        FireTopicSkeletonList(rowCount: 6)
                     }
                 }
             } else if historyViewModel.rows.isEmpty {
@@ -157,6 +160,24 @@ struct FireReadHistoryView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            FireTopicContextMenu(
+                                row: row,
+                                shareURL: row.fireTopicURL(baseURL: baseURLString),
+                                onOpen: {
+                                    presentRoute(.topic(
+                                        row: row,
+                                        postNumber: row.topic.lastReadPostNumber
+                                    ))
+                                },
+                                onBookmark: {
+                                    editingBookmarkContext = row.fireBookmarkEditorContext()
+                                },
+                                onMute: {
+                                    muteTopic(row)
+                                }
+                            )
+                        }
                         .task {
                             await historyViewModel.loadMoreIfNeeded(currentTopicID: row.topic.id)
                         }
@@ -188,6 +209,43 @@ struct FireReadHistoryView: View {
         .refreshable {
             await historyViewModel.refresh()
         }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await viewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await viewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    await historyViewModel.refresh()
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        await historyViewModel.refresh()
+                    }
+                }
+            )
+        }
+        .onChange(of: topicActionNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+            toast = FireToast(message: message, style: .error)
+            topicActionNotice = nil
+        }
+        .fireToast($toast)
     }
 
     private func presentRoute(_ route: FireAppRoute) {
@@ -195,5 +253,19 @@ struct FireReadHistoryView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                toast = FireToast(message: "已静音话题", style: .success)
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 }

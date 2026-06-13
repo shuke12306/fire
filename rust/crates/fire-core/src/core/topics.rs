@@ -15,9 +15,10 @@ use tracing::{debug, info, warn};
 use super::{network::expect_success, FireCore};
 use crate::{
     error::FireCoreError,
+    json_helpers::invalid_json,
     topic_payloads::{
-        parse_topic_ai_summary_value, parse_topic_post_stream_value, parse_topic_post_value,
-        RawTopicDetail, RawTopicListResponse,
+        parse_topic_ai_summary_value, parse_topic_post_stream_value, RawTopicDetail,
+        RawTopicListResponse,
     },
 };
 
@@ -186,13 +187,30 @@ impl FireCore {
             params.push(("match_all_tags", "true".to_string()));
         }
 
+        let cache_scope_key = topic_list_cache_scope_key(&query);
+        let cache_page = query.page.unwrap_or(0);
         let traced = self.build_json_get_request("fetch topic list", &path, params, &[])?;
-        let (trace_id, response) = self.execute_request(traced).await?;
+        let (trace_id, response) = match self.execute_request(traced).await {
+            Ok(response) => response,
+            Err(error @ FireCoreError::Network { .. }) => {
+                if let Some(cached) = self.read_cached_topic_list(&cache_scope_key, cache_page)? {
+                    warn!(
+                        kind = ?query.kind,
+                        page = ?query.page,
+                        "topic list network fetch failed; returning cached page"
+                    );
+                    return Ok(cached);
+                }
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
         let response = expect_success(self, "fetch topic list", trace_id, response).await?;
         let raw: RawTopicListResponse = self
             .read_response_json("fetch topic list", trace_id, response)
             .await?;
         let result: TopicListResponse = raw.into();
+        self.write_cached_topic_list(&cache_scope_key, cache_page, &result);
         info!(
             kind = ?query.kind,
             topic_count = result.topics.len(),
@@ -201,6 +219,55 @@ impl FireCore {
             "topic list fetched successfully"
         );
         Ok(result)
+    }
+
+    fn read_cached_topic_list(
+        &self,
+        scope_key: &str,
+        page: u32,
+    ) -> Result<Option<TopicListResponse>, FireCoreError> {
+        let auth_scope_hash = self.current_auth_scope_hash();
+        let payload = {
+            let store = self
+                .shared_store
+                .lock()
+                .expect("shared store mutex poisoned");
+            store.topic_list_cache_read(&auth_scope_hash, scope_key, page)?
+        };
+
+        let Some(payload) = payload else {
+            return Ok(None);
+        };
+
+        let mut cached: TopicListResponse = serde_json::from_str(&payload).map_err(|source| {
+            FireCoreError::ResponseDeserialize {
+                operation: "cached topic list",
+                source,
+            }
+        })?;
+        cached.is_cached = true;
+        Ok(Some(cached))
+    }
+
+    fn write_cached_topic_list(&self, scope_key: &str, page: u32, response: &TopicListResponse) {
+        let auth_scope_hash = self.current_auth_scope_hash();
+        let mut cached = response.clone();
+        cached.is_cached = false;
+        let payload = match serde_json::to_string(&cached) {
+            Ok(payload) => payload,
+            Err(error) => {
+                warn!(error = %error, "failed to serialize topic list cache payload");
+                return;
+            }
+        };
+        let result = self
+            .shared_store
+            .lock()
+            .expect("shared store mutex poisoned")
+            .topic_list_cache_write(&auth_scope_hash, scope_key, page, &payload);
+        if let Err(error) = result {
+            warn!(error = %error, "failed to write topic list cache");
+        }
     }
 
     pub async fn fetch_topic_detail(
@@ -706,17 +773,34 @@ impl FireCore {
         topic_id: u64,
         post_number: u32,
     ) -> Result<TopicPost, FireCoreError> {
-        let path = format!("/posts/by_number/{topic_id}/{post_number}.json");
-        let traced = self.build_json_get_request("fetch post by number", &path, vec![], &[])?;
+        let path = format!("/t/{topic_id}/posts.json");
+        let params = vec![
+            ("post_number", post_number.to_string()),
+            ("asc", "true".to_string()),
+            ("include_suggested", "false".to_string()),
+        ];
+        let traced = self.build_json_get_request("fetch post by number", &path, params, &[])?;
         let (trace_id, response) = self.execute_request(traced).await?;
         let response = expect_success(self, "fetch post by number", trace_id, response).await?;
         let value: Value = self
             .read_response_json("fetch post by number", trace_id, response)
             .await?;
-        parse_topic_post_value(value).map_err(|source| FireCoreError::ResponseDeserialize {
-            operation: "fetch post by number",
-            source,
-        })
+        let post_stream = parse_topic_post_stream_value(value).map_err(|source| {
+            FireCoreError::ResponseDeserialize {
+                operation: "fetch post by number",
+                source,
+            }
+        })?;
+        post_stream
+            .posts
+            .into_iter()
+            .find(|post| post.post_number == post_number)
+            .ok_or_else(|| FireCoreError::ResponseDeserialize {
+                operation: "fetch post by number",
+                source: invalid_json(format!(
+                    "topic post stream did not contain post number {post_number}"
+                )),
+            })
     }
 
     pub async fn fetch_topic_ai_summary(
@@ -1661,6 +1745,60 @@ fn deduplicate_topic_posts_by_id(posts: Vec<TopicPost>) -> Vec<TopicPost> {
         }
     }
     deduplicated
+}
+
+fn topic_list_cache_scope_key(query: &TopicListQuery) -> String {
+    let mut parts = vec![
+        format!("kind={}", query.kind.filter_name()),
+        format!(
+            "category_slug={}",
+            query.category_slug.as_deref().unwrap_or("")
+        ),
+        format!(
+            "category_id={}",
+            query.category_id.map_or(String::new(), |id| id.to_string())
+        ),
+        format!(
+            "parent_category_slug={}",
+            query.parent_category_slug.as_deref().unwrap_or("")
+        ),
+        format!("tag={}", normalized_cache_value(query.tag.as_deref())),
+        format!("order={}", query.order.as_deref().unwrap_or("")),
+        format!(
+            "ascending={}",
+            query
+                .ascending
+                .map_or(String::new(), |value| value.to_string())
+        ),
+        format!("match_all_tags={}", query.match_all_tags),
+    ];
+
+    let mut topic_ids = query.topic_ids.clone();
+    topic_ids.sort_unstable();
+    parts.push(format!(
+        "topic_ids={}",
+        topic_ids
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
+
+    parts.push(format!(
+        "additional_tags={}",
+        query
+            .additional_tags
+            .iter()
+            .map(|tag| normalized_cache_value(Some(tag)))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
+
+    parts.join("|")
+}
+
+fn normalized_cache_value(value: Option<&str>) -> String {
+    value.unwrap_or("").trim().to_ascii_lowercase()
 }
 
 #[cfg(test)]

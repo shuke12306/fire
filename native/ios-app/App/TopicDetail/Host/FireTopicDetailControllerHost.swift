@@ -13,12 +13,19 @@ struct FireTopicDetailControllerHost: UIViewControllerRepresentable {
     let scrollToPostNumber: UInt32?
 
     func makeUIViewController(context: Context) -> FireTopicDetailViewController {
-        FireTopicDetailViewController(
+        viewModel.topicRouteLogger()?.info(
+            "topic detail controller host make ui controller topic_id=\(row.topic.id) post_number=\(scrollToPostNumber.map(String.init) ?? "nil")"
+        )
+        let controller = FireTopicDetailViewController(
             viewModel: viewModel,
             topicDetailStore: topicDetailStore,
             row: row,
             scrollToPostNumber: scrollToPostNumber
         )
+        viewModel.topicRouteLogger()?.debug(
+            "topic detail controller host make ui controller complete topic_id=\(row.topic.id)"
+        )
+        return controller
     }
 
     func updateUIViewController(

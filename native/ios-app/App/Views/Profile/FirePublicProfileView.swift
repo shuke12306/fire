@@ -17,6 +17,7 @@ struct FirePublicProfileView: View {
     @State private var isUpdatingFollow = false
     @State private var showPrivateMessageComposer = false
     @State private var composerNotice: String?
+    @State private var toast: FireToast?
     @State private var celebrationPulse: Int = 0
 
     init(viewModel: FireAppViewModel, username: String) {
@@ -240,18 +241,15 @@ struct FirePublicProfileView: View {
                 )
             }
         }
-        .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    composerNotice = nil
-                }
+        .onChange(of: composerNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
             }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(composerNotice ?? "")
+            toast = FireToast(message: message, style: .info)
+            composerNotice = nil
         }
+        .fireToast($toast)
         .refreshable {
             await profileViewModel.refreshAll()
         }

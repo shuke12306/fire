@@ -8,8 +8,7 @@ Treat the following as the primary repository map:
 ```text
 fire/
   docs/
-    backend-api.md
-    backend-api/
+    knowledge/
     architecture/
       fire-native-workspace.md
   native/
@@ -28,8 +27,9 @@ fire/
 ```
 
 Use these repository-specific rules when working in this codebase:
-- `docs/backend-api*.md` is the current backend protocol documentation for Fire and should be kept in sync with implementation decisions.
-- `references/fluxdo/` is a read-only reference project: an open-source, unofficial LinuxDo client implemented with Flutter. The backend API docs in `docs/` were derived from that project, so when documentation is incomplete or behavior is unclear, inspect `references/fluxdo/` for clues before guessing.
+- `docs/knowledge/` is the current backend protocol knowledge base and should be kept stack-neutral, implementation-agnostic, and aligned with observed behavior.
+- `references/fluxdo/` is a read-only reference project: an open-source, unofficial LinuxDo client in a separate client stack. The protocol knowledge in `docs/knowledge/` was derived from that project, so when documentation is incomplete or behavior is unclear, inspect `references/fluxdo/` for clues before guessing.
+- `references/fluxdo/` must be initialized as a non-recursive submodule. Do not initialize, vendor, or rely on its internal submodules because Fire does not compile the reference project.
 - `third_party/openwire/` is the shared Rust networking stack maintained by the repository owner. It is an OkHttp-style async network library and is the intended network foundation for Fire.
 - `third_party/xlog-rs/` is the shared high-performance Rust logging library maintained by the repository owner and is the intended logging foundation for Fire.
 - `references/` is for investigation and comparison, not for extending the current product architecture.

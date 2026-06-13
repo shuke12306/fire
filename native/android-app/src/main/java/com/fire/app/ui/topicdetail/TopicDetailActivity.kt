@@ -1,30 +1,42 @@
 package com.fire.app.ui.topicdetail
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MenuItem
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.ListView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.fire.app.FireApplication
 import com.fire.app.R
 import com.fire.app.displayName
 import com.fire.app.databinding.ActivityTopicDetailBinding
@@ -32,24 +44,34 @@ import com.fire.app.richtext.FireCookedImage
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
 import com.fire.app.core.image.FireAvatarUrls
+import com.fire.app.core.ui.FireToast
 import com.fire.app.ui.composer.ComposerTagAssist
 import com.fire.app.ui.composer.PrivateMessageComposerSheet
+import com.fire.app.ui.composer.QuoteMarkdown
 import com.fire.app.ui.composer.ReplyComposerSheet
 import com.fire.app.ui.home.HomeTopicDetailPatchRepository
 import com.fire.app.ui.webview.FireInAppWebViewActivity
 import com.fire.app.core.ext.dp
 import com.fire.app.core.image.FireImageLoader
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import uniffi.fire_uniffi_session.TopicCategoryState
 import uniffi.fire_uniffi_topics.PostActionTypeState
 import uniffi.fire_uniffi_topics.PostFlagRequestState
+import uniffi.fire_uniffi_topics.ReactionUsersGroupState
 import uniffi.fire_uniffi_topics.TopicDetailState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.VotedUserState
 import uniffi.fire_uniffi_user.UserProfileState
 import uniffi.fire_uniffi_user.UserSummaryState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 class TopicDetailActivity : AppCompatActivity() {
 
@@ -60,6 +82,7 @@ class TopicDetailActivity : AppCompatActivity() {
     private lateinit var errorText: TextView
     private lateinit var retryButton: View
     private lateinit var replyFab: View
+    private lateinit var searchOverlay: TopicSearchOverlay
 
     private var viewModel: TopicDetailViewModel? = null
     private var route: TopicDetailRoute? = null
@@ -71,6 +94,27 @@ class TopicDetailActivity : AppCompatActivity() {
     private var loadMorePostsPosted = false
     private var pendingScrollTargetPostNumber: UInt? = null
     private var enabledReactionIds: List<String> = emptyList()
+    private var timingTracker: TopicTimingTracker? = null
+    private var searchMenuItem: MenuItem? = null
+    private var notificationMenuItem: MenuItem? = null
+    private var topicSearchQuery: String = ""
+    private var topicSearchMatches: List<TopicDetailPostRows.SearchMatch> = emptyList()
+    private var topicSearchIndex: Int = -1
+    private val pendingBookmarkReminders = mutableMapOf<BookmarkReminderKey, BookmarkReminderRequest>()
+    private var pendingNotificationPermissionRequest: BookmarkReminderRequest? = null
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val request = pendingNotificationPermissionRequest
+        pendingNotificationPermissionRequest = null
+        if (granted && request != null) {
+            BookmarkReminderScheduler.sync(this, request)
+        }
+    }
+    private val appScope by lazy { FireApplication.applicationScope() }
+    private val viewModelDelegate: TopicDetailViewModel by viewModels {
+        TopicDetailViewModelFactory(sessionStore)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,20 +135,52 @@ class TopicDetailActivity : AppCompatActivity() {
         errorText = binding.errorText
         retryButton = binding.retryButton
         replyFab = binding.replyFab
+        searchOverlay = binding.topicSearchOverlay
 
         binding.topicDetailToolbar.setNavigationOnClickListener {
             finish()
         }
         binding.topicDetailToolbar.title = parsedRoute.title
             ?: getString(R.string.topic_detail_title_fallback, parsedRoute.topicId.toString())
+        searchMenuItem = binding.topicDetailToolbar.menu.add(
+            R.string.topic_detail_search_topic,
+        ).apply {
+            setIcon(R.drawable.ic_search)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                showTopicSearch()
+                true
+            }
+        }
+        notificationMenuItem = binding.topicDetailToolbar.menu.add(
+            R.string.topic_detail_notification_topic,
+        ).apply {
+            setIcon(R.drawable.ic_notifications)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                viewModel?.detail?.value?.let(::showTopicNotificationOptions)
+                true
+            }
+            isVisible = false
+        }
 
         lifecycleScope.launch {
             sessionStore = FireSessionStoreRepository.get(this@TopicDetailActivity)
-            viewModel = TopicDetailViewModel.create(sessionStore)
+            viewModel = viewModelDelegate
+            timingTracker = TopicTimingTracker(
+                topicId = parsedRoute.topicId.toULong(),
+                scope = appScope,
+                reporter = { topicId, topicTimeMs, timings ->
+                    sessionStore.reportTopicTimings(topicId, topicTimeMs, timings)
+                },
+            ).also { tracker ->
+                tracker.start()
+            }
 
             val postCallbacks = PostRowCallbacks(
                 reactionIds = { enabledReactionIds },
                 onReplyClick = ::showReplyComposerForPost,
+                onQuoteClick = ::showQuoteReplyComposerForPost,
                 onHeartClick = { post -> viewModel?.toggleHeart(post) },
                 onReactClick = ::showReactionPicker,
                 onBookmarkClick = ::showPostBookmarkEditor,
@@ -112,6 +188,7 @@ class TopicDetailActivity : AppCompatActivity() {
                 onUnvotePoll = { post, poll -> viewModel?.unvotePoll(post, poll) },
                 onReactionsClick = ::showReactionUsers,
                 onReplyContextClick = ::showReplyContext,
+                onMoreRepliesClick = { post -> viewModel?.expandReplyThread(post) },
                 onDeletePostClick = ::confirmDeletePost,
                 onRecoverPostClick = ::confirmRecoverPost,
                 onFlagPostClick = ::showFlagPostOptions,
@@ -126,8 +203,6 @@ class TopicDetailActivity : AppCompatActivity() {
                 onToggleTopicVote = { viewModel?.toggleTopicVote() },
                 onShowTopicVoters = ::showTopicVoters,
                 onEditTopicClick = ::showTopicEditor,
-                onTopicBookmarkClick = ::showTopicBookmarkEditor,
-                onTopicNotificationClick = ::showTopicNotificationOptions,
             )
             postListAdapter = PostListAdapter(postCallbacks)
 
@@ -135,9 +210,18 @@ class TopicDetailActivity : AppCompatActivity() {
             recyclerView.layoutManager = LinearLayoutManager(this@TopicDetailActivity)
             recyclerView.adapter = concatAdapter
             loadEnabledReactionIds()
+            searchOverlay.bind(
+                onQueryChanged = ::updateTopicSearchQuery,
+                onPrevious = { navigateTopicSearch(-1) },
+                onNext = { navigateTopicSearch(1) },
+                onClose = ::hideTopicSearch,
+            )
 
             recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                    timingTracker?.recordInteraction()
+                    updateVisiblePostTimings()
+
                     val layoutManager = rv.layoutManager as? LinearLayoutManager ?: return
                     val totalItemCount = layoutManager.itemCount
                     val lastVisible = layoutManager.findLastVisibleItemPosition()
@@ -151,6 +235,9 @@ class TopicDetailActivity : AppCompatActivity() {
                     val isIdle = newState == RecyclerView.SCROLL_STATE_IDLE
                     headerAdapter.setBoostAnimationsEnabled(isIdle)
                     postListAdapter.setBoostAnimationsEnabled(isIdle)
+                    if (!isIdle) {
+                        timingTracker?.recordInteraction()
+                    }
                     viewModel?.setTopicDetailScrollInteractionActive(
                         !isIdle
                     )
@@ -171,6 +258,25 @@ class TopicDetailActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        timingTracker?.setSceneActive(true)
+        updateVisiblePostTimings()
+    }
+
+    override fun onPause() {
+        updateVisiblePostTimings()
+        timingTracker?.setSceneActive(false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        timingTracker?.stop()
+        timingTracker = null
+        viewModel = null
+        super.onDestroy()
+    }
+
     private fun observeViewModel() {
         val vm = viewModel ?: return
         lifecycleScope.launch {
@@ -185,8 +291,16 @@ class TopicDetailActivity : AppCompatActivity() {
                 if (error != null) {
                     errorView.visibility = View.VISIBLE
                     errorText.text = error
+                    if (vm.postRows.value.isEmpty() && vm.detail.value == null) {
+                        recyclerView.visibility = View.GONE
+                    }
                 } else {
                     errorView.visibility = View.GONE
+                    recyclerView.visibility = if (vm.isLoading.value && vm.postRows.value.isEmpty()) {
+                        View.GONE
+                    } else {
+                        View.VISIBLE
+                    }
                 }
             }
         }
@@ -198,6 +312,9 @@ class TopicDetailActivity : AppCompatActivity() {
                     HomeTopicDetailPatchRepository.publish(detail)
                     binding.topicDetailToolbar.title = detail.title.trim()
                 }
+                updateTopicNotificationToolbar(detail)
+                recomputeTopicSearch()
+                updateVisiblePostTimings()
             }
         }
 
@@ -222,8 +339,10 @@ class TopicDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             vm.postRows.collectLatest { rows ->
                 postListAdapter.submitList(rows) {
+                    updateVisiblePostTimings()
                     pendingScrollTargetPostNumber?.let { scrollToPostNumber(it) }
                 }
+                recomputeTopicSearch()
             }
         }
 
@@ -235,7 +354,39 @@ class TopicDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             vm.actionError.collectLatest { error ->
-                Toast.makeText(this@TopicDetailActivity, error, Toast.LENGTH_SHORT).show()
+                FireToast.show(binding.root, error, FireToast.Style.ERROR)
+            }
+        }
+
+        lifecycleScope.launch {
+            vm.bookmarkEvents.collectLatest { event ->
+                when (event) {
+                    is BookmarkEvent.Saved -> {
+                        FireToast.show(
+                            binding.root,
+                            R.string.topic_detail_bookmark_saved,
+                            FireToast.Style.SUCCESS,
+                        )
+                        val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
+                        pendingBookmarkReminders.remove(key)?.let { request ->
+                            scheduleBookmarkReminderAfterSave(request.copy(reminderAt = event.reminderAt))
+                        }
+                    }
+                    is BookmarkEvent.Deleted -> {
+                        FireToast.show(
+                            binding.root,
+                            R.string.topic_detail_bookmark_deleted,
+                            FireToast.Style.INFO,
+                        )
+                        val key = BookmarkReminderKey(event.bookmarkableId, event.bookmarkableType)
+                        pendingBookmarkReminders.remove(key)
+                        BookmarkReminderScheduler.cancel(
+                            this@TopicDetailActivity,
+                            event.bookmarkableId,
+                            event.bookmarkableType,
+                        )
+                    }
+                }
             }
         }
 
@@ -250,11 +401,119 @@ class TopicDetailActivity : AppCompatActivity() {
         showReplyComposer(replyToPostNumber = post.postNumber.toInt())
     }
 
-    private fun showReplyComposer(replyToPostNumber: Int?) {
+    private fun showQuoteReplyComposerForPost(post: TopicPostState) {
+        val currentRoute = route ?: return
+        val quote = QuoteMarkdown.build(
+            username = post.username,
+            postNumber = post.postNumber,
+            topicId = currentRoute.topicId.toULong(),
+            plainText = post.renderDocument?.plainText.orEmpty(),
+        )
+        if (quote == null) {
+            FireToast.show(binding.root, R.string.topic_detail_quote_empty, FireToast.Style.INFO)
+            return
+        }
+        showReplyComposer(
+            replyToPostNumber = post.postNumber.toInt(),
+            initialBody = quote,
+        )
+    }
+
+    private fun updateTopicNotificationToolbar(detail: TopicDetailState?) {
+        val item = notificationMenuItem ?: return
+        val isPrivateMessageThread = detail?.archetype
+            ?.trim()
+            ?.equals("private_message", ignoreCase = true) == true
+        item.isVisible = detail != null && !isPrivateMessageThread
+        if (detail == null || isPrivateMessageThread) return
+
+        val level = detail.details.notificationLevel ?: 1
+        val title = topicNotificationTitle(level)
+        item.title = getString(R.string.topic_detail_notification_button, title)
+        item.setIcon(topicNotificationIcon(level))
+        item.isEnabled = true
+    }
+
+    private fun topicNotificationTitle(level: Int): String {
+        return when (level) {
+            0 -> getString(R.string.topic_detail_notification_muted)
+            2 -> getString(R.string.topic_detail_notification_tracking)
+            3 -> getString(R.string.topic_detail_notification_watching)
+            else -> getString(R.string.topic_detail_notification_regular)
+        }
+    }
+
+    private fun topicNotificationIcon(level: Int): Int {
+        return when (level) {
+            0 -> R.drawable.ic_notifications_off
+            2, 3 -> R.drawable.ic_notifications_active
+            else -> R.drawable.ic_notifications
+        }
+    }
+
+    private fun showTopicSearch() {
+        searchOverlay.visibility = View.VISIBLE
+        searchOverlay.focusSearch()
+        recomputeTopicSearch()
+    }
+
+    private fun hideTopicSearch() {
+        topicSearchQuery = ""
+        topicSearchMatches = emptyList()
+        topicSearchIndex = -1
+        searchOverlay.reset()
+        searchOverlay.visibility = View.GONE
+        applyTopicSearchHighlight()
+    }
+
+    private fun updateTopicSearchQuery(query: String) {
+        topicSearchQuery = query
+        recomputeTopicSearch(scrollToActiveMatch = true)
+    }
+
+    private fun recomputeTopicSearch(scrollToActiveMatch: Boolean = false) {
+        if (searchOverlay.visibility != View.VISIBLE && topicSearchQuery.isBlank()) {
+            return
+        }
+        val posts = viewModel?.detail?.value?.postStream?.posts.orEmpty()
+        val previousPostId = topicSearchMatches.getOrNull(topicSearchIndex)?.postId
+        topicSearchMatches = TopicDetailPostRows.searchMatches(topicSearchQuery, posts)
+        topicSearchIndex = when {
+            topicSearchMatches.isEmpty() -> -1
+            previousPostId != null -> topicSearchMatches
+                .indexOfFirst { it.postId == previousPostId }
+                .takeIf { it >= 0 }
+                ?: 0
+            else -> 0
+        }
+        searchOverlay.updateResult(topicSearchIndex, topicSearchMatches.size)
+        applyTopicSearchHighlight()
+        if (scrollToActiveMatch) {
+            topicSearchMatches.getOrNull(topicSearchIndex)?.postNumber?.let(::scrollToPostNumber)
+        }
+    }
+
+    private fun navigateTopicSearch(delta: Int) {
+        if (topicSearchMatches.isEmpty()) return
+        val size = topicSearchMatches.size
+        topicSearchIndex = Math.floorMod(topicSearchIndex + delta, size)
+        searchOverlay.updateResult(topicSearchIndex, size)
+        applyTopicSearchHighlight()
+        topicSearchMatches[topicSearchIndex].postNumber.let(::scrollToPostNumber)
+    }
+
+    private fun applyTopicSearchHighlight() {
+        val highlightedPostId = topicSearchMatches.getOrNull(topicSearchIndex)?.postId
+        headerAdapter.highlightedPostId = highlightedPostId
+        postListAdapter.highlightedPostId = highlightedPostId
+    }
+
+    private fun showReplyComposer(replyToPostNumber: Int?, initialBody: String? = null) {
         val currentRoute = route ?: return
         val sheet = ReplyComposerSheet.newInstance(
             topicId = currentRoute.topicId,
             replyToPostNumber = replyToPostNumber,
+            initialBody = initialBody,
         ) {
             viewModel?.loadTopicDetail(
                 topicId = currentRoute.topicId.toULong(),
@@ -372,17 +631,6 @@ class TopicDetailActivity : AppCompatActivity() {
         )
     }
 
-    private fun showTopicBookmarkEditor(detail: TopicDetailState) {
-        showBookmarkEditor(
-            bookmarkableId = detail.id,
-            bookmarkableType = "Topic",
-            bookmarkId = detail.bookmarkId,
-            bookmarkName = detail.bookmarkName,
-            bookmarkReminderAt = detail.bookmarkReminderAt,
-            targetPostNumber = null,
-        )
-    }
-
     private fun showBookmarkEditor(
         bookmarkableId: ULong,
         bookmarkableType: String,
@@ -396,16 +644,34 @@ class TopicDetailActivity : AppCompatActivity() {
             hint = getString(R.string.topic_detail_bookmark_name_hint)
             setSingleLine(true)
         }
-        val reminderInput = EditText(this).apply {
-            setText(bookmarkReminderAt.orEmpty())
-            hint = getString(R.string.topic_detail_bookmark_reminder_hint)
-            setSingleLine(true)
+        val reminderSelection = BookmarkReminderSelection.from(bookmarkReminderAt)
+        val reminderToggle = androidx.appcompat.widget.SwitchCompat(this).apply {
+            text = getString(R.string.topic_detail_bookmark_reminder_label)
+            isChecked = reminderSelection.hasReminder
+        }
+        val reminderButton = TextView(this).apply {
+            setPadding(0, dp(12), 0, dp(4))
+            text = reminderSelection.displayText(this@TopicDetailActivity)
+            setTextColor(getColor(R.color.fire_accent))
+            setOnClickListener {
+                showBookmarkReminderDatePicker(reminderSelection, this)
+            }
+        }
+        reminderButton.visibility = if (reminderSelection.hasReminder) View.VISIBLE else View.GONE
+        reminderToggle.setOnCheckedChangeListener { _, isChecked ->
+            reminderSelection.hasReminder = isChecked
+            if (isChecked && reminderSelection.dateTime == null) {
+                reminderSelection.dateTime = ZonedDateTime.now().plusHours(1)
+            }
+            reminderButton.text = reminderSelection.displayText(this)
+            reminderButton.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 8, 48, 0)
+            setPadding(dp(24), dp(8), dp(24), 0)
             addView(nameInput)
-            addView(reminderInput)
+            addView(reminderToggle)
+            addView(reminderButton)
         }
 
         val dialog = AlertDialog.Builder(this)
@@ -427,24 +693,104 @@ class TopicDetailActivity : AppCompatActivity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reminderAt = reminderSelection.reminderAt()
+                val key = BookmarkReminderKey(bookmarkableId, bookmarkableType)
+                pendingBookmarkReminders[key] = BookmarkReminderRequest(
+                    bookmarkableId = bookmarkableId,
+                    bookmarkableType = bookmarkableType,
+                    topicId = route?.topicId ?: -1L,
+                    postNumber = targetPostNumber?.toInt() ?: -1,
+                    title = bookmarkReminderTitle(bookmarkableType, targetPostNumber),
+                    reminderAt = reminderAt,
+                )
                 viewModel?.saveBookmark(
                     bookmarkableId = bookmarkableId,
                     bookmarkableType = bookmarkableType,
                     bookmarkId = bookmarkId,
                     name = nameInput.text.toString(),
-                    reminderAt = reminderInput.text.toString(),
+                    reminderAt = reminderAt,
                     targetPostNumber = targetPostNumber,
                 )
                 dialog.dismiss()
             }
             if (bookmarkId != null) {
                 dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                    viewModel?.deleteBookmark(bookmarkId, targetPostNumber)
+                    viewModel?.deleteBookmark(
+                        bookmarkId = bookmarkId,
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                        targetPostNumber = targetPostNumber,
+                    )
                     dialog.dismiss()
                 }
             }
         }
         dialog.show()
+    }
+
+    private fun showBookmarkReminderDatePicker(
+        selection: BookmarkReminderSelection,
+        target: TextView,
+    ) {
+        val current = selection.dateTime ?: ZonedDateTime.now().plusHours(1)
+        DatePickerDialog(
+            this,
+            { _, year, month, dayOfMonth ->
+                TimePickerDialog(
+                    this,
+                    { _, hourOfDay, minute ->
+                        val selectedDateTime = current
+                            .withYear(year)
+                            .withMonth(month + 1)
+                            .withDayOfMonth(dayOfMonth)
+                            .withHour(hourOfDay)
+                            .withMinute(minute)
+                            .withSecond(0)
+                            .withNano(0)
+                        selection.dateTime = selectedDateTime.takeIf { it.isAfter(ZonedDateTime.now()) }
+                            ?: ZonedDateTime.now().plusMinutes(1).withSecond(0).withNano(0)
+                        target.text = selection.displayText(this)
+                    },
+                    current.hour,
+                    current.minute,
+                    true,
+                ).show()
+            },
+            current.year,
+            current.monthValue - 1,
+            current.dayOfMonth,
+        ).apply {
+            datePicker.minDate = System.currentTimeMillis()
+        }.show()
+    }
+
+    private fun scheduleBookmarkReminderAfterSave(request: BookmarkReminderRequest) {
+        if (request.reminderAt.isNullOrBlank()) {
+            BookmarkReminderScheduler.sync(this, request)
+            return
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingNotificationPermissionRequest = request
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        BookmarkReminderScheduler.sync(this, request)
+    }
+
+    private fun bookmarkReminderTitle(bookmarkableType: String, targetPostNumber: UInt?): String {
+        val detail = viewModel?.detail?.value
+        val title = detail?.title?.trim()?.takeIf { it.isNotEmpty() }
+            ?: route?.title?.trim()?.takeIf { it.isNotEmpty() }
+            ?: getString(R.string.topic_detail_title_fallback, route?.topicId?.toString().orEmpty())
+        return if (bookmarkableType.equals("Post", ignoreCase = true) && targetPostNumber != null) {
+            "$title #$targetPostNumber"
+        } else {
+            title
+        }
     }
 
     private fun showFlagPostOptions(post: TopicPostState) {
@@ -791,104 +1137,183 @@ class TopicDetailActivity : AppCompatActivity() {
     }
 
     private fun showReactionUsers(post: TopicPostState) {
+        showReactionUsers(post, reactionId = null)
+    }
+
+    private fun showReactionUsers(post: TopicPostState, reactionId: String?) {
         lifecycleScope.launch {
             try {
                 val groups = sessionStore.fetchReactionUsers(post.id)
+                    .filterForReaction(reactionId)
                 val message = if (groups.isEmpty()) {
                     getString(R.string.topic_detail_reaction_users_empty)
                 } else {
-                    groups.joinToString("\n\n") { group ->
-                        val users = group.users
-                            .joinToString(", ") { user ->
-                                user.name?.takeIf { it.isNotBlank() } ?: "@${user.username}"
-                            }
-                            .ifBlank { getString(R.string.topic_detail_reaction_users_empty) }
-                        getString(
-                            R.string.topic_detail_reaction_users_group,
-                            group.id,
-                            group.count.toString(),
-                        ) + "\n" + users
-                    }
+                    groups.joinToString("\n\n", transform = ::formatReactionUsersGroup)
                 }
                 AlertDialog.Builder(this@TopicDetailActivity)
-                    .setTitle(R.string.topic_detail_reaction_users_title)
+                    .setTitle(
+                        reactionId
+                            ?.let { ReactionPresentation.optionFor(it) }
+                            ?.let { getString(R.string.topic_detail_reaction_users_title_for_reaction, it.symbol, it.label) }
+                            ?: getString(R.string.topic_detail_reaction_users_title),
+                    )
                     .setMessage(message)
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@TopicDetailActivity,
+                FireToast.show(
+                    binding.root,
                     e.localizedMessage ?: getString(R.string.topic_detail_reaction_users_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             }
         }
+    }
+
+    private fun List<ReactionUsersGroupState>.filterForReaction(reactionId: String?): List<ReactionUsersGroupState> {
+        val trimmedReactionId = reactionId?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+        return filter { group -> group.id.equals(trimmedReactionId, ignoreCase = true) }
+    }
+
+    private fun formatReactionUsersGroup(group: ReactionUsersGroupState): String {
+        val users = group.users
+            .joinToString(", ") { user ->
+                user.name?.takeIf { it.isNotBlank() } ?: "@${user.username}"
+            }
+            .ifBlank { getString(R.string.topic_detail_reaction_users_empty) }
+        return getString(
+            R.string.topic_detail_reaction_users_group,
+            group.id,
+            group.count.toString(),
+        ) + "\n" + users
     }
 
     private fun showReactionPicker(post: TopicPostState) {
         val currentReaction = post.currentUserReaction
         if (currentReaction?.canUndo == false) {
-            Toast.makeText(
-                this,
+            FireToast.show(
+                binding.root,
                 R.string.topic_detail_reaction_locked,
-                Toast.LENGTH_SHORT,
-            ).show()
+                FireToast.Style.WARNING,
+            )
             return
         }
 
         lifecycleScope.launch {
-            val options = customReactionOptionsForPost(post)
+            val options = fullReactionOptionsForPost(post)
             if (options.isEmpty()) {
-                Toast.makeText(
-                    this@TopicDetailActivity,
+                FireToast.show(
+                    binding.root,
                     R.string.topic_detail_reaction_empty,
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.INFO,
+                )
                 return@launch
             }
 
-            val labels = options.map { option ->
-                val count = post.reactions
-                    .firstOrNull { it.id == option.id }
-                    ?.count
-                    ?: 0u
-                val label = getString(
-                    R.string.topic_detail_reaction_choice,
-                    "${option.symbol} ${option.label}",
-                    count.toString(),
-                )
-                if (currentReaction?.id == option.id) {
-                    getString(R.string.topic_detail_reaction_choice_selected, label)
-                } else {
-                    label
-                }
-            }.toTypedArray()
+            val content = LinearLayout(this@TopicDetailActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(8), dp(20), 0)
+            }
+            val searchLayout = TextInputLayout(this@TopicDetailActivity).apply {
+                hint = getString(R.string.topic_detail_reaction_search_hint)
+            }
+            val searchInput = TextInputEditText(searchLayout.context).apply {
+                isSingleLine = true
+            }
+            searchLayout.addView(
+                searchInput,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            val listView = ListView(this@TopicDetailActivity).apply {
+                divider = null
+                choiceMode = ListView.CHOICE_MODE_NONE
+            }
+            content.addView(
+                searchLayout,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            content.addView(
+                listView,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(360),
+                ),
+            )
 
-            AlertDialog.Builder(this@TopicDetailActivity)
+            var visibleOptions = options
+            val adapter = ArrayAdapter(
+                this@TopicDetailActivity,
+                android.R.layout.simple_list_item_1,
+                visibleOptions.map { option -> reactionChoiceLabel(post, option) }.toMutableList(),
+            )
+            fun submitVisibleOptions(query: String) {
+                visibleOptions = ReactionPresentation.filteredOptions(options, query)
+                adapter.clear()
+                adapter.addAll(visibleOptions.map { option -> reactionChoiceLabel(post, option) })
+                adapter.notifyDataSetChanged()
+            }
+            listView.adapter = adapter
+            listView.setOnItemLongClickListener { _, _, position, _ ->
+                visibleOptions.getOrNull(position)?.let { option ->
+                    showReactionUsers(post, option.id)
+                }
+                true
+            }
+            searchInput.doAfterTextChanged { text ->
+                submitVisibleOptions(text?.toString().orEmpty())
+            }
+
+            val dialog = AlertDialog.Builder(this@TopicDetailActivity)
                 .setTitle(
                     getString(
                         R.string.topic_detail_reaction_title,
                         post.postNumber.toString(),
                     ),
                 )
-                .setItems(labels) { _, which ->
-                    options.getOrNull(which)?.let { option ->
-                        viewModel?.toggleReaction(post, option.id)
-                    }
-                }
+                .setView(content)
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                .create()
+            listView.setOnItemClickListener { _, _, position, _ ->
+                visibleOptions.getOrNull(position)?.let { option ->
+                    viewModel?.toggleReaction(post, option.id)
+                    dialog.dismiss()
+                }
+            }
+            dialog.show()
         }
     }
 
-    private suspend fun customReactionOptionsForPost(post: TopicPostState): List<ReactionOption> {
+    private fun reactionChoiceLabel(post: TopicPostState, option: ReactionOption): String {
+        val count = post.reactions
+            .firstOrNull { it.id.equals(option.id, ignoreCase = true) }
+            ?.count
+            ?: 0u
+        val label = getString(
+            R.string.topic_detail_reaction_choice,
+            "${option.symbol} ${option.label}",
+            count.toString(),
+        )
+        return if (post.currentUserReaction?.id?.equals(option.id, ignoreCase = true) == true) {
+            getString(R.string.topic_detail_reaction_choice_selected, label)
+        } else {
+            label
+        }
+    }
+
+    private suspend fun fullReactionOptionsForPost(post: TopicPostState): List<ReactionOption> {
         if (enabledReactionIds.isEmpty()) {
             enabledReactionIds = runCatching {
                 sessionStore.snapshot().bootstrap.enabledReactionIds
             }.getOrDefault(emptyList())
             refreshReactionRows()
         }
-        return ReactionPresentation.customOptions(
+        return ReactionPresentation.fullOptions(
             reactionIds = enabledReactionIds,
             currentReactionId = post.currentUserReaction?.id,
         )
@@ -913,30 +1338,22 @@ class TopicDetailActivity : AppCompatActivity() {
             TopicNotificationOption(
                 level = 0,
                 title = getString(R.string.topic_detail_notification_muted),
-                description = getString(R.string.topic_detail_notification_muted_description),
             ),
             TopicNotificationOption(
                 level = 1,
                 title = getString(R.string.topic_detail_notification_regular),
-                description = getString(R.string.topic_detail_notification_regular_description),
             ),
             TopicNotificationOption(
                 level = 2,
                 title = getString(R.string.topic_detail_notification_tracking),
-                description = getString(R.string.topic_detail_notification_tracking_description),
             ),
             TopicNotificationOption(
                 level = 3,
                 title = getString(R.string.topic_detail_notification_watching),
-                description = getString(R.string.topic_detail_notification_watching_description),
             ),
         )
         val labels = options.map { option ->
-            getString(
-                R.string.topic_detail_notification_option,
-                option.title,
-                option.description,
-            )
+            option.title
         }.toTypedArray()
         val selectedIndex = options.indexOfFirst {
             it.level == (detail.details.notificationLevel ?: 1)
@@ -1196,7 +1613,7 @@ class TopicDetailActivity : AppCompatActivity() {
             .filter { it > 0u }
             .distinct()
         if (replyIds.isEmpty()) {
-            return sessionStore.fetchPostReplies(post.id, after = 1u)
+            return emptyList()
         }
 
         return replyIds.chunked(REPLY_CONTEXT_POST_BATCH_SIZE).flatMap { batch ->
@@ -1248,6 +1665,39 @@ class TopicDetailActivity : AppCompatActivity() {
             loadMorePostsPosted = false
             viewModel?.loadMorePosts()
         }
+    }
+
+    private fun updateVisiblePostTimings() {
+        val tracker = timingTracker ?: return
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+        if (firstVisible == RecyclerView.NO_POSITION || lastVisible == RecyclerView.NO_POSITION) {
+            tracker.updateVisiblePostNumbers(emptySet())
+            return
+        }
+
+        val visiblePostNumbers = buildSet {
+            for (adapterPosition in firstVisible..lastVisible) {
+                visiblePostNumberForAdapterPosition(adapterPosition)?.let(::add)
+            }
+        }
+        if (visiblePostNumbers.isNotEmpty()) {
+            tracker.recordInteraction()
+        }
+        tracker.updateVisiblePostNumbers(visiblePostNumbers)
+    }
+
+    private fun visiblePostNumberForAdapterPosition(adapterPosition: Int): UInt? {
+        if (adapterPosition < 0) return null
+        if (adapterPosition < headerAdapter.itemCount) {
+            return viewModel?.detail?.value?.postStream?.posts
+                ?.minByOrNull { it.postNumber }
+                ?.postNumber
+        }
+
+        val rowIndex = adapterPosition - headerAdapter.itemCount
+        return postListAdapter.currentList.getOrNull(rowIndex)?.post?.postNumber
     }
 
     private fun scrollToPostNumber(postNumber: UInt) {
@@ -1367,8 +1817,49 @@ class TopicDetailActivity : AppCompatActivity() {
 private data class TopicNotificationOption(
     val level: Int,
     val title: String,
-    val description: String,
 )
+
+private data class BookmarkReminderKey(
+    val bookmarkableId: ULong,
+    val bookmarkableType: String,
+)
+
+private class BookmarkReminderSelection(
+    var hasReminder: Boolean,
+    var dateTime: ZonedDateTime?,
+) {
+    fun reminderAt(): String? {
+        if (!hasReminder) return null
+        val normalizedDateTime = dateTime
+            ?.takeIf { it.isAfter(ZonedDateTime.now()) }
+            ?: ZonedDateTime.now().plusMinutes(1)
+        return normalizedDateTime
+            ?.withSecond(0)
+            ?.withNano(0)
+            ?.toInstant()
+            ?.toString()
+    }
+
+    fun displayText(context: Context): String {
+        val dateTime = dateTime ?: return context.getString(R.string.topic_detail_bookmark_reminder_pick)
+        return DateTimeFormatter
+            .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .format(dateTime.withZoneSameInstant(ZoneId.systemDefault()))
+    }
+
+    companion object {
+        fun from(rawValue: String?): BookmarkReminderSelection {
+            val parsed = rawValue
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()) }.getOrNull() }
+            return BookmarkReminderSelection(
+                hasReminder = parsed != null,
+                dateTime = parsed,
+            )
+        }
+    }
+}
 
 private data class PostFlagOption(
     val id: UInt,

@@ -1,6 +1,9 @@
 import Combine
 import UIKit
 
+private let fireTopicDetailSnapshotBuildDiagnosticThresholdMs: Int64 = 50
+private let fireTopicDetailSnapshotApplyDiagnosticThresholdMs: Int64 = 16
+
 @MainActor
 final class FireTopicDetailViewController: UIViewController, UIGestureRecognizerDelegate {
     let viewModel: FireAppViewModel
@@ -28,7 +31,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private lazy var feedUpdatePipeline = FireTopicDetailFeedUpdatePipeline(
         feedController: feedController,
         paginationCoordinator: paginationCoordinator,
-        visibilityCoordinator: visibilityCoordinator
+        visibilityCoordinator: visibilityCoordinator,
+        logger: viewModel.topicDetailLogger()
     )
 
     private lazy var modalRouter = FireTopicDetailModalRouter(
@@ -40,6 +44,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private lazy var toolbarCoordinator = FireTopicDetailToolbarCoordinator(
         viewController: self,
         actions: .init(
+            onToggleSearch: { [weak self] in
+                self?.toggleTopicSearch()
+            },
             onPresentTopicEditor: { [weak self] in
                 self?.presentTopicEditor()
             },
@@ -64,9 +71,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         },
         isLoadingPostReplyContext: { [weak self] postID in
             self?.topicDetailStore.isLoadingPostReplyContext(postID: postID) ?? false
-        },
-        postReplyContextError: { [weak self] postID in
-            self?.topicDetailStore.postReplyContextError(for: postID)
         },
         onVisiblePostNumbersChanged: { [weak self] visiblePostNumbers in
             self?.handleVisiblePostNumbersChanged(visiblePostNumbers)
@@ -115,6 +119,12 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         },
         onSelectReaction: { [weak self] post, reactionID in
             self?.toggleReaction(reactionID, for: post)
+        },
+        onOpenReactionPicker: { [weak self] post in
+            self?.presentReactionPicker(for: post)
+        },
+        onQuotePost: { [weak self] post in
+            self?.openQuoteComposer(for: post)
         },
         onEditPost: { [weak self] post in
             self?.presentPostEditor(post)
@@ -171,6 +181,19 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private var replyDraft = ""
     private var quickReplyError: String?
     private var keyboardFrameInScreen: CGRect = .null
+    private let topicSearchBar = FireTopicSearchBar()
+    private var topicSearchQuery = ""
+    private var topicSearchMatches: [FireTopicSearchMatch] = []
+    private var topicSearchIndex = -1
+    private var lastLayoutDiagnosticsSignature: String?
+    private var repeatedLayoutDiagnosticsCount = 0
+    private var activeTopicSearchMatch: FireTopicSearchMatch? {
+        guard topicSearchIndex >= 0,
+              topicSearchIndex < topicSearchMatches.count else {
+            return nil
+        }
+        return topicSearchMatches[topicSearchIndex]
+    }
 
     init(
         viewModel: FireAppViewModel,
@@ -193,6 +216,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         self.detailOwnerToken = "ios.topic-detail.\(row.topic.id).\(UUID().uuidString.lowercased())"
         self.timingTracker = FireTopicTimingTracker(topicId: row.topic.id)
         super.init(nibName: nil, bundle: nil)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller init topic_id=\(row.topic.id) post_number=\(scrollToPostNumber.map(String.init) ?? "nil") owner_token=\(detailOwnerToken) row_title_length=\(row.topic.title.count)"
+        )
     }
 
     @available(*, unavailable)
@@ -207,27 +233,51 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     }
 
     override func loadView() {
+        viewModel.topicDetailLogger()?.debug("topic detail loadView start topic_id=\(row.topic.id)")
         view = rootNode.view
+        viewModel.topicDetailLogger()?.debug("topic detail loadView complete topic_id=\(row.topic.id)")
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidLoad start topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         view.backgroundColor = .systemBackground
         view.tintColor = FireTopicDetailCellColors.accent
         configureRuntime()
+        configureTopicSearchBar()
         configureNavigationAppearance()
         toolbarCoordinator.configureNavigationItem(navigationItem)
         updateDismissButtonIfNeeded()
         view.addGestureRecognizer(pageBackEdgePanGestureRecognizer)
         beginPageLifecycle()
         buildAndApplySnapshot()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidLoad complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let startedAt = Date()
+        let diagnosticsSignature = layoutDiagnosticsSignature()
+        let shouldLogLayout = shouldLogLayoutDiagnostics(signature: diagnosticsSignature)
+        if shouldLogLayout {
+            viewModel.topicDetailLogger()?.debug(
+                "topic detail viewDidLayoutSubviews start topic_id=\(row.topic.id) signature=\(diagnosticsSignature) repeated_count=\(repeatedLayoutDiagnosticsCount)"
+            )
+        }
+        layoutTopicSearchBar()
         quickReplyBarNode.updateLayoutWidth(view.bounds.width)
         updateBottomChromeInset()
         feedController.invalidateLayoutIfWidthChanged()
+        if shouldLogLayout {
+            viewModel.topicDetailLogger()?.debug(
+                "topic detail viewDidLayoutSubviews complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) signature=\(diagnosticsSignature)"
+            )
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -237,13 +287,25 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewWillAppear topic_id=\(row.topic.id) animated=\(animated) navigation_stack_count=\(navigationController?.viewControllers.count ?? 0)"
+        )
+        viewModel.topicDetailLogger()?.debug("topic detail viewWillAppear configure navigation start topic_id=\(row.topic.id)")
         configureNavigationAppearance()
         updateDismissButtonIfNeeded()
+        viewModel.topicDetailLogger()?.debug("topic detail viewWillAppear configure navigation complete topic_id=\(row.topic.id)")
         viewModel.setAPMRoute("topic.detail.\(row.topic.id)")
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewWillAppear complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidAppear topic_id=\(row.topic.id) animated=\(animated) view_attached=\(feedController.isViewAttached)"
+        )
         navigationController?.interactivePopGestureRecognizer?.isEnabled =
             (navigationController?.viewControllers.count ?? 0) > 1
         pageBackEdgePanGestureRecognizer.isEnabled = canNavigateBackFromTopicDetail
@@ -254,6 +316,9 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        viewModel.topicDetailLogger()?.info(
+            "topic detail viewDidDisappear topic_id=\(row.topic.id) animated=\(animated) moving_from_parent=\(isMovingFromParent) being_dismissed=\(isBeingDismissed)"
+        )
         if isMovingFromParent || isBeingDismissed {
             endPageLifecycle()
         }
@@ -325,6 +390,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             bookmarkID: detail?.bookmarkId,
             bookmarkableID: topic.id,
             bookmarkableType: "Topic",
+            topicID: topic.id,
+            postNumber: nil,
             title: displayedTopicTitle,
             initialName: detail?.bookmarkName,
             initialReminderAt: detail?.bookmarkReminderAt,
@@ -338,6 +405,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             bookmarkID: post.bookmarkId,
             bookmarkableID: post.id,
             bookmarkableType: "Post",
+            topicID: topic.id,
+            postNumber: post.postNumber,
             title: username.isEmpty ? "#\(post.postNumber)" : "#\(post.postNumber) · \(username)",
             initialName: post.bookmarkName,
             initialReminderAt: post.bookmarkReminderAt,
@@ -346,9 +415,12 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     }
 
     private func configureRuntime() {
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.debug("topic detail configure runtime start topic_id=\(row.topic.id)")
         feedController.paginationCoordinator = paginationCoordinator
         feedController.visibilityCoordinator = visibilityCoordinator
         feedController.layoutManager = layoutManager
+        feedController.diagnosticsLogger = viewModel.topicDetailLogger()
         feedController.onRefresh = { [weak self] in
             await self?.performRefresh()
         }
@@ -401,9 +473,33 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 self?.handleQuickReplyFocusChanged(focused)
             }
         )
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail configure runtime complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt))"
+        )
+    }
+
+    private func configureTopicSearchBar() {
+        topicSearchBar.translatesAutoresizingMaskIntoConstraints = true
+        topicSearchBar.isHidden = true
+        topicSearchBar.onQueryChanged = { [weak self] query in
+            self?.updateTopicSearchQuery(query)
+        }
+        topicSearchBar.onPrevious = { [weak self] in
+            self?.navigateTopicSearch(delta: -1)
+        }
+        topicSearchBar.onNext = { [weak self] in
+            self?.navigateTopicSearch(delta: 1)
+        }
+        topicSearchBar.onClose = { [weak self] in
+            self?.hideTopicSearch()
+        }
+        view.addSubview(topicSearchBar)
     }
 
     private func beginPageLifecycle() {
+        viewModel.topicDetailLogger()?.info(
+            "topic detail lifecycle begin topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         topicDetailStore.beginTopicDetailLifecycle(
             topicId: row.topic.id,
             ownerToken: detailOwnerToken
@@ -411,7 +507,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
         timingTracker.start { [weak viewModel] topicId, topicTimeMs, timings in
             guard let viewModel else { return false }
-            return await viewModel.reportTopicTimings(
+            return await viewModel.topicInteraction.reportTopicTimings(
                 topicId: topicId,
                 topicTimeMs: topicTimeMs,
                 timings: timings
@@ -422,9 +518,15 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         subscribeToStoreRevisions()
         kickOffInitialLoad()
         kickOffMessageBusSubscription()
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail lifecycle begin scheduled tasks topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
     }
 
     private func endPageLifecycle() {
+        viewModel.topicDetailLogger()?.info(
+            "topic detail lifecycle end topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         initialLoadTask?.cancel()
         initialLoadTask = nil
         subscriptionTask?.cancel()
@@ -447,9 +549,19 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func kickOffInitialLoad() {
         initialLoadTask?.cancel()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail initial load task scheduled topic_id=\(row.topic.id) target_post=\(scrollToPostNumber.map(String.init) ?? "nil")"
+        )
         initialLoadTask = Task { [weak self] in
             guard let self else { return }
+            let startedAt = Date()
+            self.viewModel.topicDetailLogger()?.info(
+                "topic detail initial load task start topic_id=\(self.row.topic.id) target_post=\(self.scrollToPostNumber.map(String.init) ?? "nil")"
+            )
             await self.loadTopicDetail(targetPostNumber: self.scrollToPostNumber)
+            self.viewModel.topicDetailLogger()?.info(
+                "topic detail initial load task complete topic_id=\(self.row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) cancelled=\(Task.isCancelled)"
+            )
         }
     }
 
@@ -550,11 +662,20 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func kickOffMessageBusSubscription() {
         subscriptionTask?.cancel()
+        viewModel.topicDetailLogger()?.debug(
+            "topic detail messagebus subscription task scheduled topic_id=\(row.topic.id) owner_token=\(detailOwnerToken)"
+        )
         subscriptionTask = Task { [weak self] in
             guard let self else { return }
+            self.viewModel.topicDetailLogger()?.debug(
+                "topic detail messagebus subscription task start topic_id=\(self.row.topic.id) owner_token=\(self.detailOwnerToken)"
+            )
             await self.topicDetailStore.maintainTopicDetailSubscription(
                 topicId: self.row.topic.id,
                 ownerToken: self.detailOwnerToken
+            )
+            self.viewModel.topicDetailLogger()?.debug(
+                "topic detail messagebus subscription task complete topic_id=\(self.row.topic.id) cancelled=\(Task.isCancelled)"
             )
         }
     }
@@ -564,11 +685,18 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         force: Bool = false
     ) async {
         let topicSlug = displayedTopicSlug
+        let startedAt = Date()
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller load request start topic_id=\(row.topic.id) force=\(force) target_post=\(targetPostNumber.map(String.init) ?? "nil") slug_present=\(!topicSlug.isEmpty)"
+        )
         await topicDetailStore.loadTopicDetail(
             topicId: row.topic.id,
             topicSlug: topicSlug.isEmpty ? nil : topicSlug,
             targetPostNumber: targetPostNumber,
             force: force
+        )
+        viewModel.topicDetailLogger()?.info(
+            "topic detail controller load request complete topic_id=\(row.topic.id) elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt)) has_detail=\(topicDetailStore.topicDetail(for: row.topic.id) != nil) is_loading=\(topicDetailStore.isLoadingTopic(topicId: row.topic.id)) error_present=\(topicDetailStore.errorMessage(for: row.topic.id) != nil)"
         )
     }
 
@@ -682,7 +810,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         FireTopicDetailInteractionState(
             mutatingPostIDs: topicDetailStore.mutatingPostIDs,
             loadingPostReplyContextIDs: topicDetailStore.loadingPostReplyContextIDs,
-            postReplyContextErrorsByPostID: topicDetailStore.postReplyContextErrorsByPostID,
             expandedPostTextIDs: expandedPostTextIDs,
             expandedReplyRootPostIDs: expandedReplyRootPostIDs
         )
@@ -723,6 +850,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             canWriteInteractions: state.route.canWriteInteractions,
             postLookup: state.feed.postLookup,
             interactionState: state.interaction,
+            activeSearchPostID: activeTopicSearchMatch?.postID,
             snapshotInvalidationToken: AnyHashable(FireTopicDetailFeedInvalidationToken(
                 topicID: state.topic.id,
                 topicCollectionRevision: state.feed.topicCollectionRevision,
@@ -737,6 +865,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 canWriteInteractions: state.route.canWriteInteractions,
                 currentUsername: state.route.currentUsername ?? "",
                 baseURLString: state.route.baseURLString,
+                activeSearchPostID: activeTopicSearchMatch?.postID,
                 expandedReplyRootPostIDs: state.interaction.expandedReplyRootPostIDs
             )),
             interactions: runtimeInteractions
@@ -759,10 +888,16 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         applyChromeState(chrome: pageState.chrome, composer: pageState.composer)
 
         snapshotBuildTask?.cancel()
-        snapshotBuildTask = Task.detached(priority: .userInitiated) { [weak self, snapshotAssembler, input, configuration, generation] in
+        let logger = viewModel.topicDetailLogger()
+        snapshotBuildTask = Task.detached(priority: .userInitiated) { [weak self, snapshotAssembler, input, configuration, generation, logger] in
             let buildStartedAt = Date()
             let snapshot = snapshotAssembler.buildSnapshot(from: input)
             let buildDurationMs = Self.elapsedMilliseconds(since: buildStartedAt)
+            if buildDurationMs >= fireTopicDetailSnapshotBuildDiagnosticThresholdMs {
+                logger?.debug(
+                    "topic detail snapshot build slow topic_id=\(configuration.row.topic.id) generation=\(generation) build_ms=\(buildDurationMs) item_count=\(snapshot.items.count)"
+                )
+            }
 
             await MainActor.run { [weak self] in
                 guard let self,
@@ -817,13 +952,36 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         buildDurationMs: Int64,
         applyDurationMs: Int64
     ) {
+        guard buildDurationMs >= fireTopicDetailSnapshotBuildDiagnosticThresholdMs
+                || applyDurationMs >= fireTopicDetailSnapshotApplyDiagnosticThresholdMs
+                || !feedController.isViewAttached else {
+            return
+        }
         viewModel.topicDetailLogger()?.debug(
-            "topic detail snapshot apply topic_id=\(topic.id) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil)"
+            "topic detail snapshot apply diagnostic topic_id=\(topic.id) snapshot_build_ms=\(buildDurationMs) feed_apply_ms=\(applyDurationMs) snapshot_item_count=\(snapshot.items.count) topic_collection_revision=\(configuration.topicCollectionRevision) has_detail=\(configuration.detail != nil) feed_attached=\(feedController.isViewAttached)"
         )
     }
 
     nonisolated private static func elapsedMilliseconds(since startedAt: Date) -> Int64 {
         Int64((Date().timeIntervalSince(startedAt) * 1_000).rounded())
+    }
+
+    nonisolated private static func formatSize(_ size: CGSize) -> String {
+        "\(Int(size.width.rounded()))x\(Int(size.height.rounded()))"
+    }
+
+    private func layoutDiagnosticsSignature() -> String {
+        "bounds=\(Self.formatSize(view.bounds.size)) safe_bottom=\(Int(view.safeAreaInsets.bottom.rounded())) feed_attached=\(feedController.isViewAttached)"
+    }
+
+    private func shouldLogLayoutDiagnostics(signature: String) -> Bool {
+        guard lastLayoutDiagnosticsSignature == signature else {
+            lastLayoutDiagnosticsSignature = signature
+            repeatedLayoutDiagnosticsCount = 0
+            return true
+        }
+        repeatedLayoutDiagnosticsCount += 1
+        return repeatedLayoutDiagnosticsCount.isMultiple(of: 500)
     }
 
     private func handleLayoutRevisionChanged() {
@@ -856,6 +1014,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func updateBottomChromeInset(animatedWith notification: Notification? = nil) {
         rootNode.updateBottomSafeAreaInset(currentBottomChromeInset)
+        updateFeedTopInset()
 
         guard let notification else { return }
         let duration = (notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?
@@ -874,6 +1033,10 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private var currentBottomChromeInset: CGFloat {
         max(view.safeAreaInsets.bottom, keyboardOverlapHeight)
+    }
+
+    private var currentSearchBarHeight: CGFloat {
+        topicSearchBar.isHidden ? 0 : topicSearchBar.bounds.height
     }
 
     private var keyboardOverlapHeight: CGFloat {
@@ -911,6 +1074,8 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
             handleTopicLink(payload)
         case .badge:
             modalRouter.push(route: route)
+        case .notifications, .profileTab, .search:
+            break
         }
     }
 
@@ -954,9 +1119,6 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func openPostReplies(for post: TopicPostState) {
         expandedReplyRootPostIDs.insert(post.id)
         buildAndApplySnapshot()
-        guard shouldLoadReplyContext(for: post) else {
-            return
-        }
         Task {
             await topicDetailStore.loadPostReplyContextIfNeeded(
                 topicID: topic.id,
@@ -965,19 +1127,89 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         }
     }
 
-    private func shouldLoadReplyContext(for post: TopicPostState) -> Bool {
-        let declaredReplyCount = Int(post.replyCount)
-        guard declaredReplyCount > 0 else {
-            return false
+    private func toggleTopicSearch() {
+        if topicSearchBar.isHidden {
+            showTopicSearch()
+        } else {
+            hideTopicSearch()
         }
-        guard let renderState = topicDetailStore.topicRenderState(for: topic.id) else {
-            return true
+    }
+
+    private func showTopicSearch() {
+        topicSearchBar.isHidden = false
+        layoutTopicSearchBar()
+        updateFeedTopInset()
+        topicSearchBar.focusInput()
+        recomputeTopicSearch(scrollToActiveMatch: false)
+    }
+
+    private func hideTopicSearch() {
+        topicSearchQuery = ""
+        topicSearchMatches = []
+        topicSearchIndex = -1
+        topicSearchBar.reset()
+        topicSearchBar.isHidden = true
+        view.endEditing(true)
+        layoutTopicSearchBar()
+        updateFeedTopInset()
+        buildAndApplySnapshot()
+    }
+
+    private func updateTopicSearchQuery(_ query: String) {
+        topicSearchQuery = query
+        recomputeTopicSearch(scrollToActiveMatch: true)
+    }
+
+    private func recomputeTopicSearch(scrollToActiveMatch: Bool) {
+        if topicSearchBar.isHidden && topicSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
         }
-        return FireTopicDetailReplyContextLoadPolicy.shouldLoadReplyContext(
-            for: post,
-            replyRows: renderState.replyRows,
-            postLookup: topicDetailStore.topicPostLookup(for: topic.id)
+        let previousPostID = activeTopicSearchMatch?.postID
+        topicSearchMatches = FireTopicPresentation.topicSearchMatches(
+            query: topicSearchQuery,
+            posts: detail?.postStream.posts ?? []
         )
+        if topicSearchMatches.isEmpty {
+            topicSearchIndex = -1
+        } else if let previousPostID,
+                  let index = topicSearchMatches.firstIndex(where: { $0.postID == previousPostID }) {
+            topicSearchIndex = index
+        } else {
+            topicSearchIndex = 0
+        }
+        topicSearchBar.updateResult(index: topicSearchIndex, total: topicSearchMatches.count)
+        buildAndApplySnapshot()
+        if scrollToActiveMatch, let match = activeTopicSearchMatch {
+            openPostNumber(match.postNumber)
+        }
+    }
+
+    private func navigateTopicSearch(delta: Int) {
+        guard !topicSearchMatches.isEmpty else { return }
+        let size = topicSearchMatches.count
+        topicSearchIndex = (topicSearchIndex + delta + size) % size
+        topicSearchBar.updateResult(index: topicSearchIndex, total: size)
+        buildAndApplySnapshot()
+        if let match = activeTopicSearchMatch {
+            openPostNumber(match.postNumber)
+        }
+    }
+
+    private func layoutTopicSearchBar() {
+        let height: CGFloat = topicSearchBar.isHidden ? 0 : 56
+        let targetFrame = CGRect(
+            x: 0,
+            y: view.safeAreaInsets.top,
+            width: view.bounds.width,
+            height: height
+        )
+        if topicSearchBar.frame != targetFrame {
+            topicSearchBar.frame = targetFrame
+        }
+    }
+
+    private func updateFeedTopInset() {
+        rootNode.updateTopChromeInset(currentSearchBarHeight)
     }
 
     private func clearComposerTarget() {
@@ -1021,6 +1253,60 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 self.buildAndApplyChromeState()
                 Task {
                     await self.loadTopicDetail(force: true)
+                }
+            },
+            onSubmissionNotice: { [weak self] message in
+                self?.modalRouter.presentNotice(message: message)
+            }
+        )
+    }
+
+    private func openQuoteComposer(for post: TopicPostState) {
+        guard let quote = FireQuoteMarkdown.build(
+            username: post.username,
+            postNumber: post.postNumber,
+            topicID: topic.id,
+            plainText: post.renderDocument?.plainText ?? ""
+        ) else {
+            modalRouter.presentNotice(message: "该帖子暂无可引用内容。")
+            return
+        }
+
+        let quickReplyDraft = replyDraft
+        let initialBody = FireComposerInitialBody.merge(
+            initialBody: quote,
+            currentBody: quickReplyDraft
+        ).text
+        let quoteSelectionLocation = (quote as NSString).length
+        composerContext = FireReplyComposerContext(
+            topicId: topic.id,
+            postId: post.id,
+            replyToPostNumber: post.postNumber,
+            replyToUsername: post.username
+        )
+        quickReplyBarNode.resignInputFocus()
+        buildAndApplyChromeState()
+        modalRouter.presentAdvancedComposer(
+            route: FireComposerRoute(
+                kind: .advancedReply(
+                    topicID: topic.id,
+                    topicTitle: displayedTopicTitle,
+                    categoryID: displayedCategoryId,
+                    replyToPostNumber: post.postNumber,
+                    replyToUsername: post.username,
+                    isPrivateMessage: isPrivateMessageThread
+                )
+            ),
+            initialBody: initialBody,
+            initialBodySelectionLocation: quoteSelectionLocation,
+            onReplySubmitted: { [weak self] in
+                guard let self else { return }
+                self.replyDraft = ""
+                self.composerContext = nil
+                self.quickReplyError = nil
+                self.buildAndApplyChromeState()
+                Task {
+                    await self.loadTopicDetail(targetPostNumber: post.postNumber, force: true)
                 }
             },
             onSubmissionNotice: { [weak self] message in
@@ -1092,6 +1378,33 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         )
     }
 
+    private func presentReactionPicker(for post: TopicPostState) {
+        if post.currentUserReaction?.canUndo == false {
+            modalRouter.presentNotice(message: "当前表情回应已超过可撤销时间，暂时不能修改。")
+            return
+        }
+
+        let options = FireTopicPresentation.reactionOptions(
+            from: viewModel.session.bootstrap.enabledReactionIds,
+            currentReactionID: post.currentUserReaction?.id
+        )
+        guard !options.isEmpty else {
+            modalRouter.presentNotice(message: "当前没有可用的表情回应。")
+            return
+        }
+
+        modalRouter.presentReactionPicker(
+            post: post,
+            options: options,
+            onSelectReaction: { [weak self] reactionID in
+                self?.toggleReaction(reactionID, for: post)
+            },
+            onShowUsers: { [weak self] reactionID in
+                self?.showReactionUsers(for: post, reactionID: reactionID)
+            }
+        )
+    }
+
     private func applyReactionChange(
         from currentReaction: TopicReactionState?,
         to desiredReactionID: String?,
@@ -1122,6 +1435,18 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
         }
     }
 
+    private func showReactionUsers(for post: TopicPostState, reactionID: String?) {
+        Task { @MainActor in
+            do {
+                let groups = try await viewModel.topicInteraction.fetchReactionUsers(postID: post.id)
+                let filteredGroups = groups.filter(for: reactionID)
+                modalRouter.presentReactionUsers(groups: filteredGroups, reactionID: reactionID)
+            } catch {
+                modalRouter.presentNotice(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func transitionReaction(
         from currentReactionID: String?,
         to desiredReactionID: String?,
@@ -1130,11 +1455,11 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     ) async throws {
         switch (currentReactionID, desiredReactionID) {
         case (nil, "heart"):
-            try await topicDetailStore.setPostLiked(topicId: topic.id, postId: postId, liked: true)
+            try await viewModel.topicInteraction.setPostLiked(topicId: topic.id, postId: postId, liked: true)
         case ("heart", nil):
-            try await topicDetailStore.setPostLiked(topicId: topic.id, postId: postId, liked: false)
+            try await viewModel.topicInteraction.setPostLiked(topicId: topic.id, postId: postId, liked: false)
         default:
-            try await topicDetailStore.togglePostReaction(
+            try await viewModel.topicInteraction.togglePostReaction(
                 topicId: topic.id,
                 postId: postId,
                 reactionId: toggledReactionId
@@ -1238,7 +1563,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func updateTopicNotificationLevel(_ option: FireTopicNotificationLevelOption) {
         Task { @MainActor in
             do {
-                try await viewModel.setTopicNotificationLevel(
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
                     topicID: topic.id,
                     notificationLevel: option.rawValue,
                     recoveryOriginURL: topicCloudflareRecoveryURL
@@ -1253,7 +1578,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func toggleTopicVote() async {
         guard let detail else { return }
         do {
-            _ = try await viewModel.voteTopic(
+            _ = try await viewModel.topicInteraction.voteTopic(
                 topicID: topic.id,
                 voted: !detail.userVoted,
                 recoveryOriginURL: topicCloudflareRecoveryURL
@@ -1265,7 +1590,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
 
     private func presentTopicVoters() async {
         do {
-            let voters = try await viewModel.fetchTopicVoters(topicID: topic.id)
+            let voters = try await viewModel.topicInteraction.fetchTopicVoters(topicID: topic.id)
             modalRouter.presentTopicVoters(voters, isLoading: false)
         } catch {
             modalRouter.presentNotice(message: error.localizedDescription)
@@ -1279,7 +1604,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     ) {
         Task { @MainActor in
             do {
-                _ = try await viewModel.votePoll(
+                _ = try await viewModel.topicInteraction.votePoll(
                     topicID: topic.id,
                     postID: post.id,
                     pollName: poll.name,
@@ -1295,7 +1620,7 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
     private func removePollVote(for post: TopicPostState, poll: PollState) {
         Task { @MainActor in
             do {
-                _ = try await viewModel.unvotePoll(
+                _ = try await viewModel.topicInteraction.unvotePoll(
                     topicID: topic.id,
                     postID: post.id,
                     pollName: poll.name,
@@ -1305,5 +1630,128 @@ final class FireTopicDetailViewController: UIViewController, UIGestureRecognizer
                 modalRouter.presentNotice(message: error.localizedDescription)
             }
         }
+    }
+}
+
+@MainActor
+private final class FireTopicSearchBar: UIView, UITextFieldDelegate {
+    var onQueryChanged: ((String) -> Void)?
+    var onPrevious: (() -> Void)?
+    var onNext: (() -> Void)?
+    var onClose: (() -> Void)?
+
+    private let textField = UITextField()
+    private let resultLabel = UILabel()
+    private let previousButton = UIButton(type: .system)
+    private let nextButton = UIButton(type: .system)
+    private let closeButton = UIButton(type: .system)
+    private let stackView = UIStackView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func focusInput() {
+        textField.becomeFirstResponder()
+    }
+
+    func reset() {
+        textField.text = ""
+        updateResult(index: -1, total: 0)
+    }
+
+    func updateResult(index: Int, total: Int) {
+        resultLabel.text = total > 0 && index >= 0 ? "\(index + 1)/\(total)" : "0/0"
+    }
+
+    private func setup() {
+        backgroundColor = .systemBackground
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.08
+        layer.shadowRadius = 8
+        layer.shadowOffset = CGSize(width: 0, height: 2)
+
+        stackView.axis = .horizontal
+        stackView.alignment = .center
+        stackView.spacing = 8
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stackView)
+
+        textField.borderStyle = .roundedRect
+        textField.placeholder = "搜索已加载帖子"
+        textField.returnKeyType = .search
+        textField.clearButtonMode = .whileEditing
+        textField.delegate = self
+        textField.addTarget(self, action: #selector(textDidChange), for: .editingChanged)
+        textField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        resultLabel.font = .preferredFont(forTextStyle: .caption1)
+        resultLabel.adjustsFontForContentSizeCategory = true
+        resultLabel.textColor = .secondaryLabel
+        resultLabel.textAlignment = .center
+        resultLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        updateResult(index: -1, total: 0)
+
+        configureButton(previousButton, systemName: "chevron.up", label: "上一个结果", action: #selector(previousTapped))
+        configureButton(nextButton, systemName: "chevron.down", label: "下一个结果", action: #selector(nextTapped))
+        configureButton(closeButton, systemName: "xmark", label: "关闭搜索", action: #selector(closeTapped))
+
+        stackView.addArrangedSubview(textField)
+        stackView.addArrangedSubview(resultLabel)
+        stackView.addArrangedSubview(previousButton)
+        stackView.addArrangedSubview(nextButton)
+        stackView.addArrangedSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            previousButton.widthAnchor.constraint(equalToConstant: 34),
+            previousButton.heightAnchor.constraint(equalToConstant: 34),
+            nextButton.widthAnchor.constraint(equalToConstant: 34),
+            nextButton.heightAnchor.constraint(equalToConstant: 34),
+            closeButton.widthAnchor.constraint(equalToConstant: 34),
+            closeButton.heightAnchor.constraint(equalToConstant: 34),
+        ])
+    }
+
+    private func configureButton(
+        _ button: UIButton,
+        systemName: String,
+        label: String,
+        action: Selector
+    ) {
+        button.setImage(UIImage(systemName: systemName), for: .normal)
+        button.tintColor = FireTopicDetailCellColors.accent
+        button.accessibilityLabel = label
+        button.addTarget(self, action: action, for: .touchUpInside)
+    }
+
+    @objc private func textDidChange() {
+        onQueryChanged?(textField.text ?? "")
+    }
+
+    @objc private func previousTapped() {
+        onPrevious?()
+    }
+
+    @objc private func nextTapped() {
+        onNext?()
+    }
+
+    @objc private func closeTapped() {
+        onClose?()
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        onNext?()
+        return true
     }
 }

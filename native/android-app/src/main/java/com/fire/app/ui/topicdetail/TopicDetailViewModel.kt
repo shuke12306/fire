@@ -2,6 +2,7 @@ package com.fire.app.ui.topicdetail
 
 import android.util.LruCache
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fire.app.TopicPresentation
 import com.fire.app.core.error.FireErrorReporter
@@ -71,6 +72,9 @@ class TopicDetailViewModel(
     private val _actionError = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val actionError = _actionError.asSharedFlow()
 
+    private val _bookmarkEvents = MutableSharedFlow<BookmarkEvent>(extraBufferCapacity = 1)
+    val bookmarkEvents = _bookmarkEvents.asSharedFlow()
+
     private var sourceCursor: TopicSourceCursorState? = null
     private var sourceSnapshot: TopicDetailSourceSnapshotState? = null
     private var treePresentation: TopicTreePresentationState? = null
@@ -85,6 +89,7 @@ class TopicDetailViewModel(
     private var topicAiSummaryUnavailable: Boolean = false
     private var subscribedTopicId: ULong? = null
     private var subscribedOwnerToken: String? = null
+    private val expandedReplyRootPostIds = mutableSetOf<ULong>()
 
     val hasMorePosts: Boolean get() = sourceCursor != null
 
@@ -95,6 +100,7 @@ class TopicDetailViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
+            prepareForTopicLoad(topicId)
             try {
                 val shouldUseSuggestedUnreadRootTarget = targetPostNumber == null && _detail.value == null
                 val payload = fetchTopicDetailPagePayload(
@@ -104,15 +110,15 @@ class TopicDetailViewModel(
                     trackVisit = true,
                     allowSuggestedUnreadRoot = shouldUseSuggestedUnreadRootTarget,
                 )
-                val allPosts = applyFetchedPayload(payload)
-                preloadRenderContent(allPosts)
-                loadTopicAiSummaryIfNeeded(topicId, _detail.value)
-                maintainTopicDetailMessageBus(topicId, payload.sourceSnapshot.header.messageBusLastId)
                 val scrollTargetPostNumber = TopicDetailPostRows.initialScrollTargetPostNumber(
                     explicitTargetPostNumber = targetPostNumber,
                     suggestedUnreadRootPostNumber = payload.treePresentation.firstUnreadRootPostNumber,
                     shouldUseSuggestedUnreadRootTarget = shouldUseSuggestedUnreadRootTarget,
                 )
+                val allPosts = applyFetchedPayload(payload, focusedPostNumber = scrollTargetPostNumber)
+                preloadRenderContent(allPosts)
+                loadTopicAiSummaryIfNeeded(topicId, _detail.value)
+                maintainTopicDetailMessageBus(topicId, payload.sourceSnapshot.header.messageBusLastId)
                 scrollTargetPostNumber?.let { scrollToPostWhenLoaded(it) }
             } catch (e: CancellationException) {
                 throw e
@@ -123,11 +129,38 @@ class TopicDetailViewModel(
                     sessionStore = sessionStore,
                     fallbackMessage = "加载话题详情失败",
                 )
-                _errorMessage.value = reported.displayMessage
+                if (_detail.value == null && _postRows.value.isEmpty()) {
+                    _errorMessage.value = reported.displayMessage
+                } else {
+                    _actionError.tryEmit(reported.displayMessage)
+                }
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    private fun prepareForTopicLoad(topicId: ULong) {
+        val previousTopicId = sourceSnapshot?.header?.topicId ?: _detail.value?.id
+        if (previousTopicId == null || previousTopicId == topicId) {
+            return
+        }
+
+        releaseTopicDetailMessageBus()
+        topicAiSummaryJob?.cancel()
+        topicAiSummaryJob = null
+        topicAiSummaryTopicId = null
+        topicAiSummaryUnavailable = false
+        sourceCursor = null
+        sourceSnapshot = null
+        treePresentation = null
+        expandedReplyRootPostIds.clear()
+        renderCache.evictAll()
+        _detail.value = null
+        _postRows.value = emptyList()
+        _topicAiSummary.value = null
+        _topicAiSummaryError.value = null
+        _isLoadingTopicAiSummary.value = false
     }
 
     fun setTopicDetailScrollInteractionActive(active: Boolean) {
@@ -154,7 +187,10 @@ class TopicDetailViewModel(
         )
     }
 
-    private fun applyFetchedPayload(payload: TopicDetailPageState): List<TopicPostState> {
+    private fun applyFetchedPayload(
+        payload: TopicDetailPageState,
+        focusedPostNumber: UInt? = null,
+    ): List<TopicPostState> {
         val bodyPost = payload.sourceSnapshot.body.post
         val normalizedReplyRows = TopicDetailPostRows.uniqueTreeRows(
             rows = payload.treePresentation.replyRows,
@@ -171,7 +207,12 @@ class TopicDetailViewModel(
             replyRows = normalizedReplyRows,
         )
         val postsById = TopicDetailPostRows.postsById(allPosts)
-        val rows = normalizedReplyRows.mapNotNull { row -> postRow(row, postsById) }
+        val rows = TopicDetailPostRows.projectRows(
+            rows = normalizedReplyRows,
+            postsById = postsById,
+            expandedReplyRootPostIds = expandedReplyRootPostIds,
+            focusedPostNumber = focusedPostNumber,
+        )
 
         val nextDetail = TopicDetailState(
             id = header.topicId,
@@ -213,6 +254,7 @@ class TopicDetailViewModel(
         if (_postRows.value != rows) {
             _postRows.value = rows
         }
+        _errorMessage.value = null
         return allPosts
     }
 
@@ -263,7 +305,7 @@ class TopicDetailViewModel(
                     error = e,
                     sessionStore = sessionStore,
                 )
-                _errorMessage.value = reported.displayMessage
+                _actionError.tryEmit(reported.displayMessage)
             }
         }
     }
@@ -309,7 +351,7 @@ class TopicDetailViewModel(
                 error = e,
                 sessionStore = sessionStore,
             )
-            _errorMessage.value = reported.displayMessage
+            _actionError.tryEmit(reported.displayMessage)
         }
     }
 
@@ -368,6 +410,19 @@ class TopicDetailViewModel(
     fun reloadTopicAiSummary() {
         val topicId = sourceSnapshot?.header?.topicId ?: _detail.value?.id ?: return
         loadTopicAiSummaryIfNeeded(topicId, _detail.value, force = true)
+    }
+
+    fun expandReplyThread(post: TopicPostState) {
+        if (!expandedReplyRootPostIds.add(post.id)) return
+        val postsById = _detail.value
+            ?.postStream
+            ?.posts
+            ?.let(TopicDetailPostRows::postsById)
+            ?: return
+        val rows = projectedPostRows(postsById)
+        if (_postRows.value != rows) {
+            _postRows.value = rows
+        }
     }
 
     fun toggleTopicVote() {
@@ -559,6 +614,12 @@ class TopicDetailViewModel(
                     val bookmarkId = post.bookmarkId
                     if (bookmarkId != null) {
                         sessionStore.deleteBookmark(bookmarkId)
+                        _bookmarkEvents.tryEmit(
+                            BookmarkEvent.Deleted(
+                                bookmarkableId = post.id,
+                                bookmarkableType = "Post",
+                            ),
+                        )
                     }
                 } else {
                     sessionStore.createBookmark(post.id, "Post")
@@ -596,6 +657,13 @@ class TopicDetailViewModel(
                         reminderAt = normalizedReminder,
                     )
                 }
+                _bookmarkEvents.tryEmit(
+                    BookmarkEvent.Saved(
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                        reminderAt = normalizedReminder,
+                    ),
+                )
                 refreshCurrentTopic(targetPostNumber)
             } catch (e: Exception) {
                 handleActionError(e, "书签更新失败")
@@ -603,10 +671,21 @@ class TopicDetailViewModel(
         }
     }
 
-    fun deleteBookmark(bookmarkId: ULong, targetPostNumber: UInt?) {
+    fun deleteBookmark(
+        bookmarkId: ULong,
+        bookmarkableId: ULong,
+        bookmarkableType: String,
+        targetPostNumber: UInt?,
+    ) {
         viewModelScope.launch {
             try {
                 sessionStore.deleteBookmark(bookmarkId)
+                _bookmarkEvents.tryEmit(
+                    BookmarkEvent.Deleted(
+                        bookmarkableId = bookmarkableId,
+                        bookmarkableType = bookmarkableType,
+                    ),
+                )
                 refreshCurrentTopic(targetPostNumber)
             } catch (e: Exception) {
                 handleActionError(e, "书签删除失败")
@@ -678,7 +757,7 @@ class TopicDetailViewModel(
         var remainingPages = TARGET_HYDRATION_PAGE_LIMIT
         while (remainingPages > 0 && sourceCursor != null && !hasLoadedPostNumber(postNumber)) {
             remainingPages -= 1
-            if (!loadMorePostsPage()) break
+            if (!loadMorePostsPage(focusedPostNumber = postNumber)) break
         }
 
         if (hasLoadedPostNumber(postNumber)) {
@@ -691,7 +770,7 @@ class TopicDetailViewModel(
         return _postRows.value.any { row -> row.post.postNumber == postNumber }
     }
 
-    private suspend fun loadMorePostsPage(): Boolean {
+    private suspend fun loadMorePostsPage(focusedPostNumber: UInt? = null): Boolean {
         val currentCursor = sourceCursor ?: return false
         if (_isLoadingMore.value) return false
         _isLoadingMore.value = true
@@ -708,6 +787,7 @@ class TopicDetailViewModel(
                     sourceSnapshot = outcome.sourceSnapshot,
                     treePresentation = outcome.treePresentation,
                 ),
+                focusedPostNumber = focusedPostNumber,
             )
             preloadRenderContent(allPosts)
             outcome.sourceSnapshot.loadedPosts.any { !previousLoadedPostIds.contains(it.id) }
@@ -720,23 +800,22 @@ class TopicDetailViewModel(
                 sessionStore = sessionStore,
                 fallbackMessage = "加载更多帖子失败",
             )
-            _errorMessage.value = reported.displayMessage
+            _actionError.tryEmit(reported.displayMessage)
             false
         } finally {
             _isLoadingMore.value = false
         }
     }
 
-    private fun postRow(
-        row: TopicTreeRowState,
+    private fun projectedPostRows(
         postsById: Map<ULong, TopicPostState>,
-    ): PostRow? {
-        val post = postsById[row.postId] ?: return null
-        return PostRow(
-            post = post,
-            depth = row.depth.toInt(),
-            parentPostNumber = row.parentPostNumber,
-            hasChildren = row.hasChildren,
+        focusedPostNumber: UInt? = null,
+    ): List<PostRow> {
+        return TopicDetailPostRows.projectRows(
+            rows = treePresentation?.replyRows.orEmpty(),
+            postsById = postsById,
+            expandedReplyRootPostIds = expandedReplyRootPostIds,
+            focusedPostNumber = focusedPostNumber,
         )
     }
 
@@ -819,10 +898,7 @@ class TopicDetailViewModel(
             ?.posts
             ?.let(TopicDetailPostRows::postsById)
             ?: emptyMap()
-        _postRows.value = treePresentation
-            ?.replyRows
-            ?.mapNotNull { row -> postRow(row, postsById) }
-            .orEmpty()
+        _postRows.value = projectedPostRows(postsById)
     }
 
     private fun handleActionError(error: Exception, fallbackMessage: String) {
@@ -853,7 +929,37 @@ class TopicDetailViewModel(
     }
 }
 
+sealed class BookmarkEvent {
+    data class Saved(
+        val bookmarkableId: ULong,
+        val bookmarkableType: String,
+        val reminderAt: String?,
+    ) : BookmarkEvent()
+
+    data class Deleted(
+        val bookmarkableId: ULong,
+        val bookmarkableType: String,
+    ) : BookmarkEvent()
+}
+
+class TopicDetailViewModelFactory(
+    private val sessionStore: FireSessionStore,
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(TopicDetailViewModel::class.java)) {
+            return TopicDetailViewModel.create(sessionStore) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+    }
+}
+
 object TopicDetailPostRows {
+    data class SearchMatch(
+        val postId: ULong,
+        val postNumber: UInt,
+    )
+
     fun uniqueTreeRows(
         rows: List<TopicTreeRowState>,
         bodyPostId: ULong? = null,
@@ -880,6 +986,143 @@ object TopicDetailPostRows {
         return row.depth == 0 && row.post.boosts.isNotEmpty()
     }
 
+    fun searchMatches(query: String, posts: List<TopicPostState>): List<SearchMatch> {
+        val needle = query.trim()
+        if (needle.isEmpty()) return emptyList()
+
+        val seenPostIds = LinkedHashSet<ULong>()
+        return posts
+            .asSequence()
+            .filter { post -> seenPostIds.add(post.id) }
+            .filter { post ->
+                post.renderDocument
+                    ?.plainText
+                    ?.contains(needle, ignoreCase = true) == true
+            }
+            .sortedWith(
+                compareBy<TopicPostState> { it.postNumber }
+                    .thenBy { it.id },
+            )
+            .map { post ->
+                SearchMatch(
+                    postId = post.id,
+                    postNumber = post.postNumber,
+                )
+            }
+            .toList()
+    }
+
+    fun projectRows(
+        rows: List<TopicTreeRowState>,
+        postsById: Map<ULong, TopicPostState>,
+        expandedReplyRootPostIds: Set<ULong> = emptySet(),
+        focusedPostNumber: UInt? = null,
+    ): List<PostRow> {
+        val availableRows = rows.mapNotNull { row ->
+            val post = postsById[row.postId] ?: return@mapNotNull null
+            ProjectableReplyRow(row = row, post = post)
+        }
+        if (availableRows.isEmpty()) return emptyList()
+
+        val rowByPostNumber = availableRows
+            .mapIndexed { index, projected -> projected.row.postNumber to index }
+            .toMap()
+        val rootIndexByIndex = availableRows.indices.associateWith { index ->
+            rootIndexFor(index, availableRows, rowByPostNumber)
+        }
+        val secondaryIndicesByRoot = LinkedHashMap<Int, MutableList<Int>>()
+        for (index in availableRows.indices) {
+            val rootIndex = rootIndexByIndex[index] ?: index
+            if (rootIndex != index) {
+                secondaryIndicesByRoot.getOrPut(rootIndex) { mutableListOf() }.add(index)
+            }
+        }
+
+        val focusedIndex = focusedPostNumber?.let(rowByPostNumber::get)
+        val focusedSecondaryIndices = focusedIndex
+            ?.let { selectedAncestryIndices(it, availableRows, rowByPostNumber, rootIndexByIndex) }
+            .orEmpty()
+
+        return buildList {
+            availableRows.forEachIndexed { index, projected ->
+                val rootIndex = rootIndexByIndex[index] ?: index
+                if (rootIndex != index) return@forEachIndexed
+
+                val secondaryIndices = secondaryIndicesByRoot[index].orEmpty()
+                val isExpanded = expandedReplyRootPostIds.contains(projected.post.id)
+                val selectedSecondaryIndices = if (isExpanded) {
+                    secondaryIndices.toSet()
+                } else {
+                    focusedSecondaryIndices.intersect(secondaryIndices.toSet())
+                }
+                val hiddenReplyCount = (secondaryIndices.size - selectedSecondaryIndices.size).coerceAtLeast(0)
+                add(
+                    postRow(
+                        projected = projected,
+                        hiddenReplyCount = hiddenReplyCount.toUInt().takeIf { it > 0u } ?: 0u,
+                    ),
+                )
+                secondaryIndices.forEach { secondaryIndex ->
+                    if (!selectedSecondaryIndices.contains(secondaryIndex)) return@forEach
+                    add(postRow(projected = availableRows[secondaryIndex]))
+                }
+            }
+        }
+    }
+
+    private fun rootIndexFor(
+        startIndex: Int,
+        rows: List<ProjectableReplyRow>,
+        rowByPostNumber: Map<UInt, Int>,
+    ): Int {
+        var index = startIndex
+        val visited = mutableSetOf<Int>()
+        while (visited.add(index)) {
+            val row = rows[index].row
+            val parentNumber = row.parentPostNumber
+            if (row.depth.toInt() <= 1 || parentNumber == null || parentNumber <= 1u) {
+                return index
+            }
+            index = rowByPostNumber[parentNumber] ?: return index
+        }
+        return startIndex
+    }
+
+    private fun selectedAncestryIndices(
+        focusedIndex: Int,
+        rows: List<ProjectableReplyRow>,
+        rowByPostNumber: Map<UInt, Int>,
+        rootIndexByIndex: Map<Int, Int>,
+    ): Set<Int> {
+        val rootIndex = rootIndexByIndex[focusedIndex] ?: focusedIndex
+        if (rootIndex == focusedIndex) return emptySet()
+
+        val selected = linkedSetOf<Int>()
+        var index = focusedIndex
+        val visited = mutableSetOf<Int>()
+        while (index != rootIndex && visited.add(index)) {
+            selected += index
+            val parentNumber = rows[index].row.parentPostNumber ?: break
+            index = rowByPostNumber[parentNumber] ?: break
+        }
+        return selected
+    }
+
+    private fun postRow(
+        projected: ProjectableReplyRow,
+        hiddenReplyCount: UInt = 0u,
+    ): PostRow {
+        return projected.row.let { row ->
+            PostRow(
+                post = projected.post,
+                depth = row.depth.toInt(),
+                parentPostNumber = row.parentPostNumber,
+                hasChildren = row.hasChildren,
+                hiddenReplyCount = hiddenReplyCount,
+            )
+        }
+    }
+
     fun postsForDetail(
         bodyPost: TopicPostState,
         loadedPosts: List<TopicPostState>,
@@ -904,6 +1147,11 @@ object TopicDetailPostRows {
         }
         return postsById.values.toList()
     }
+
+    private data class ProjectableReplyRow(
+        val row: TopicTreeRowState,
+        val post: TopicPostState,
+    )
 }
 
 object TopicDetailBoostPresentation {

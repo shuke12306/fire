@@ -10,11 +10,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.fire.app.R
 import com.fire.app.core.error.FireErrorReporter
+import com.fire.app.core.ui.FireToast
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -26,9 +26,11 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
 
     private var topicId: ULong = 0u
     private var replyToPostNumber: UInt? = null
+    private var initialBody: String = ""
     private var onReplySubmitted: (() -> Unit)? = null
 
     private lateinit var bodyInput: EditText
+    private lateinit var markdownToolbar: MarkdownToolbarView
     private lateinit var submitButton: TextView
     private lateinit var uploadButton: TextView
     private lateinit var previewButton: TextView
@@ -59,6 +61,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         bodyInput = view.findViewById(R.id.reply_body_input)
+        markdownToolbar = view.findViewById(R.id.reply_markdown_toolbar)
         submitButton = view.findViewById(R.id.reply_submit_button)
         uploadButton = view.findViewById(R.id.reply_upload_button)
         previewButton = view.findViewById(R.id.reply_preview_button)
@@ -68,6 +71,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         arguments?.let { args ->
             topicId = args.getLong(ARG_TOPIC_ID).toULong()
             replyToPostNumber = args.getInt(ARG_REPLY_TO_POST_NUMBER).takeIf { it > 0 }?.toUInt()
+            initialBody = args.getString(ARG_INITIAL_BODY).orEmpty()
         }
 
         val title = if (replyToPostNumber != null) {
@@ -85,6 +89,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 sessionStore,
                 viewLifecycleOwner.lifecycleScope,
             )
+            markdownToolbar.bind(bodyInput)
 
             ComposerMentionAssist(
                 input = bodyInput,
@@ -113,6 +118,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 ?.ifBlank { "https://linux.do" }
                 ?: "https://linux.do"
             restoreDraftIfAvailable()
+            applyInitialBodyIfNeeded()
             draftAutosave?.start()
 
             uploadButton.setOnClickListener {
@@ -153,11 +159,10 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 launch {
                 vm.error.collectLatest { error ->
                     if (error != null) {
-                        Toast.makeText(
-                            requireContext(),
+                        showToast(
                             error.ifBlank { getString(R.string.topic_detail_reply_error) },
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                            FireToast.Style.ERROR,
+                        )
                     }
                 }
             }
@@ -174,6 +179,7 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
 
     private fun updatePreviewMode() {
         bodyInput.visibility = if (previewMode) View.GONE else View.VISIBLE
+        markdownToolbar.visibility = if (previewMode) View.GONE else View.VISIBLE
         view?.findViewById<LinearLayout>(R.id.reply_mention_suggestions)?.visibility = View.GONE
         previewContainer.visibility = if (previewMode) View.VISIBLE else View.GONE
         previewButton.text = getString(
@@ -197,11 +203,10 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
                 val markdown = uploadImageMarkdown(requireContext(), sessionStore, uri)
                 insertMarkdownAtCursor(bodyInput, markdown)
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
+                showToast(
                     e.localizedMessage ?: getString(R.string.composer_upload_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             } finally {
                 progressBar.visibility = View.GONE
                 uploadButton.isEnabled = true
@@ -213,7 +218,23 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
         val draft = runCatching { sessionStore.fetchDraft(draftKey()) }.getOrNull() ?: return
         draftSequence = draft.sequence
         draft.data.reply?.let { bodyInput.setText(it) }
-        Toast.makeText(requireContext(), R.string.composer_draft_restored, Toast.LENGTH_SHORT).show()
+        showToast(getString(R.string.composer_draft_restored), FireToast.Style.INFO)
+    }
+
+    private fun showToast(message: String, style: FireToast.Style) {
+        FireToast.show(view ?: return, message, style)
+    }
+
+    private fun applyInitialBodyIfNeeded() {
+        val result = ComposerInitialBody.merge(
+            initialBody = initialBody,
+            currentBody = bodyInput.text.toString(),
+        )
+        bodyInput.setText(result.text)
+        bodyInput.setSelection(
+            result.selectionStart.coerceIn(0, bodyInput.text.length),
+            result.selectionEnd.coerceIn(0, bodyInput.text.length),
+        )
     }
 
     private suspend fun persistDraftIfNeeded() {
@@ -266,16 +287,19 @@ class ReplyComposerSheet : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_TOPIC_ID = "topic_id"
         private const val ARG_REPLY_TO_POST_NUMBER = "reply_to_post_number"
+        private const val ARG_INITIAL_BODY = "initial_body"
 
         fun newInstance(
             topicId: Long,
             replyToPostNumber: Int? = null,
+            initialBody: String? = null,
             onReplySubmitted: (() -> Unit)? = null,
         ): ReplyComposerSheet {
             return ReplyComposerSheet().apply {
                 arguments = Bundle().apply {
                     putLong(ARG_TOPIC_ID, topicId)
                     replyToPostNumber?.let { putInt(ARG_REPLY_TO_POST_NUMBER, it) }
+                    initialBody?.let { putString(ARG_INITIAL_BODY, it) }
                 }
                 this.onReplySubmitted = onReplySubmitted
             }

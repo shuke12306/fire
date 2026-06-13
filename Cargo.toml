@@ -6,6 +6,7 @@ members = [
     "rust/crates/fire-core",
     "rust/crates/fire-uniffi",
     "rust/crates/fire-uniffi-diagnostics",
+    "rust/crates/fire-uniffi-ldc",
     "rust/crates/fire-uniffi-messagebus",
     "rust/crates/fire-uniffi-notifications",
     "rust/crates/fire-uniffi-search",
@@ -28,7 +29,7 @@ repository = "https://github.com/peterich-rs/fire.git"
 [workspace.dependencies]
 mars-xlog = { version = "0.1.0-preview.2", default-features = false, features = ["rust-backend", "tracing"] }
 mars-xlog-core = "0.1.0-preview.2"
-openwire = { path = "third_party/openwire/crates/openwire", default-features = false, features = ["tls-rustls", "json", "compression"] }
+openwire = { version = "0.1.1", default-features = false, features = ["tls-rustls", "json", "compression"] }
 async-trait = "0.1.89"
 async-compression = { version = "=0.4.18", default-features = false }
 base64 = "0.22"

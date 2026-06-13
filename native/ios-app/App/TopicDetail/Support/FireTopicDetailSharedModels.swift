@@ -115,6 +115,7 @@ struct FireTopicDetailFeedInvalidationToken: Hashable {
     let canWriteInteractions: Bool
     let currentUsername: String
     let baseURLString: String
+    let activeSearchPostID: UInt64?
     let expandedReplyRootPostIDs: Set<UInt64>
 }
 
@@ -149,7 +150,6 @@ struct FireTopicDetailSidecarInvalidationToken: Hashable {
 struct FireTopicDetailInteractionInvalidationToken: Hashable {
     let mutatingPostIDs: Set<UInt64>
     let loadingPostReplyContextIDs: Set<UInt64>
-    let postReplyContextErrorIDs: [UInt64]
     let expandedPostTextIDs: Set<UInt64>
     let expandedReplyRootPostIDs: Set<UInt64>
 }
@@ -170,6 +170,17 @@ enum FireTopicNotificationLevelOption: Int32, CaseIterable, Identifiable {
         case .regular: "普通"
         case .tracking: "跟踪"
         case .watching: "关注"
+        }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .muted:
+            return "bell.slash.fill"
+        case .tracking, .watching:
+            return "bell.fill"
+        case .regular:
+            return "bell"
         }
     }
 }

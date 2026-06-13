@@ -77,6 +77,8 @@
 
     </HorizontalScrollView>
 
+    <include layout="@layout/view_offline_banner" />
+
     <FrameLayout
         android:id="@+id/topic_list_container"
         android:layout_width="match_parent"
@@ -105,12 +107,12 @@
             android:paddingHorizontal="12dp"
             android:visibility="gone">
 
-            <include layout="@layout/item_topic_row_skeleton" />
-            <include layout="@layout/item_topic_row_skeleton" />
-            <include layout="@layout/item_topic_row_skeleton" />
-            <include layout="@layout/item_topic_row_skeleton" />
-            <include layout="@layout/item_topic_row_skeleton" />
-            <include layout="@layout/item_topic_row_skeleton" />
+            <include layout="@layout/item_topic_shimmer" />
+            <include layout="@layout/item_topic_shimmer" />
+            <include layout="@layout/item_topic_shimmer" />
+            <include layout="@layout/item_topic_shimmer" />
+            <include layout="@layout/item_topic_shimmer" />
+            <include layout="@layout/item_topic_shimmer" />
 
         </LinearLayout>
 

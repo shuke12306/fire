@@ -109,14 +109,14 @@ final class FireTopicDetailModalRouter {
             context: context,
             onSave: { [viewModel] name, reminderAt in
                 if let bookmarkID = context.bookmarkID {
-                    try await viewModel.updateBookmark(
+                    try await viewModel.topicInteraction.updateBookmark(
                         bookmarkID: bookmarkID,
                         name: name,
                         reminderAt: reminderAt,
                         recoveryOriginURL: recoveryOriginURL
                     )
                 } else {
-                    _ = try await viewModel.createBookmark(
+                    _ = try await viewModel.topicInteraction.createBookmark(
                         bookmarkableID: context.bookmarkableID,
                         bookmarkableType: context.bookmarkableType,
                         name: name,
@@ -128,7 +128,7 @@ final class FireTopicDetailModalRouter {
             },
             onDelete: context.bookmarkID.map { [viewModel] bookmarkID in
                 {
-                    try await viewModel.deleteBookmark(
+                    try await viewModel.topicInteraction.deleteBookmark(
                         bookmarkID: bookmarkID,
                         recoveryOriginURL: recoveryOriginURL
                     )
@@ -201,6 +201,45 @@ final class FireTopicDetailModalRouter {
         presentSheetController(UIHostingController(rootView: rootView))
     }
 
+    func presentReactionPicker(
+        post: TopicPostState,
+        options: [FireReactionOption],
+        onSelectReaction: @escaping @MainActor (String) -> Void,
+        onShowUsers: @escaping @MainActor (String) -> Void
+    ) {
+        let rootView = NavigationStack {
+            FirePostReactionPickerSheet(
+                post: post,
+                options: options,
+                onSelectReaction: { [weak self] reactionID in
+                    self?.viewController?.dismiss(animated: true) {
+                        Task { @MainActor in
+                            onSelectReaction(reactionID)
+                        }
+                    }
+                },
+                onShowUsers: { [weak self] reactionID in
+                    self?.viewController?.dismiss(animated: true) {
+                        Task { @MainActor in
+                            onShowUsers(reactionID)
+                        }
+                    }
+                }
+            )
+        }
+        presentSheetController(UIHostingController(rootView: rootView))
+    }
+
+    func presentReactionUsers(
+        groups: [ReactionUsersGroupState],
+        reactionID: String?
+    ) {
+        let rootView = NavigationStack {
+            FireReactionUsersSheet(groups: groups, reactionID: reactionID)
+        }
+        presentSheetController(UIHostingController(rootView: rootView))
+    }
+
     func presentPostReplies(
         topicID: UInt64,
         context: FirePostReplyContext,
@@ -226,6 +265,7 @@ final class FireTopicDetailModalRouter {
     func presentAdvancedComposer(
         route: FireComposerRoute,
         initialBody: String,
+        initialBodySelectionLocation: Int? = nil,
         onReplySubmitted: @escaping @MainActor () -> Void,
         onSubmissionNotice: @escaping @MainActor (String) -> Void
     ) {
@@ -234,6 +274,7 @@ final class FireTopicDetailModalRouter {
                 viewModel: viewModel,
                 route: route,
                 initialBody: initialBody,
+                initialBodySelectionLocation: initialBodySelectionLocation,
                 onReplySubmitted: onReplySubmitted,
                 onSubmissionNotice: onSubmissionNotice
             )

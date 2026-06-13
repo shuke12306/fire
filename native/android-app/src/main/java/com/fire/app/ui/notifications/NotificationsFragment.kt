@@ -33,6 +33,8 @@ class NotificationsFragment : Fragment() {
     private lateinit var emptyView: TextView
     private lateinit var loadingView: ProgressBar
     private lateinit var markAllReadButton: View
+    private lateinit var viewAllButton: View
+    private lateinit var offlineBanner: View
 
     private var viewModel: NotificationsViewModel? = null
 
@@ -52,6 +54,8 @@ class NotificationsFragment : Fragment() {
         emptyView = view.findViewById(R.id.empty_view)
         loadingView = view.findViewById(R.id.loading_view)
         markAllReadButton = view.findViewById(R.id.mark_all_read_button)
+        viewAllButton = view.findViewById(R.id.view_all_notifications_button)
+        offlineBanner = view.findViewById(R.id.offline_banner)
 
         viewLifecycleOwner.lifecycleScope.launch {
             val sessionStore = FireSessionStoreRepository.get(requireContext())
@@ -92,6 +96,9 @@ class NotificationsFragment : Fragment() {
             markAllReadButton.setOnClickListener {
                 viewModel?.markAllRead()
             }
+            viewAllButton.setOnClickListener {
+                findNavController().navigate(NotificationsFragmentDirections.actionNotificationsToHistory())
+            }
 
             val vm = viewModel ?: return@launch
             launch {
@@ -116,6 +123,12 @@ class NotificationsFragment : Fragment() {
             launch {
                 vm.isRefreshing.collect { refreshing ->
                     swipeRefresh.isRefreshing = refreshing
+                }
+            }
+
+            launch {
+                vm.isOffline.collect { isOffline ->
+                    offlineBanner.visibility = if (isOffline) View.VISIBLE else View.GONE
                 }
             }
 
@@ -158,6 +171,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun refreshNotifications() {
+        viewModel?.prepareNotificationRefresh()
         viewModel?.refreshRecentNotifications(force = true)
         adapter.refresh()
     }

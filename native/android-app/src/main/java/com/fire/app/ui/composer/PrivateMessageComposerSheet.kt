@@ -9,11 +9,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.fire.app.R
 import com.fire.app.core.error.FireErrorReporter
+import com.fire.app.core.ui.FireToast
 import com.fire.app.session.FireSessionStore
 import com.fire.app.session.FireSessionStoreRepository
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -28,6 +28,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
     private lateinit var recipientInput: EditText
     private lateinit var recipientTokens: ChipGroup
     private lateinit var bodyInput: EditText
+    private lateinit var markdownToolbar: MarkdownToolbarView
     private lateinit var submitButton: TextView
     private lateinit var uploadButton: TextView
     private lateinit var previewButton: TextView
@@ -68,6 +69,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
         recipientInput = view.findViewById(R.id.private_message_recipient_input)
         recipientTokens = view.findViewById(R.id.private_message_recipient_tokens)
         bodyInput = view.findViewById(R.id.private_message_body_input)
+        markdownToolbar = view.findViewById(R.id.private_message_markdown_toolbar)
         submitButton = view.findViewById(R.id.private_message_submit_button)
         uploadButton = view.findViewById(R.id.private_message_upload_button)
         previewButton = view.findViewById(R.id.private_message_preview_button)
@@ -95,6 +97,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                 sessionStore,
                 viewLifecycleOwner.lifecycleScope,
             )
+            markdownToolbar.bind(bodyInput)
 
             ComposerRecipientAssist(
                 input = recipientInput,
@@ -135,21 +138,16 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                     canSendMessage = session.readiness.canWriteAuthenticatedApi
                     submitButton.isEnabled = canSendMessage
                     if (!canSendMessage) {
-                        Toast.makeText(
-                            requireContext(),
-                            R.string.profile_private_message_login_required,
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        showToast(
+                            getString(R.string.profile_private_message_login_required),
+                            FireToast.Style.WARNING,
+                        )
                     }
                 }
                 .onFailure {
                     canSendMessage = false
                     submitButton.isEnabled = false
-                    Toast.makeText(
-                        requireContext(),
-                        R.string.profile_private_message_error,
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    showToast(getString(R.string.profile_private_message_error), FireToast.Style.ERROR)
                 }
             restoreDraftIfAvailable()
             draftAutosave?.start()
@@ -185,11 +183,10 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                     return@setOnClickListener
                 }
                 if (!canSendMessage) {
-                    Toast.makeText(
-                        requireContext(),
-                        R.string.profile_private_message_login_required,
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    showToast(
+                        getString(R.string.profile_private_message_login_required),
+                        FireToast.Style.WARNING,
+                    )
                     return@setOnClickListener
                 }
                 viewModel?.submitPrivateMessage(title, body, recipients)
@@ -217,11 +214,10 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                 launch {
                 vm.error.collectLatest { error ->
                     if (error != null) {
-                        Toast.makeText(
-                            requireContext(),
+                        showToast(
                             error.ifBlank { getString(R.string.profile_private_message_error) },
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                            FireToast.Style.ERROR,
+                        )
                     }
                 }
             }
@@ -242,6 +238,7 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
         recipientTokens.visibility = if (previewMode || recipientValues().isEmpty()) View.GONE else View.VISIBLE
         titleInput.visibility = editorVisibility
         bodyInput.visibility = editorVisibility
+        markdownToolbar.visibility = editorVisibility
         view?.findViewById<LinearLayout>(R.id.private_message_recipient_suggestions)?.visibility = View.GONE
         view?.findViewById<LinearLayout>(R.id.private_message_mention_suggestions)?.visibility = View.GONE
         previewContainer.visibility = if (previewMode) View.VISIBLE else View.GONE
@@ -270,11 +267,10 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
                 val markdown = uploadImageMarkdown(requireContext(), sessionStore, uri)
                 insertMarkdownAtCursor(bodyInput, markdown)
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
+                showToast(
                     e.localizedMessage ?: getString(R.string.composer_upload_error),
-                    Toast.LENGTH_SHORT,
-                ).show()
+                    FireToast.Style.ERROR,
+                )
             } finally {
                 progressBar.visibility = View.GONE
                 uploadButton.isEnabled = true
@@ -303,7 +299,11 @@ class PrivateMessageComposerSheet : BottomSheetDialogFragment() {
         if (draft.data.recipients.isNotEmpty()) {
             recipientInput.setText(draft.data.recipients.joinToString(" "))
         }
-        Toast.makeText(requireContext(), R.string.composer_draft_restored, Toast.LENGTH_SHORT).show()
+        showToast(getString(R.string.composer_draft_restored), FireToast.Style.INFO)
+    }
+
+    private fun showToast(message: String, style: FireToast.Style) {
+        FireToast.show(view ?: return, message, style)
     }
 
     private suspend fun persistDraftIfNeeded() {

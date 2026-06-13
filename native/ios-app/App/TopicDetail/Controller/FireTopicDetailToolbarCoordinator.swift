@@ -3,6 +3,7 @@ import UIKit
 @MainActor
 final class FireTopicDetailToolbarCoordinator {
     struct Actions {
+        let onToggleSearch: () -> Void
         let onPresentTopicEditor: () -> Void
         let onPresentBookmarkEditor: () -> Void
         let onUpdateNotificationLevel: (FireTopicNotificationLevelOption) -> Void
@@ -47,6 +48,15 @@ final class FireTopicDetailToolbarCoordinator {
     private func buildRightBarButtonItems() -> [UIBarButtonItem] {
         var items: [UIBarButtonItem] = []
 
+        let searchItem = UIBarButtonItem(
+            image: UIImage(systemName: "magnifyingglass"),
+            primaryAction: UIAction { [actions] _ in
+                actions.onToggleSearch()
+            }
+        )
+        searchItem.accessibilityLabel = "搜索已加载帖子"
+        items.append(searchItem)
+
         if let shareURL = state.shareURL {
             var shareButton: UIBarButtonItem!
             shareButton = UIBarButtonItem(
@@ -57,6 +67,16 @@ final class FireTopicDetailToolbarCoordinator {
             )
             shareButton.accessibilityLabel = "分享话题"
             items.append(shareButton)
+        }
+
+        if !state.isPrivateMessageThread {
+            let notificationItem = UIBarButtonItem(
+                image: UIImage(systemName: state.currentNotificationLevel.systemImageName),
+                menu: buildNotificationLevelMenu()
+            )
+            notificationItem.accessibilityLabel = "通知设置：\(state.currentNotificationLevel.title)"
+            notificationItem.isEnabled = state.canWriteInteractions
+            items.append(notificationItem)
         }
 
         let menuItem = UIBarButtonItem(
@@ -91,20 +111,20 @@ final class FireTopicDetailToolbarCoordinator {
         }
         sections.append(UIMenu(options: .displayInline, children: [bookmarkAction]))
 
-        if !state.isPrivateMessageThread {
-            let notificationActions = FireTopicNotificationLevelOption.allCases.map { option in
-                UIAction(
-                    title: option.title,
-                    image: option == state.currentNotificationLevel ? UIImage(systemName: "checkmark") : nil,
-                    attributes: state.canWriteInteractions ? [] : .disabled
-                ) { [actions] _ in
-                    actions.onUpdateNotificationLevel(option)
-                }
-            }
-            sections.append(UIMenu(title: "", options: .displayInline, children: notificationActions))
-        }
-
         return UIMenu(title: "", children: sections)
+    }
+
+    private func buildNotificationLevelMenu() -> UIMenu {
+        let notificationActions = FireTopicNotificationLevelOption.allCases.map { option in
+            UIAction(
+                title: option.title,
+                image: option == state.currentNotificationLevel ? UIImage(systemName: "checkmark") : nil,
+                attributes: state.canWriteInteractions ? [] : .disabled
+            ) { [actions] _ in
+                actions.onUpdateNotificationLevel(option)
+            }
+        }
+        return UIMenu(title: "通知设置", options: .displayInline, children: notificationActions)
     }
 
     private func presentShareSheet(url: URL, anchor: UIBarButtonItem?) {

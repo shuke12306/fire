@@ -1,9 +1,5 @@
 # 文件上传 API
 
-> 对应 FluxDO 源文档第 11 节
-
----
-
 ## 11.1 上传文件
 
 ```
@@ -11,7 +7,7 @@ POST /uploads.json
 Content-Type: multipart/form-data
 ```
 
-**场景**：编辑器中上传图片或附件。内置速率限制重试（最多 3 次）。
+**场景**：编辑器中上传图片或附件。`429` 时可按 `Retry-After` 做有限次数重试。
 
 **Query Parameters：**
 
@@ -45,6 +41,12 @@ Content-Type: multipart/form-data
   "extension": "png"
 }
 ```
+
+`short_url` is the preferred Markdown reference for composer uploads. Some
+responses may omit `short_url`; in that case clients should fall back to `url` as
+the usable upload reference. Preserve `original_filename`, dimensions, size, and
+extension when generating Markdown such as image, video, audio, or attachment
+links.
 
 **错误码：**
 - `413`：文件过大

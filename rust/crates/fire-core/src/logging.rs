@@ -1,7 +1,7 @@
 use std::{
     fs,
     fs::OpenOptions,
-    io::{self, Write},
+    io::{self, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
@@ -20,6 +20,7 @@ const FIRE_DIAGNOSTICS_DIR_NAME: &str = "diagnostics";
 const FIRE_READABLE_LOG_FILE_NAME: &str = "fire-readable.log";
 const FIRE_HOST_LOG_TARGET: &str = "fire.host";
 const FIRE_LOG_MAX_FILE_SIZE_BYTES: i64 = 8 * 1024 * 1024;
+const FIRE_READABLE_LOG_MAX_FILE_SIZE_BYTES: u64 = 2 * 1024 * 1024;
 const FIRE_LOG_MAX_ALIVE_SECONDS: i64 = 7 * 24 * 60 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,10 +230,19 @@ pub fn log_host_message(
 
 struct FileBackedMakeWriter {
     file: std::fs::File,
+    written_bytes: u64,
 }
 
 impl FileBackedMakeWriter {
     fn new(path: &Path) -> Result<Self, FireCoreError> {
+        if let Ok(metadata) = fs::metadata(path) {
+            if metadata.len() > FIRE_READABLE_LOG_MAX_FILE_SIZE_BYTES {
+                fs::remove_file(path).map_err(|source| FireCoreError::WorkspaceIo {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+            }
+        }
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -241,7 +251,27 @@ impl FileBackedMakeWriter {
                 path: path.to_path_buf(),
                 source,
             })?;
-        Ok(Self { file })
+        let written_bytes = file.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+        Ok(Self {
+            file,
+            written_bytes,
+        })
+    }
+
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let incoming_bytes = u64::try_from(buf.len()).unwrap_or(u64::MAX);
+        if self.written_bytes.saturating_add(incoming_bytes) > FIRE_READABLE_LOG_MAX_FILE_SIZE_BYTES
+        {
+            self.file.flush()?;
+            self.file.set_len(0)?;
+            self.file.seek(SeekFrom::Start(0))?;
+            self.written_bytes = 0;
+        }
+        let written = self.file.write(buf)?;
+        self.written_bytes = self
+            .written_bytes
+            .saturating_add(u64::try_from(written).unwrap_or(u64::MAX));
+        Ok(written)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -273,7 +303,6 @@ impl Write for SharedFileWriterGuard {
         self.inner
             .lock()
             .expect("readable log writer lock poisoned")
-            .file
             .write(buf)
     }
 

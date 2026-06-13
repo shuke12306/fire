@@ -44,9 +44,11 @@ class HomeFragment : Fragment() {
     private lateinit var selectedTagsGroup: ChipGroup
     private lateinit var searchButton: View
     private lateinit var createTopicButton: View
+    private lateinit var offlineBanner: View
 
     private var viewModel: HomeViewModel? = null
     private var pendingAutoRefresh = false
+    private val topicNavigationGate = HomeTopicNavigationGate()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -69,6 +71,7 @@ class HomeFragment : Fragment() {
         selectedTagsGroup = view.findViewById(R.id.selected_tags_group)
         searchButton = view.findViewById(R.id.search_button)
         createTopicButton = view.findViewById(R.id.create_topic_button)
+        offlineBanner = view.findViewById(R.id.offline_banner)
 
         viewLifecycleOwner.lifecycleScope.launch {
             val sessionStore = FireSessionStoreRepository.get(requireContext())
@@ -76,6 +79,9 @@ class HomeFragment : Fragment() {
 
             adapter = TopicListAdapter(
                 onTopicClick = { row ->
+                    if (!topicNavigationGate.tryBeginOpeningTopicDetail()) {
+                        return@TopicListAdapter
+                    }
                     TopicDetailActivity.start(
                         context = requireContext(),
                         topicId = row.topic.id.toLong(),
@@ -160,9 +166,15 @@ class HomeFragment : Fragment() {
                         }
                     }
                     launch {
+                        vm.isOffline.collectLatest { isOffline ->
+                            offlineBanner.visibility = if (isOffline) View.VISIBLE else View.GONE
+                        }
+                    }
+                    launch {
                         vm.topicListRefreshEvents.collect {
                             if (isTopicListAtTop()) {
                                 pendingAutoRefresh = false
+                                vm.prepareTopicRefresh()
                                 adapter.refresh()
                             } else {
                                 pendingAutoRefresh = true
@@ -177,6 +189,11 @@ class HomeFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        topicNavigationGate.reset()
     }
 
     private fun setupCategoryBar() {
@@ -204,6 +221,7 @@ class HomeFragment : Fragment() {
     private fun setupSwipeRefresh() {
         swipeRefresh.setOnRefreshListener {
             pendingAutoRefresh = false
+            viewModel?.prepareTopicRefresh()
             adapter.refresh()
         }
     }
@@ -215,6 +233,7 @@ class HomeFragment : Fragment() {
 
         createTopicButton.setOnClickListener {
             TopicComposerSheet.newInstance { topicId ->
+                viewModel?.prepareTopicRefresh()
                 adapter.refresh()
                 TopicDetailActivity.start(
                     context = requireContext(),
@@ -263,6 +282,7 @@ class HomeFragment : Fragment() {
             return
         }
         pendingAutoRefresh = false
+        viewModel?.prepareTopicRefresh()
         adapter.refresh()
     }
 

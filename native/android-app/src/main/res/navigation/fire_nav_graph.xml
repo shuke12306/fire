@@ -18,6 +18,11 @@
             app:destination="@id/onboardingFragment"
             app:popUpTo="@id/preheatGateFragment"
             app:popUpToInclusive="true" />
+        <action
+            android:id="@+id/action_preheatGate_to_loginWebView"
+            app:destination="@id/loginWebViewFragment"
+            app:popUpTo="@id/preheatGateFragment"
+            app:popUpToInclusive="true" />
     </fragment>
 
     <fragment
@@ -36,7 +41,7 @@
         <action
             android:id="@+id/action_loginWebView_to_home"
             app:destination="@id/homeFragment"
-            app:popUpTo="@id/onboardingFragment"
+            app:popUpTo="@id/fire_nav_graph"
             app:popUpToInclusive="true" />
     </fragment>
 
@@ -56,6 +61,9 @@
         <action
             android:id="@+id/action_notifications_to_profile"
             app:destination="@id/profileFragment" />
+        <action
+            android:id="@+id/action_notifications_to_history"
+            app:destination="@id/notificationHistoryFragment" />
     </fragment>
 
     <fragment
@@ -71,8 +79,20 @@
             android:id="@+id/action_profile_to_bookmarks"
             app:destination="@id/bookmarksFragment" />
         <action
+            android:id="@+id/action_profile_to_drafts"
+            app:destination="@id/draftsFragment" />
+        <action
+            android:id="@+id/action_profile_to_readHistory"
+            app:destination="@id/readHistoryFragment" />
+        <action
             android:id="@+id/action_profile_to_privateMessages"
             app:destination="@id/privateMessagesFragment" />
+        <action
+            android:id="@+id/action_profile_to_ldc"
+            app:destination="@id/ldcFragment" />
+        <action
+            android:id="@+id/action_profile_to_cdk"
+            app:destination="@id/cdkFragment" />
         <deepLink
             app:uri="fire://profile/{username}"
             app:action="android.intent.action.VIEW" />
@@ -93,8 +113,37 @@
         android:label="@string/feed_bookmarks" />
 
     <fragment
+        android:id="@+id/draftsFragment"
+        android:name="com.fire.app.ui.drafts.DraftsFragment"
+        android:label="@string/feed_drafts" />
+
+    <fragment
+        android:id="@+id/notificationHistoryFragment"
+        android:name="com.fire.app.ui.notifications.NotificationHistoryFragment"
+        android:label="@string/notifications_history_title">
+        <action
+            android:id="@+id/action_notificationHistory_to_profile"
+            app:destination="@id/profileFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/readHistoryFragment"
+        android:name="com.fire.app.ui.readhistory.ReadHistoryFragment"
+        android:label="@string/feed_read_history" />
+
+    <fragment
         android:id="@+id/privateMessagesFragment"
         android:name="com.fire.app.ui.privatemessages.PrivateMessagesFragment"
         android:label="@string/feed_private_messages_inbox" />
+
+    <fragment
+        android:id="@+id/ldcFragment"
+        android:name="com.fire.app.ui.ldc.LDCFragment"
+        android:label="@string/ldc_title" />
+
+    <fragment
+        android:id="@+id/cdkFragment"
+        android:name="com.fire.app.ui.ldc.CDKFragment"
+        android:label="@string/cdk_title" />
 
 </navigation>

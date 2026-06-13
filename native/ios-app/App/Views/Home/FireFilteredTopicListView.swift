@@ -106,9 +106,15 @@ final class FireFilteredTopicListViewModel: ObservableObject {
         await load(page: nil, reset: true)
     }
 
-    func selectKind(_ kind: TopicListKindState) async {
+    func selectKind(_ kind: TopicListKindState, animation: Animation? = nil) async {
         guard selectedKind != kind else { return }
-        selectedKind = kind
+        if let animation {
+            withAnimation(animation) {
+                selectedKind = kind
+            }
+        } else {
+            selectedKind = kind
+        }
         await load(page: nil, reset: true)
     }
 
@@ -202,6 +208,10 @@ struct FireFilteredTopicListView: View {
     @StateObject private var listViewModel: FireFilteredTopicListViewModel
     @State private var copiedErrorMessage = false
     @State private var selectedRoute: FireAppRoute?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
+    @State private var toast: FireToast?
+    @Namespace private var feedSelectorNamespace
     @Namespace private var pushTransitionNamespace
 
     init(
@@ -240,6 +250,11 @@ struct FireFilteredTopicListView: View {
         case .loading, .blockingError:
             return nil
         }
+    }
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     var body: some View {
@@ -303,41 +318,59 @@ struct FireFilteredTopicListView: View {
         .task {
             await listViewModel.loadIfNeeded()
         }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await viewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await viewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    await listViewModel.refresh()
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        await listViewModel.refresh()
+                    }
+                }
+            )
+        }
+        .onChange(of: topicActionNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+            toast = FireToast(message: message, style: .error)
+            topicActionNotice = nil
+        }
+        .fireToast($toast)
     }
 
     // MARK: - Kind Selector
 
     private var kindSelectorSection: some View {
         Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(TopicListKindState.orderedCases, id: \.self) { kind in
-                        Button {
-                            _ = withAnimation(.easeInOut(duration: 0.2)) {
-                                Task<Void, Never> {
-                                    await listViewModel.selectKind(kind)
-                                }
-                            }
-                        } label: {
-                            Text(kind.title)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(
-                                    listViewModel.selectedKind == kind ? Color.white : Color(.label)
-                                )
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(
-                                    Capsule().fill(
-                                        listViewModel.selectedKind == kind
-                                            ? FireTheme.accent
-                                            : Color(.tertiarySystemFill)
-                                    )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
+            FireFeedKindSelector(
+                selectedKind: listViewModel.selectedKind,
+                namespace: feedSelectorNamespace
+            ) { kind in
+                Task<Void, Never> {
+                    await listViewModel.selectKind(
+                        kind,
+                        animation: .easeInOut(duration: 0.2)
+                    )
                 }
-                .padding(.vertical, 2)
             }
         }
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -373,6 +406,21 @@ struct FireFilteredTopicListView: View {
                     id: FireAppRoute.topic(row: topicRow).id,
                     in: pushTransitionNamespace
                 )
+                .contextMenu {
+                    FireTopicContextMenu(
+                        row: topicRow,
+                        shareURL: topicRow.fireTopicURL(baseURL: baseURLString),
+                        onOpen: {
+                            presentRoute(.topic(row: topicRow))
+                        },
+                        onBookmark: {
+                            editingBookmarkContext = topicRow.fireBookmarkEditorContext()
+                        },
+                        onMute: {
+                            muteTopic(topicRow)
+                        }
+                    )
+                }
             }
 
             if listViewModel.currentKindNextPage != nil {
@@ -423,27 +471,22 @@ struct FireFilteredTopicListView: View {
                     }
                 }
                 .padding(.vertical, 6)
-                .redacted(reason: .placeholder)
+                .fireShimmer()
+                .accessibilityHidden(true)
             }
         }
     }
 
     private var emptySection: some View {
         Section {
-            VStack(spacing: 12) {
-                Image(systemName: "tray")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
-                Text("暂无话题")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button("刷新") {
-                    Task { await listViewModel.refresh() }
-                }
-                .buttonStyle(.bordered)
-                .tint(FireTheme.accent)
+            FireEmptyFeedState(
+                systemImage: "tray",
+                title: "暂无话题",
+                message: "当前筛选条件下还没有话题。",
+                actionTitle: "刷新"
+            ) {
+                Task { await listViewModel.refresh() }
             }
-            .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         }
         .listRowSeparator(.hidden)
@@ -454,5 +497,19 @@ struct FireFilteredTopicListView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                toast = FireToast(message: "已静音话题", style: .success)
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 }

@@ -9,8 +9,9 @@ struct FireTabRoot: View {
     @StateObject private var notificationStore: FireNotificationStore
     @StateObject private var topicDetailStore: FireTopicDetailStore
     @StateObject private var profileViewModel: FireProfileViewModel
-    @AppStorage("fire.appearancePreference") private var appearancePreferenceRawValue = FireAppearancePreference.system.rawValue
+    @AppStorage(FireTheme.appearancePreferenceStorageKey) private var appearancePreferenceRawValue = FireAppearancePreference.system.rawValue
     @State private var preheatComplete = false
+    @State private var tabSelectionFeedbackPulse: Int = 0
 
     init() {
         let vm = FireAppViewModel()
@@ -71,7 +72,11 @@ struct FireTabRoot: View {
                 .toolbarBackground(.visible, for: .tabBar)
                 .environmentObject(homeFeedStore)
                 .environmentObject(topicDetailStore)
-                .fireTopicRoutePresenter(.appRoot(navigationState: navigationState))
+                .fireTopicRoutePresenter(.appRoot(
+                    navigationState: navigationState,
+                    logger: viewModel.topicRouteLogger()
+                ))
+                .fireSelectionFeedback(trigger: tabSelectionFeedbackPulse)
             } else {
                 FireOnboardingView(
                     viewModel: viewModel,
@@ -92,15 +97,41 @@ struct FireTabRoot: View {
                 preheatComplete = true
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .firePreheatGateDidRequestLogin)) { notification in
+            Task { @MainActor in
+                let message = notification.object as? String
+                viewModel.completeStartupAfterPreheatFailure(message: message)
+                preheatComplete = true
+                viewModel.openLogin()
+            }
+        }
         .fullScreenCover(item: $viewModel.authPresentationState) { presentationState in
             FireAuthScreen(
                 viewModel: viewModel,
                 presentationState: presentationState
             )
         }
-        .fullScreenCover(item: $navigationState.presentedTopicRoute) { route in
+        .fullScreenCover(
+            item: $navigationState.presentedTopicRoute,
+            onDismiss: {
+                viewModel.topicRouteLogger()?.info(
+                    "presented topic route cover dismissed current_presented_route_id=\(navigationState.presentedTopicRoute?.id ?? "nil")"
+                )
+                navigationState.dismissPresentedTopicRoute()
+            }
+        ) { route in
             FirePresentedTopicRouteHost(viewModel: viewModel, route: route)
-            .environmentObject(topicDetailStore)
+                .environmentObject(topicDetailStore)
+                .onAppear {
+                    viewModel.topicRouteLogger()?.info(
+                        "presented topic route cover appeared \(route.diagnosticsSummary)"
+                    )
+                }
+                .onDisappear {
+                    viewModel.topicRouteLogger()?.info(
+                        "presented topic route cover disappeared \(route.diagnosticsSummary)"
+                    )
+                }
         }
         .task {
             viewModel.loadInitialState()
@@ -151,6 +182,9 @@ struct FireTabRoot: View {
                 break
             }
         }
+        .onChange(of: navigationState.selectedTab) { _, _ in
+            tabSelectionFeedbackPulse += 1
+        }
         .onChange(of: navigationState.pendingRoute) { _, route in
             selectTabForPendingRouteIfReady(route)
         }
@@ -186,12 +220,23 @@ struct FireTabRoot: View {
 
     private func selectTabForPendingRouteIfReady(_ route: FireAppRoute?) {
         guard let route, isAuthenticated else { return }
-        if route.isTopicRoute {
+        switch route {
+        case .topic:
             navigationState.presentTopicRoute(route)
             navigationState.pendingRoute = nil
-            return
+        case .notifications:
+            navigationState.selectedTab = 1
+            navigationState.pendingRoute = nil
+        case .profileTab:
+            navigationState.selectedTab = 2
+            navigationState.pendingRoute = nil
+        case .search(let query):
+            navigationState.pendingSearchQuery = query ?? ""
+            navigationState.selectedTab = 0
+            navigationState.pendingRoute = nil
+        case .profile, .badge:
+            navigationState.selectedTab = 0
         }
-        navigationState.selectedTab = 0
     }
 
     private func scenePhaseLabel(_ phase: ScenePhase) -> String {

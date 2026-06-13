@@ -107,7 +107,6 @@ struct FireTopicDetailSnapshotAssembler: Sendable {
         FireTopicDetailInteractionInvalidationToken(
             mutatingPostIDs: state.mutatingPostIDs,
             loadingPostReplyContextIDs: state.loadingPostReplyContextIDs,
-            postReplyContextErrorIDs: state.postReplyContextErrorsByPostID.keys.sorted(),
             expandedPostTextIDs: state.expandedPostTextIDs,
             expandedReplyRootPostIDs: state.expandedReplyRootPostIDs
         )

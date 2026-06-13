@@ -50,6 +50,30 @@ final class FireRouteParserTests: XCTestCase {
         XCTAssertEqual(route, .badge(id: 42, slug: "trust-level-3"))
     }
 
+    func testParseFireNotificationsRoute() throws {
+        let url = try XCTUnwrap(URL(string: "fire://notifications"))
+
+        let route = FireRouteParser.parse(url: url)
+
+        XCTAssertEqual(route, .notifications)
+    }
+
+    func testParseFireSearchRoutePreservesQuery() throws {
+        let url = try XCTUnwrap(URL(string: "fire://search?query=swift%20widgets"))
+
+        let route = FireRouteParser.parse(url: url)
+
+        XCTAssertEqual(route, .search(query: "swift widgets"))
+    }
+
+    func testParseFireProfileRouteWithoutUsernameTargetsProfileTab() throws {
+        let url = try XCTUnwrap(URL(string: "fire://profile"))
+
+        let route = FireRouteParser.parse(url: url)
+
+        XCTAssertEqual(route, .profileTab)
+    }
+
     func testNotificationPayloadMapsIntoTopicRoute() {
         let route = FireRouteParser.route(
             fromNotificationUserInfo: [

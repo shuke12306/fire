@@ -169,7 +169,6 @@ final class FirePostLayoutManagerTests: XCTestCase {
             pollSignature: [],
             boostSignature: [],
             hasReactions: false,
-            replyShortcutCount: nil,
             textExpansionState: textExpansionState,
             acceptedAnswer: false,
             hasAuthorMetadata: false,

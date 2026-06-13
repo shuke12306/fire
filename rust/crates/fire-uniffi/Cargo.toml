@@ -15,6 +15,7 @@ fire-core = { path = "../fire-core" }
 fire-models = { path = "../fire-models" }
 fire-rich-text = { path = "../fire-rich-text" }
 fire-uniffi-diagnostics = { path = "../fire-uniffi-diagnostics" }
+fire-uniffi-ldc = { path = "../fire-uniffi-ldc" }
 fire-uniffi-messagebus = { path = "../fire-uniffi-messagebus" }
 fire-uniffi-notifications = { path = "../fire-uniffi-notifications" }
 fire-uniffi-search = { path = "../fire-uniffi-search" }

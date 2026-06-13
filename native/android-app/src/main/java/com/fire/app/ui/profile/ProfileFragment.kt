@@ -29,7 +29,11 @@ class ProfileFragment : Fragment() {
     private lateinit var loadingView: ProgressBar
     private lateinit var profileActions: View
     private lateinit var bookmarksButton: View
+    private lateinit var draftsButton: View
+    private lateinit var readHistoryButton: View
     private lateinit var privateMessagesButton: View
+    private lateinit var ldcButton: View
+    private lateinit var cdkButton: View
 
     private var viewModel: ProfileViewModel? = null
     private var requestedUsername: String? = null
@@ -51,7 +55,11 @@ class ProfileFragment : Fragment() {
         loadingView = view.findViewById(R.id.loading_view)
         profileActions = view.findViewById(R.id.profile_actions)
         bookmarksButton = view.findViewById(R.id.bookmarks_button)
+        draftsButton = view.findViewById(R.id.drafts_button)
+        readHistoryButton = view.findViewById(R.id.read_history_button)
         privateMessagesButton = view.findViewById(R.id.private_messages_button)
+        ldcButton = view.findViewById(R.id.ldc_button)
+        cdkButton = view.findViewById(R.id.cdk_button)
 
         viewLifecycleOwner.lifecycleScope.launch {
             val sessionStore = FireSessionStoreRepository.get(requireContext())
@@ -150,8 +158,20 @@ class ProfileFragment : Fragment() {
         bookmarksButton.setOnClickListener {
             findNavController().navigate(ProfileFragmentDirections.actionProfileToBookmarks())
         }
+        draftsButton.setOnClickListener {
+            findNavController().navigate(ProfileFragmentDirections.actionProfileToDrafts())
+        }
+        readHistoryButton.setOnClickListener {
+            findNavController().navigate(ProfileFragmentDirections.actionProfileToReadHistory())
+        }
         privateMessagesButton.setOnClickListener {
             findNavController().navigate(ProfileFragmentDirections.actionProfileToPrivateMessages())
+        }
+        ldcButton.setOnClickListener {
+            findNavController().navigate(ProfileFragmentDirections.actionProfileToLdc())
+        }
+        cdkButton.setOnClickListener {
+            findNavController().navigate(ProfileFragmentDirections.actionProfileToCdk())
         }
     }
 

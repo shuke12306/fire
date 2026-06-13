@@ -39,13 +39,21 @@ struct FireHomeView: View {
     @State private var showCategoryBrowser = false
     @State private var showTagPicker = false
     @State private var showCreateTopicComposer = false
+    @State private var showSearch = false
     @State private var didPrefetchToFillViewport = false
     @State private var selectedRoute: FireAppRoute?
     @State private var lastTriggeredTopicsPage: UInt32?
     @State private var composerNotice: String?
+    @State private var toast: FireToast?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
     @Namespace private var pushTransitionNamespace
 
     private static let paginationPrefetchDistance: CGFloat = 480
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
+    }
 
     var body: some View {
         NavigationStack {
@@ -57,9 +65,24 @@ struct FireHomeView: View {
                     showTagPicker = true
                 },
                 onSelectTopic: selectTopic(_:),
+                onEditTopicBookmark: { row in
+                    editingBookmarkContext = row.fireBookmarkEditorContext()
+                },
+                onMuteTopic: muteTopic(_:),
                 onRefresh: refreshTopics,
-                onScrollMetricsChanged: handleTopicListScrollMetricsChange(_: )
+                onScrollMetricsChanged: handleTopicListScrollMetricsChange(_: ),
+                baseURLString: baseURLString,
+                topicRouteLogger: viewModel.topicRouteLogger()
             )
+            .overlay(alignment: .top) {
+                if homeFeedStore.isOffline {
+                    FireOfflineBanner()
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: homeFeedStore.isOffline)
             .onAppear {
                 homeFeedStore.setTopicListVisible(true)
             }
@@ -76,12 +99,15 @@ struct FireHomeView: View {
                         } label: {
                             Image(systemName: "square.and.pencil")
                         }
+                        .accessibilityLabel("创建新话题")
 
-                        NavigationLink {
-                            FireSearchView(appViewModel: viewModel, searchStore: searchStore)
+                        Button {
+                            showSearch = true
                         } label: {
                             Image(systemName: "magnifyingglass")
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("搜索")
                     }
                 }
             }
@@ -92,18 +118,29 @@ struct FireHomeView: View {
                         .fireNavigationPush(
                             sourceID: "home-route",
                             namespace: pushTransitionNamespace
-                        )
+                    )
                 }
+            }
+            .navigationDestination(isPresented: $showSearch) {
+                FireSearchView(appViewModel: viewModel, searchStore: searchStore)
             }
         }
         .onAppear {
             consumePendingRouteIfVisible(navigationState.pendingRoute)
+            consumePendingSearchQuery(navigationState.pendingSearchQuery)
         }
         .task {
             await homeFeedStore.refreshTopicsIfPossible(force: false)
         }
         .onChange(of: navigationState.pendingRoute) { _, route in
             consumePendingRouteIfVisible(route)
+        }
+        .onChange(of: navigationState.pendingSearchQuery) { _, query in
+            consumePendingSearchQuery(query)
+        }
+        .onChange(of: navigationState.selectedTab) { _, selectedTab in
+            guard selectedTab == 0 else { return }
+            consumePendingSearchQuery(navigationState.pendingSearchQuery)
         }
         .onChange(of: homeFeedStore.selectedTopicKind) { _, _ in
             resetPaginationTracking()
@@ -129,6 +166,9 @@ struct FireHomeView: View {
                 lastTriggeredTopicsPage = nil
             }
         }
+        .onChange(of: composerNotice) { _, message in
+            showToast(message, style: .info)
+        }
         .sheet(isPresented: $showCategoryBrowser) {
             FireCategoryBrowserSheet(viewModel: viewModel)
                 .fireSheet(presented: $showCategoryBrowser)
@@ -153,18 +193,35 @@ struct FireHomeView: View {
                 )
             }
         }
-        .alert("提示", isPresented: Binding(
-            get: { composerNotice != nil },
-            set: { presenting in
-                if !presenting {
-                    composerNotice = nil
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await viewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await viewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    await homeFeedStore.refreshTopicsAsync()
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        await homeFeedStore.refreshTopicsAsync()
+                    }
                 }
-            }
-        )) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text(composerNotice ?? "")
+            )
         }
+        .fireToast($toast)
     }
 
     private func resetPaginationTracking() {
@@ -188,7 +245,31 @@ struct FireHomeView: View {
     }
 
     private func selectTopic(_ route: FireAppRoute) {
+        viewModel.topicRouteLogger()?.info("home selected route \(route.diagnosticsSummary)")
         presentRoute(route)
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                showToast("已静音话题", style: .success)
+            } catch {
+                showToast(error.localizedDescription, style: .error)
+            }
+        }
+    }
+
+    private func showToast(_ message: String?, style: FireToastStyle) {
+        guard let message,
+              !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        toast = FireToast(message: message, style: style)
+        composerNotice = nil
     }
 
     private func handleTopicListScrollMetricsChange(_ newMetrics: FireCollectionScrollMetrics) {
@@ -215,14 +296,40 @@ struct FireHomeView: View {
         guard navigationState.selectedTab == 0, let route else {
             return
         }
+        switch route {
+        case .topic, .profile, .badge, .search:
+            break
+        case .notifications, .profileTab:
+            return
+        }
         presentRoute(route)
         navigationState.pendingRoute = nil
     }
 
-    private func presentRoute(_ route: FireAppRoute) {
-        if topicRoutePresenter.present(route) {
+    private func consumePendingSearchQuery(_ query: String?) {
+        guard navigationState.selectedTab == 0,
+              let query = query?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return
         }
+        searchStore.prepareSearch(query: query)
+        showSearch = true
+        navigationState.pendingSearchQuery = nil
+    }
+
+    private func presentRoute(_ route: FireAppRoute) {
+        let logger = viewModel.topicRouteLogger()
+        logger?.debug("home present route requested \(route.diagnosticsSummary)")
+        if case .search(let query) = route {
+            logger?.debug("home routing search via pending query query_present=\(query != nil)")
+            navigationState.pendingSearchQuery = query ?? ""
+            consumePendingSearchQuery(query)
+            return
+        }
+        if topicRoutePresenter.present(route) {
+            logger?.debug("home route handled by topic presenter \(route.diagnosticsSummary)")
+            return
+        }
+        logger?.debug("home route falling back to local navigation destination \(route.diagnosticsSummary)")
         selectedRoute = route
     }
 }

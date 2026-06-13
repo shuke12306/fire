@@ -1,26 +1,18 @@
-# LDC OAuth、CDK OAuth、LDC 打赏 API
+# LDC、CDK OAuth 与 LDC 打赏 API
 
-> 对应 FluxDO 源文档第 23-25 节
+LDC Credit and CDK use the same OAuth-style browser authorization shape, but their `user-info` payloads are different. The authorization page itself is hosted through `connect.linux.do`.
 
----
+## 1. LDC OAuth
 
-# 第 23 节：LDC OAuth API
+Base URL: `https://credit.linux.do`
 
-**Base URL：** `https://credit.linux.do`
+### 1.1 Get Authorization URL
 
----
-
-## 23.1 获取授权 URL
-
-```
+```http
 GET https://credit.linux.do/api/v1/oauth/login
 ```
 
-**场景**：用户发起 LDC（信用积分）OAuth 授权。
-
-**Request Options：** `skipCsrf: true`
-
-**Response (200)：**
+Response:
 
 ```json
 {
@@ -28,62 +20,45 @@ GET https://credit.linux.do/api/v1/oauth/login
 }
 ```
 
----
+### 1.2 Load Authorization Page
 
-## 23.2 获取授权页面
-
-```
-GET <authUrl>
+```http
+GET <authorization_url>
 ```
 
-**Request Options：** `skipCsrf: true`, `allowRedirectSetCookie: true`, 不自动重定向
-
-**Response：** HTML 页面，解析其中的授权链接：
+The response is HTML. Parse the approval link:
 
 ```html
 <a href="/oauth2/approve/...">Approve</a>
 ```
 
----
+### 1.3 Approve Authorization
 
-## 23.3 确认授权
-
-```
+```http
 GET https://connect.linux.do/oauth2/approve/...
 ```
 
-**Request Options：** `skipCsrf: true`, `skipRedirect: true`, `allowRedirectSetCookie: true`
+The successful response is a redirect. Read `code` and `state` from the `Location` URL.
 
-**Response：** 302 重定向，`Location` Header 中包含 `code` 和 `state` 参数。
+### 1.4 OAuth Callback
 
----
-
-## 23.4 OAuth 回调
-
-```
+```http
 POST https://credit.linux.do/api/v1/oauth/callback
+Content-Type: application/x-www-form-urlencoded
 ```
-
-**Request Body（form-urlencoded）：**
 
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `code` | string | 是 | 授权码 |
-| `state` | string | 是 | 状态参数 |
+|---|---|---:|---|
+| `code` | string | 是 | Authorization code from redirect |
+| `state` | string | 是 | State from redirect |
 
-**Request Options：** `skipCsrf: true`
+### 1.5 User Info
 
----
-
-## 23.5 获取用户信息
-
-```
+```http
 GET https://credit.linux.do/api/v1/oauth/user-info
 ```
 
-**Request Options：** `skipCsrf: true`, `showErrorToast: false`
-
-**Response (200)：**
+Response:
 
 ```json
 {
@@ -93,74 +68,117 @@ GET https://credit.linux.do/api/v1/oauth/user-info
     "nickname": "昵称",
     "trust_level": 2,
     "avatar_url": "https://...",
-    "total_receive": "100.00",
-    "total_payment": "50.00",
-    "total_transfer": "10.00",
-    "total_community": "5.00",
-    "community_balance": "3.00",
-    "available_balance": "42.00",
+    "total_receive": "100",
+    "total_payment": "50",
+    "total_transfer": "10",
+    "total_community": "5",
+    "community_balance": "3",
+    "available_balance": "42",
     "pay_score": 80,
     "is_pay_key": false,
     "is_admin": false,
-    "remain_quota": "100.00",
+    "remain_quota": "100",
     "pay_level": 1,
-    "daily_limit": "50.00"
+    "daily_limit": 50,
+    "gamification_score": 1234
   }
 }
 ```
 
-**Response (401/403)：** 抛出 `OAuthExpiredException`。
+`401` or `403` means the OAuth authorization is expired or invalid.
 
----
+### 1.6 Logout
 
-## 23.6 登出 LDC
-
-```
+```http
 GET https://credit.linux.do/api/v1/oauth/logout
 ```
 
-**Request Options：** `skipCsrf: true`
+## 2. CDK OAuth
 
----
+Base URL: `https://cdk.linux.do`
 
-# 第 24 节：CDK OAuth API
+The OAuth flow is symmetric to LDC:
 
-**Base URL：** `https://cdk.linux.do`
+| Step | Endpoint |
+|---|---|
+| Get authorization URL | `GET https://cdk.linux.do/api/v1/oauth/login` |
+| OAuth callback | `POST https://cdk.linux.do/api/v1/oauth/callback` |
+| User info | `GET https://cdk.linux.do/api/v1/oauth/user-info` |
+| Logout | `GET https://cdk.linux.do/api/v1/oauth/logout` |
 
-接口与 LDC OAuth 完全对称，仅域名不同：
+CDK `user-info` response:
 
-| 接口 | URL |
-|------|-----|
-| 获取授权 URL | `GET https://cdk.linux.do/api/v1/oauth/login` |
-| OAuth 回调 | `POST https://cdk.linux.do/api/v1/oauth/callback` |
-| 获取用户信息 | `GET https://cdk.linux.do/api/v1/oauth/user-info` |
-| 登出 | `GET https://cdk.linux.do/api/v1/oauth/logout` |
-
-**Request/Response 格式：** 与 LDC 完全一致。
-
----
-
-# 第 25 节：LDC 打赏 API
-
----
-
-## 25.1 执行打赏
-
+```json
+{
+  "data": {
+    "id": 1,
+    "username": "example",
+    "nickname": "昵称",
+    "trust_level": 2,
+    "avatar_url": "https://...",
+    "score": 100
+  }
+}
 ```
+
+Do not reuse the LDC balance/payment fields for CDK. Only the OAuth flow shape is shared.
+
+## 3. Connect HTML Stats
+
+```http
+GET https://connect.linux.do/
+```
+
+The Connect landing page can expose HTML cards and trust-level statistics. This is an HTML scraping surface, not a JSON API. Clients that implement it should treat CSS selectors as unstable and gracefully handle missing fields.
+
+Observed useful selectors include:
+
+| Selector | Meaning |
+|---|---|
+| `div.card` | Summary cards |
+| `.tl3-ring` | Trust-level progress ring |
+| `.tl3-bar-item` | Trust-level requirement bars |
+
+## 4. LDC Reward
+
+```http
 POST https://credit.linux.do/epay/pay/distribute
-```
-
-**场景**：对帖子/用户进行 LDC 信用积分打赏。
-
-**Request Headers：**
-
-```
-Authorization: Basic <base64(clientId:clientSecret)>
 Content-Type: application/json
+Authorization: Basic <base64(client_id:client_secret)>
 ```
 
-**Request Body（JSON）：** `LdcRewardRequest` 对象（由模型定义）。
+### Request Body
 
-**Response (200)：** `LdcRewardResult` 对象。
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `user_id` | integer | 是 | Reward recipient user id |
+| `username` | string | 是 | Reward recipient username |
+| `amount` | number | 是 | Reward amount |
+| `out_trade_no` | string | 是 | Client-generated unique trade number |
+| `remark` | string | 否 | Optional remark |
 
-**Response (401)：** 认证失败。
+`out_trade_no` must be unique for the merchant/client. A robust format should include the topic/post identity, timestamp, and random suffix.
+
+### Response
+
+Success-like response:
+
+```json
+{
+  "data": {
+    "trade_no": "server-trade-no"
+  }
+}
+```
+
+Failure response:
+
+```json
+{
+  "error_msg": "error message"
+}
+```
+
+Some failures use `msg` instead of `error_msg`. Clients should treat a response with `data` and no error message as successful, and otherwise surface `error_msg` or `msg`.
+
+`401` indicates invalid Basic authentication credentials.

@@ -7,12 +7,20 @@ struct FireSearchView: View {
     @FocusState private var isSearchFieldFocused: Bool
     @State private var hasAppeared = false
     @State private var selectedRoute: FireAppRoute?
+    @State private var editingBookmarkContext: FireBookmarkEditorContext?
+    @State private var topicActionNotice: String?
+    @State private var toast: FireToast?
 
     private var scopeBinding: Binding<FireSearchScope> {
         Binding(
             get: { searchStore.scope },
             set: { searchStore.setScope($0) }
         )
+    }
+
+    private var baseURLString: String {
+        let trimmed = appViewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     var body: some View {
@@ -34,6 +42,43 @@ struct FireSearchView: View {
                 isSearchFieldFocused = true
             }
         }
+        .sheet(item: $editingBookmarkContext) { context in
+            FireBookmarkEditorSheet(
+                context: context,
+                onSave: { name, reminderAt in
+                    if let bookmarkID = context.bookmarkID {
+                        try await appViewModel.topicInteraction.updateBookmark(
+                            bookmarkID: bookmarkID,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    } else {
+                        _ = try await appViewModel.topicInteraction.createBookmark(
+                            bookmarkableID: context.bookmarkableID,
+                            bookmarkableType: context.bookmarkableType,
+                            name: name,
+                            reminderAt: reminderAt
+                        )
+                    }
+                    searchStore.submit(reset: true)
+                },
+                onDelete: context.bookmarkID.map { bookmarkID in
+                    {
+                        try await appViewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
+                        searchStore.submit(reset: true)
+                    }
+                }
+            )
+        }
+        .onChange(of: topicActionNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+            toast = FireToast(message: message, style: .error)
+            topicActionNotice = nil
+        }
+        .fireToast($toast)
     }
 
     // MARK: - Search Header
@@ -42,6 +87,7 @@ struct FireSearchView: View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
+                    .accessibilityHidden(true)
                     .foregroundStyle(FireTheme.tertiaryInk)
 
                 TextField("搜索话题、帖子、用户…", text: $searchStore.query)
@@ -63,14 +109,15 @@ struct FireSearchView: View {
                             .foregroundStyle(FireTheme.tertiaryInk)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("清除搜索内容")
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .background(FireTheme.softSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
                     .strokeBorder(FireTheme.divider, lineWidth: 0.5)
             )
 
@@ -91,16 +138,28 @@ struct FireSearchView: View {
     @ViewBuilder
     private var contentArea: some View {
         if searchStore.isSearching && searchStore.result == nil {
-            VStack(spacing: 8) {
-                Spacer()
-                ProgressView()
-                    .controlSize(.large)
-                Text("搜索中…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            List {
+                Section("话题") {
+                    ForEach(0..<3, id: \.self) { _ in
+                        FireTopicSkeletonRow(
+                            subtitleWidth: 104,
+                            showsTrailingMeta: false
+                        )
+                    }
+                }
+
+                Section("帖子") {
+                    ForEach(0..<3, id: \.self) { _ in
+                        FireTopicSkeletonRow(
+                            avatarSize: 34,
+                            subtitleWidth: 140,
+                            showsTrailingMeta: false
+                        )
+                    }
+                }
             }
-            .frame(maxWidth: .infinity)
+            .listStyle(.plain)
+            .accessibilityLabel("搜索中")
         } else if let result = searchStore.result {
             resultList(result)
         } else if let errorMessage = searchStore.errorMessage {
@@ -161,6 +220,26 @@ struct FireSearchView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("搜索结果：\(topic.title)")
+                        .contextMenu {
+                            FireTopicContextMenu(
+                                row: row,
+                                shareURL: row.fireTopicURL(baseURL: baseURLString),
+                                onOpen: {
+                                    presentRoute(.topic(
+                                        topicId: topic.id,
+                                        postNumber: nil,
+                                        preview: FireTopicRoutePreview(row: row)
+                                    ))
+                                },
+                                onBookmark: {
+                                    editingBookmarkContext = row.fireBookmarkEditorContext()
+                                },
+                                onMute: {
+                                    muteTopic(row)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -179,6 +258,7 @@ struct FireSearchView: View {
                                 FireSearchPostRow(post: post, row: row)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("搜索结果：\(post.topicTitleHeadline ?? row.topic.title)")
                         } else {
                             FireSearchPostRow(post: post, row: nil)
                         }
@@ -195,6 +275,7 @@ struct FireSearchView: View {
                             FireSearchUserRow(user: user)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("用户搜索结果：\(user.name ?? user.username)，@\(user.username)")
                     }
                 }
             }
@@ -226,6 +307,7 @@ struct FireSearchView: View {
                 Section {
                     VStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
+                            .accessibilityHidden(true)
                             .font(.title)
                             .foregroundStyle(FireTheme.tertiaryInk)
                         Text("没有找到相关结果")
@@ -251,6 +333,7 @@ struct FireSearchView: View {
                     .frame(height: 40)
 
                 Image(systemName: "text.magnifyingglass")
+                    .accessibilityHidden(true)
                     .font(.system(size: 48))
                     .foregroundStyle(FireTheme.tertiaryInk)
 
@@ -281,6 +364,20 @@ struct FireSearchView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await appViewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                toast = FireToast(message: "已静音话题", style: .success)
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 
     private func dslHintRow(_ keyword: String, _ hint: String) -> some View {
@@ -423,6 +520,7 @@ private struct FireSearchPostRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -454,5 +552,6 @@ private struct FireSearchUserRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }

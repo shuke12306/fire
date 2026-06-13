@@ -271,6 +271,15 @@ struct FireNotificationsView: View {
 
     private var notificationList: some View {
         List {
+            if notificationStore.isRecentOffline {
+                Section {
+                    FireOfflineBanner("正在显示离线通知缓存")
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+
             if let errorMessage = notificationStore.recentNonBlockingErrorMessage {
                 Section {
                     FireErrorBanner(
@@ -287,7 +296,16 @@ struct FireNotificationsView: View {
             }
 
             ForEach(notificationStore.recentNotifications, id: \.id) { item in
-                notificationRow(item)
+                FireNotificationRow(
+                    item: item,
+                    baseURLString: baseURLString,
+                    onOpen: {
+                        handleNotificationTap(item)
+                    },
+                    onMarkRead: {
+                        notificationStore.markRead(id: item.id)
+                    }
+                )
                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -308,6 +326,7 @@ struct FireNotificationsView: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(FireTheme.accent)
                     Image(systemName: "chevron.right")
+                        .accessibilityHidden(true)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(FireTheme.accent)
                     Spacer()
@@ -328,15 +347,6 @@ struct FireNotificationsView: View {
         }
     }
 
-    private func notificationRow(_ item: NotificationItemState) -> some View {
-        Button {
-            handleNotificationTap(item)
-        } label: {
-            notificationRowContent(item)
-        }
-        .buttonStyle(.plain)
-    }
-
     private func handleNotificationTap(_ item: NotificationItemState) {
         if !item.read {
             notificationStore.markRead(id: item.id)
@@ -349,43 +359,10 @@ struct FireNotificationsView: View {
         presentRoute(route)
     }
 
-    private func notificationRowContent(_ item: NotificationItemState) -> some View {
-        FireNotificationRowContent(item: item, baseURLString: baseURLString)
-    }
-
     // MARK: - Loading skeleton
 
     private var loadingSkeleton: some View {
-        List {
-            ForEach(0..<8, id: \.self) { _ in
-                HStack(alignment: .top, spacing: 12) {
-                    Circle()
-                        .fill(Color(.tertiarySystemFill))
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 6)
-
-                    Circle()
-                        .fill(Color(.tertiarySystemFill))
-                        .frame(width: 36, height: 36)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.tertiarySystemFill))
-                            .frame(height: 13)
-
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.quaternarySystemFill))
-                            .frame(width: 80, height: 10)
-                    }
-                }
-                .padding(.vertical, 10)
-                .redacted(reason: .placeholder)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-        }
-        .listStyle(.plain)
+        FireNotificationSkeletonList(rowCount: 8)
     }
 
     // MARK: - Empty state
@@ -405,24 +382,14 @@ struct FireNotificationsView: View {
                 )
             }
 
-            Image(systemName: "bell.slash")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(FireTheme.tertiaryInk)
-
-            Text("暂无通知")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Text("当有人回复、提及或点赞你的帖子时，通知会出现在这里。")
-                .font(.subheadline)
-                .foregroundStyle(FireTheme.tertiaryInk)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button("刷新") {
+            FireEmptyFeedState(
+                systemImage: "bell.slash",
+                title: "暂无通知",
+                message: "当有人回复、提及或点赞你的帖子时，通知会出现在这里。",
+                actionTitle: "刷新"
+            ) {
                 retryRecentLoad()
             }
-            .buttonStyle(FireSecondaryButtonStyle())
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -434,9 +401,42 @@ struct FireNotificationsView: View {
         }
         selectedRoute = route
     }
+
 }
 
 // MARK: - Shared notification row
+
+struct FireNotificationRow: View {
+    let item: NotificationItemState
+    let baseURLString: String
+    let onOpen: () -> Void
+    let onMarkRead: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            FireNotificationRowContent(item: item, baseURLString: baseURLString)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(notificationAccessibilityLabel)
+        .contextMenu {
+            FireNotificationContextMenu(
+                item: item,
+                shareURL: item.fireShareURL(baseURL: baseURLString),
+                onOpen: onOpen,
+                onMarkRead: onMarkRead
+            )
+        }
+    }
+
+    private var notificationAccessibilityLabel: String {
+        var parts = [item.displayDescription]
+        if let timestamp = FireTopicPresentation.compactTimestamp(item.createdAt) {
+            parts.append(timestamp)
+        }
+        parts.append(item.read ? "已读" : "未读")
+        return parts.joined(separator: "，")
+    }
+}
 
 struct FireNotificationRowContent: View {
     let item: NotificationItemState
@@ -448,6 +448,7 @@ struct FireNotificationRowContent: View {
                 .fill(item.read ? Color.clear : FireTheme.accent)
                 .frame(width: 7, height: 7)
                 .padding(.top, 6)
+                .accessibilityHidden(true)
 
             ZStack {
                 Circle()
@@ -465,8 +466,10 @@ struct FireNotificationRowContent: View {
                     Image(systemName: item.typeSystemImage)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(item.typeIconColor)
+                        .accessibilityHidden(true)
                 }
             }
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.displayDescription)
@@ -491,5 +494,6 @@ struct FireNotificationRowContent: View {
                 : FireTheme.accent.opacity(0.03)
         )
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }

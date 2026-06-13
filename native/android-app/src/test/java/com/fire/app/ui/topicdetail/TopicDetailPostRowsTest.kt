@@ -8,6 +8,7 @@ import uniffi.fire_uniffi_topics.TopicPostBoostState
 import uniffi.fire_uniffi_topics.TopicPostBoostUserState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.TopicTreeRowState
+import uniffi.fire_uniffi_types.RenderDocumentState
 
 class TopicDetailPostRowsTest {
     @Test
@@ -101,21 +102,191 @@ class TopicDetailPostRowsTest {
     }
 
     @Test
-    fun boostBarragePresentation_isFixedToFiveVisibleRows() {
-        assertEquals(5, TopicDetailBoostPresentation.BODY_BARRAGE_VISIBLE_LINE_LIMIT)
-        assertEquals(5, TopicDetailBoostPresentation.BODY_BARRAGE_MAX_LANES)
+    fun manualBoostLayout_fillsFirstRowThenSecondBeforeHorizontalOverflow() {
+        val layout = TopicDetailManualBoostLayout.placements(
+            chipWidths = listOf(60, 70, 80, 90),
+            pageWidth = 200,
+            rowCount = 2,
+            chipSpacing = 8,
+        )
+
+        assertEquals(listOf(0, 0, 1, 1), layout.placements.map { it.rowIndex })
+        assertEquals(listOf(0, 68, 0, 88), layout.placements.map { it.x })
+        assertEquals(200, layout.contentWidth)
+        assertEquals(2, layout.usedRowCount)
     }
 
     @Test
-    fun postRow_bodyUsesRegularInsetUnlessHeaderRequestsTitleWidth() {
-        val regular = PostRow(post = post(id = 1uL, postNumber = 1u, username = "author"))
-        val headerOriginal = PostRow(
-            post = post(id = 1uL, postNumber = 1u, username = "author"),
-            usesTitleWidthBody = true,
+    fun manualBoostLayout_doesNotBackfillFirstRowAfterMovingToSecondRow() {
+        val layout = TopicDetailManualBoostLayout.placements(
+            chipWidths = listOf(160, 50, 20),
+            pageWidth = 200,
+            rowCount = 2,
+            chipSpacing = 8,
         )
 
-        assertEquals(false, regular.usesTitleWidthBody)
-        assertEquals(true, headerOriginal.usesTitleWidthBody)
+        assertEquals(listOf(0, 1, 1), layout.placements.map { it.rowIndex })
+        assertEquals(listOf(0, 0, 58), layout.placements.map { it.x })
+        assertEquals(200, layout.contentWidth)
+        assertEquals(2, layout.usedRowCount)
+    }
+
+    @Test
+    fun manualBoostLayout_addsOverflowAsNextTwoRowPage() {
+        val layout = TopicDetailManualBoostLayout.placements(
+            chipWidths = listOf(120, 70, 120, 70, 100),
+            pageWidth = 200,
+            rowCount = 2,
+            chipSpacing = 8,
+        )
+
+        assertEquals(listOf(0, 0, 1, 1, 0), layout.placements.map { it.rowIndex })
+        assertEquals(208, layout.placements[4].x)
+        assertEquals(true, layout.contentWidth > 200)
+        assertEquals(2, layout.usedRowCount)
+    }
+
+    @Test
+    fun manualBoostLayout_reportsSingleUsedRowWhenEverythingFitsFirstRow() {
+        val layout = TopicDetailManualBoostLayout.placements(
+            chipWidths = listOf(40, 50),
+            pageWidth = 200,
+            rowCount = 2,
+            chipSpacing = 8,
+        )
+
+        assertEquals(listOf(0, 0), layout.placements.map { it.rowIndex })
+        assertEquals(1, layout.usedRowCount)
+    }
+
+    @Test
+    fun projectRows_preservesTreeOrderAndDepth() {
+        val root = post(id = 2uL, postNumber = 2u, username = "root")
+        val child = post(id = 3uL, postNumber = 3u, username = "child")
+        val laterRoot = post(id = 4uL, postNumber = 4u, username = "later")
+        val rows = listOf(
+            row(root, parentPostNumber = 1u, depth = 1u),
+            row(child, parentPostNumber = 2u, depth = 2u),
+            row(laterRoot, parentPostNumber = 1u, depth = 1u),
+        )
+
+        val projected = TopicDetailPostRows.projectRows(
+            rows = rows,
+            postsById = TopicDetailPostRows.postsById(listOf(root, child, laterRoot)),
+            expandedReplyRootPostIds = setOf(root.id),
+        )
+
+        assertEquals(listOf(2u, 3u, 4u), projected.map { it.post.postNumber })
+        assertEquals(listOf(1, 2, 1), projected.map { it.depth })
+        assertEquals(listOf(1u, 2u, 1u), projected.map { it.parentPostNumber })
+    }
+
+    @Test
+    fun projectRows_hidesSecondaryRepliesBehindRootShortcutByDefault() {
+        val root = post(id = 2uL, postNumber = 2u, username = "root")
+        val child = post(id = 3uL, postNumber = 3u, username = "child")
+        val grandchild = post(id = 4uL, postNumber = 4u, username = "grandchild")
+        val laterRoot = post(id = 5uL, postNumber = 5u, username = "later")
+        val rows = listOf(
+            row(root, parentPostNumber = 1u, depth = 1u),
+            row(child, parentPostNumber = 2u, depth = 2u),
+            row(grandchild, parentPostNumber = 3u, depth = 3u),
+            row(laterRoot, parentPostNumber = 1u, depth = 1u),
+        )
+
+        val projected = TopicDetailPostRows.projectRows(
+            rows = rows,
+            postsById = TopicDetailPostRows.postsById(listOf(root, child, grandchild, laterRoot)),
+        )
+
+        assertEquals(listOf(2u, 5u), projected.map { it.post.postNumber })
+        assertEquals(2u, projected.first().hiddenReplyCount)
+        assertEquals(0u, projected.last().hiddenReplyCount)
+    }
+
+    @Test
+    fun projectRows_keepsFocusedSecondaryAncestryVisibleWithoutExpandingThread() {
+        val root = post(id = 2uL, postNumber = 2u, username = "root")
+        val child = post(id = 3uL, postNumber = 3u, username = "child")
+        val grandchild = post(id = 4uL, postNumber = 4u, username = "grandchild")
+        val sibling = post(id = 5uL, postNumber = 5u, username = "sibling")
+        val rows = listOf(
+            row(root, parentPostNumber = 1u, depth = 1u),
+            row(child, parentPostNumber = 2u, depth = 2u),
+            row(grandchild, parentPostNumber = 3u, depth = 3u),
+            row(sibling, parentPostNumber = 2u, depth = 2u),
+        )
+
+        val projected = TopicDetailPostRows.projectRows(
+            rows = rows,
+            postsById = TopicDetailPostRows.postsById(listOf(root, child, grandchild, sibling)),
+            focusedPostNumber = grandchild.postNumber,
+        )
+
+        assertEquals(listOf(2u, 3u, 4u), projected.map { it.post.postNumber })
+        assertEquals(listOf(1, 2, 3), projected.map { it.depth })
+        assertEquals(1u, projected.first().hiddenReplyCount)
+    }
+
+    @Test
+    fun projectRows_expandedReplyThreadShowsLoadedSecondaryReplies() {
+        val root = post(id = 2uL, postNumber = 2u, username = "root")
+        val child = post(id = 3uL, postNumber = 3u, username = "child")
+        val sibling = post(id = 4uL, postNumber = 4u, username = "sibling")
+        val rows = listOf(
+            row(root, parentPostNumber = 1u, depth = 1u),
+            row(child, parentPostNumber = 2u, depth = 2u),
+            row(sibling, parentPostNumber = 2u, depth = 2u),
+        )
+
+        val projected = TopicDetailPostRows.projectRows(
+            rows = rows,
+            postsById = TopicDetailPostRows.postsById(listOf(root, child, sibling)),
+            expandedReplyRootPostIds = setOf(root.id),
+        )
+
+        assertEquals(listOf(2u, 3u, 4u), projected.map { it.post.postNumber })
+        assertEquals(listOf(0u, 0u, 0u), projected.map { it.hiddenReplyCount })
+    }
+
+    @Test
+    fun searchMatches_usesLoadedRenderPlainTextAndSortsByFloor() {
+        val later = post(
+            id = 3uL,
+            postNumber = 3u,
+            username = "later",
+            plainText = "Needle in a later post",
+        )
+        val earlier = post(
+            id = 2uL,
+            postNumber = 2u,
+            username = "earlier",
+            plainText = "accent NEEDLE match",
+        )
+        val duplicate = post(
+            id = 2uL,
+            postNumber = 2u,
+            username = "duplicate",
+            plainText = "needle duplicate",
+        )
+        val cookedOnly = post(
+            id = 4uL,
+            postNumber = 4u,
+            username = "needle-cooked-only",
+        )
+
+        val matches = TopicDetailPostRows.searchMatches(
+            query = " needle ",
+            posts = listOf(later, earlier, duplicate, cookedOnly),
+        )
+
+        assertEquals(
+            listOf(
+                TopicDetailPostRows.SearchMatch(postId = earlier.id, postNumber = 2u),
+                TopicDetailPostRows.SearchMatch(postId = later.id, postNumber = 3u),
+            ),
+            matches,
+        )
     }
 
     private fun post(
@@ -123,6 +294,8 @@ class TopicDetailPostRowsTest {
         postNumber: UInt,
         username: String,
         boosts: List<TopicPostBoostState> = emptyList(),
+        replyToPostNumber: UInt? = null,
+        plainText: String? = null,
     ): TopicPostState {
         return TopicPostState(
             id = id,
@@ -138,7 +311,7 @@ class TopicDetailPostRowsTest {
             updatedAt = "2026-03-28T10:00:00Z",
             likeCount = 0u,
             replyCount = 0u,
-            replyToPostNumber = null,
+            replyToPostNumber = replyToPostNumber,
             replyToUser = null,
             bookmarked = false,
             bookmarkId = null,
@@ -149,7 +322,13 @@ class TopicDetailPostRowsTest {
             boosts = boosts,
             canBoost = false,
             polls = emptyList(),
-            renderDocument = null,
+            renderDocument = plainText?.let {
+                RenderDocumentState(
+                    blocks = emptyList(),
+                    plainText = it,
+                    imageAttachments = emptyList(),
+                )
+            },
             acceptedAnswer = false,
             canAcceptAnswer = false,
             canUnacceptAnswer = false,
@@ -179,15 +358,19 @@ class TopicDetailPostRowsTest {
         )
     }
 
-    private fun row(post: TopicPostState): TopicTreeRowState {
+    private fun row(
+        post: TopicPostState,
+        parentPostNumber: UInt = 1u,
+        depth: UInt = 1u,
+    ): TopicTreeRowState {
         return TopicTreeRowState(
             postId = post.id,
             postNumber = post.postNumber,
             rootPostNumber = 1u,
-            parentPostNumber = 1u,
-            depth = 1u.toUShort(),
+            parentPostNumber = parentPostNumber,
+            depth = depth.toUShort(),
             preorderIndex = post.postNumber - 1u,
-            hasChildren = false,
+            hasChildren = depth == 1u,
             descendantCount = 0u,
             siblingIndex = 0u.toUShort(),
             isLastSibling = true,

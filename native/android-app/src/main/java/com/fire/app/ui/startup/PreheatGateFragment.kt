@@ -47,6 +47,7 @@ class PreheatGateFragment : Fragment() {
     private fun awaitPreloadedData() {
         statusButton.isEnabled = false
         statusButton.text = getString(R.string.onboarding_checking_login_state)
+        statusButton.setOnClickListener { awaitPreloadedData() }
         errorText.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -65,15 +66,15 @@ class PreheatGateFragment : Fragment() {
 
                 onPreloadedDataReady(store)
             } catch (e: Exception) {
-                showError(e.message ?: "\u52a0\u8f7d\u5931\u8d25")
+                showLoginError(getString(R.string.onboarding_login_check_failed))
             }
         }
     }
 
     private suspend fun onPreloadedDataReady(store: FireSessionStore) {
-        val loginProbeStartedAt = SystemClock.elapsedRealtime()
-        when (store.determineLoginStateWithProbe().also {
-            logStartupStep("login_probe_ms", loginProbeStartedAt)
+        val loginStateStartedAt = SystemClock.elapsedRealtime()
+        when (store.determineLoginState().also {
+            logStartupStep("login_state_ms", loginStateStartedAt)
         }) {
             is LoginStateDeterminationState.LoggedIn -> {
                 store.triggerAppStateRefresh(
@@ -82,20 +83,20 @@ class PreheatGateFragment : Fragment() {
                 )
                 findNavController().navigate(R.id.action_preheatGate_to_home)
             }
-            LoginStateDeterminationState.NetworkErrorPreserveState -> {
-                showError(getString(R.string.onboarding_login_check_failed))
-            }
             else -> {
                 findNavController().navigate(R.id.action_preheatGate_to_onboarding)
             }
         }
     }
 
-    private fun showError(message: String) {
+    private fun showLoginError(message: String) {
         errorText.visibility = View.VISIBLE
         errorText.text = message
         statusButton.isEnabled = true
-        statusButton.text = getString(R.string.onboarding_retry_login_check)
+        statusButton.text = getString(R.string.onboarding_login)
+        statusButton.setOnClickListener {
+            findNavController().navigate(R.id.action_preheatGate_to_loginWebView)
+        }
     }
 
     private fun logStartupStep(field: String, startedAtMs: Long) {

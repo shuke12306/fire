@@ -1,9 +1,5 @@
 # 用户 API
 
-> 对应 FluxDO 源文档第 8 节
-
----
-
 ## 8.1 获取用户信息
 
 ```
@@ -33,6 +29,9 @@ GET /u/{username}.json
   }
 }
 ```
+
+Some responses wrap the user object in `user`; some return a bare user object.
+Clients should normalize both shapes to the same user model.
 
 ---
 
@@ -249,6 +248,38 @@ GET /user_badges.json
 ```
 GET /u/{username}/invited/pending
 ```
+
+**Response variants：**
+
+Array response:
+
+```json
+[
+  {
+    "invite_link": "https://linux.do/invites/...",
+    "invite": {}
+  }
+]
+```
+
+Map envelopes:
+
+```json
+{
+  "invites": []
+}
+```
+
+```json
+{
+  "pending_invites": []
+}
+```
+
+The list may also appear under `invited` or `pending`, or the response may be a
+single invite-like object containing fields such as `invite_link`, `invite_url`,
+`url`, `link`, `invite`, or `invite_key`. Clients should normalize these forms
+into a list of invite-link objects.
 
 ---
 

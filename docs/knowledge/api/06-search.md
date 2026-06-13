@@ -1,9 +1,5 @@
 # 搜索 API
 
-> 对应 FluxDO 源文档第 9 节
-
----
-
 ## 9.1 全文搜索
 
 ```
@@ -16,7 +12,7 @@ GET /search.json
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `q` | string | 是 | 搜索关键词 |
+| `q` | string | 否 | 搜索关键词；可为空字符串，用于浏览/按分类过滤标签 |
 | `page` | int | 否 | 页码（默认 1，>1 时传递） |
 | `type_filter` | string | 否 | 类型过滤：`topic`/`post`/`user`/`category`/`tag` |
 
@@ -57,7 +53,7 @@ GET /tags/filter/search
 | `q` | string | 是 | 搜索关键词 |
 | `limit` | int | 否 | 返回数量限制 |
 | `categoryId` | int | 否 | 分类 ID |
-| `selected_tags` | string[] | 否 | 已选标签 |
+| `selected_tags` | string[] | 否 | 已选标签；使用数组编码 |
 | `filterForInput` | bool | 否 | true 时只返回当前分类允许的标签 |
 
 ---

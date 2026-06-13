@@ -57,6 +57,7 @@ rust/
     fire-uniffi-search/     # Search FFI handle
     fire-uniffi-messagebus/ # MessageBus FFI handle
     fire-uniffi-notifications/ # Notifications FFI handle
+    fire-uniffi-ldc/      # LDC/CDK OAuth FFI handle
     fire-uniffi-image/      # Image FFI handle                             (NEW)
     fire-uniffi-diagnostics/ # Diagnostics FFI handle
     fire-uniffi/            # Top-level FFI aggregation
@@ -203,7 +204,7 @@ login or a legacy recovery WebView from platform code.
 | Item | Choice |
 |---|---|
 | Language | Swift 5.10+ |
-| Minimum version | iOS 16 |
+| Minimum version | iOS 17 |
 | UI framework | UIKit + Texture (AsyncDisplayKit) |
 | Architecture | MVVM |
 | Image loading | **Nuke** (upper-layer scheduling + transitions + prefetch), **Rust** (lower-layer decode + cache) |
@@ -787,6 +788,7 @@ FireAppCore
   ├── .search()        → FireSearchHandle
   ├── .messagebus()    → FireMessageBusHandle
   ├── .notifications() → FireNotificationsHandle
+  ├── .ldc()           → FireLdcHandle
   ├── .image()         → FireImageHandle              ← NEW
   └── .diagnostics()   → FireDiagnosticsHandle
 ```

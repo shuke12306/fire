@@ -46,14 +46,12 @@ struct FireTopicDetailSidecarState {
 struct FireTopicDetailInteractionState: Equatable {
     let mutatingPostIDs: Set<UInt64>
     let loadingPostReplyContextIDs: Set<UInt64>
-    let postReplyContextErrorsByPostID: [UInt64: String]
     let expandedPostTextIDs: Set<UInt64>
     let expandedReplyRootPostIDs: Set<UInt64>
 
     static let empty = FireTopicDetailInteractionState(
         mutatingPostIDs: [],
         loadingPostReplyContextIDs: [],
-        postReplyContextErrorsByPostID: [:],
         expandedPostTextIDs: [],
         expandedReplyRootPostIDs: []
     )
@@ -66,17 +64,14 @@ struct FireTopicDetailInteractionState: Equatable {
         expandedPostTextIDs.contains(postID)
     }
 
-    func isReplyThreadExpanded(_ postID: UInt64) -> Bool {
-        expandedReplyRootPostIDs.contains(postID)
-    }
-
     func isLoadingPostReplyContext(_ postID: UInt64) -> Bool {
         loadingPostReplyContextIDs.contains(postID)
     }
 
-    func postReplyContextError(_ postID: UInt64) -> String? {
-        postReplyContextErrorsByPostID[postID]
+    func isReplyThreadExpanded(_ postID: UInt64) -> Bool {
+        expandedReplyRootPostIDs.contains(postID)
     }
+
 }
 
 /// Route/session constants needed by feed construction.

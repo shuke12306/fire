@@ -46,6 +46,44 @@ async fn fetch_recent_notifications_parses_payload_and_updates_state() {
     assert!(
         request.contains("GET /notifications?recent=true&limit=30&bump_last_seen_reviewable=true")
     );
+    assert!(!page.is_cached);
+    assert!(!state.recent_is_cached);
+}
+
+#[tokio::test]
+async fn fetch_recent_notifications_returns_cached_page_on_network_error() {
+    let server = TestServer::spawn(vec![raw_json_response(
+        200,
+        "application/json",
+        &notification_page_json(
+            &[notification_json(100, false, false, "Topic A")],
+            1,
+            Some(100),
+            None,
+        ),
+    )])
+    .await
+    .expect("server");
+    let core = authenticated_core(&server.base_url());
+
+    let live = core
+        .fetch_recent_notifications(None)
+        .await
+        .expect("live notifications");
+    assert!(!live.is_cached);
+
+    let cached = core
+        .fetch_recent_notifications(None)
+        .await
+        .expect("cached notifications");
+    let state = core.notification_state();
+    let _ = server.shutdown().await;
+
+    assert!(cached.is_cached);
+    assert_eq!(cached.notifications.len(), 1);
+    assert_eq!(cached.notifications[0].id, live.notifications[0].id);
+    assert!(state.recent_is_cached);
+    assert_eq!(state.recent.len(), 1);
 }
 
 #[tokio::test]

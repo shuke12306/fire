@@ -70,6 +70,14 @@ struct FireProfileView: View {
         "生成和整理待使用的邀请码链接。"
     }
 
+    private var ldcSubtitle: String {
+        "查看 LDC 信用余额、配额和支付等级。"
+    }
+
+    private var cdkSubtitle: String {
+        "查看 CDK 连接状态和积分。"
+    }
+
     private var followingSubtitle: String {
         "当前关注 \(formatNumber(profileViewModel.profile?.totalFollowing ?? 0)) 位用户。"
     }
@@ -212,6 +220,28 @@ struct FireProfileView: View {
                     }
 
                     NavigationLink {
+                        FireLDCView(viewModel: viewModel)
+                    } label: {
+                        shortcutRowContent(
+                            icon: "creditcard.fill",
+                            tint: .teal,
+                            title: "LDC 信用",
+                            subtitle: ldcSubtitle
+                        )
+                    }
+
+                    NavigationLink {
+                        FireCDKView(viewModel: viewModel)
+                    } label: {
+                        shortcutRowContent(
+                            icon: "key.fill",
+                            tint: .purple,
+                            title: "CDK 连接",
+                            subtitle: cdkSubtitle
+                        )
+                    }
+
+                    NavigationLink {
                         FireFollowListView(
                             viewModel: viewModel,
                             username: displayUsername,
@@ -297,6 +327,7 @@ struct FireProfileView: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                                .accessibilityHidden(true)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(FireTheme.accent)
                                 .frame(width: 24)
@@ -327,6 +358,7 @@ struct FireProfileView: View {
                         Image(systemName: "gearshape")
                             .foregroundStyle(FireTheme.subtleInk)
                     }
+                    .accessibilityLabel("设置")
                 }
             }
             .refreshable {
@@ -437,6 +469,7 @@ struct FireProfileView: View {
                 .frame(width: 36, height: 36)
                 .overlay {
                     Image(systemName: icon)
+                        .accessibilityHidden(true)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(tint)
                 }
@@ -456,6 +489,7 @@ struct FireProfileView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     private func errorBanner(message: String) -> some View {
@@ -606,7 +640,7 @@ private struct FireProfileLoadTrigger: Equatable {
 private struct FireSettingsView: View {
     @ObservedObject var viewModel: FireAppViewModel
     let canLogout: Bool
-    @AppStorage("fire.appearancePreference") private var appearancePreferenceRawValue = FireAppearancePreference.system.rawValue
+    @AppStorage(FireTheme.appearancePreferenceStorageKey) private var appearancePreferenceRawValue = FireAppearancePreference.system.rawValue
     @State private var showLogoutConfirmation = false
 
     private var appVersionText: String {

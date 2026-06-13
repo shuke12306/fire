@@ -35,6 +35,7 @@ pub(crate) fn parse_notification_list_response_value(
         seen_notification_id: integer_u64(object.get("seen_notification_id")),
         next_offset: next_offset_from_load_more(load_more_notifications.as_deref()),
         load_more_notifications,
+        is_cached: false,
     })
 }
 

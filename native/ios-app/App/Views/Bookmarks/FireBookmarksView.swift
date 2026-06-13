@@ -111,6 +111,8 @@ struct FireBookmarksView: View {
     @StateObject private var bookmarksViewModel: FireBookmarksViewModel
     @State private var editingContext: FireBookmarkEditorContext?
     @State private var selectedRoute: FireAppRoute?
+    @State private var topicActionNotice: String?
+    @State private var toast: FireToast?
     @Namespace private var pushTransitionNamespace
 
     private struct ContentVersion: Hashable {
@@ -139,6 +141,11 @@ struct FireBookmarksView: View {
             hasLoadedOnce: bookmarksViewModel.hasLoadedOnce,
             errorMessage: bookmarksViewModel.errorMessage
         )
+    }
+
+    private var baseURLString: String {
+        let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "https://linux.do" : trimmed
     }
 
     private var sections: [FireListSectionModel<FireBookmarksCollectionSection, FireBookmarksCollectionItem>] {
@@ -204,7 +211,7 @@ struct FireBookmarksView: View {
                 context: context,
                 onSave: { name, reminderAt in
                     guard let bookmarkID = context.bookmarkID else { return }
-                    try await viewModel.updateBookmark(
+                    try await viewModel.topicInteraction.updateBookmark(
                         bookmarkID: bookmarkID,
                         name: name,
                         reminderAt: reminderAt
@@ -213,12 +220,21 @@ struct FireBookmarksView: View {
                 },
                 onDelete: context.bookmarkID.map { bookmarkID in
                     {
-                        try await viewModel.deleteBookmark(bookmarkID: bookmarkID)
+                        try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
                         await bookmarksViewModel.refresh()
                     }
                 }
             )
         }
+        .onChange(of: topicActionNotice) { _, message in
+            guard let message,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+            toast = FireToast(message: message, style: .error)
+            topicActionNotice = nil
+        }
+        .fireToast($toast)
     }
 
     private static func makeLayout() -> UICollectionViewLayout {
@@ -304,16 +320,12 @@ struct FireBookmarksView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         case .loading:
-            HStack {
-                Spacer()
-                ProgressView()
-                    .padding(.vertical, 28)
-                Spacer()
-            }
+            FireTopicSkeletonList(rowCount: 5)
             .padding(.horizontal, 16)
         case .empty:
             VStack(spacing: 12) {
                 Image(systemName: "bookmark")
+                    .accessibilityHidden(true)
                     .font(.system(size: 34, weight: .light))
                     .foregroundStyle(FireTheme.tertiaryInk)
                 Text("还没有书签")
@@ -436,6 +448,7 @@ struct FireBookmarksView: View {
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("书签操作")
                     }
                 }
                 .padding(.horizontal, 2)
@@ -446,6 +459,24 @@ struct FireBookmarksView: View {
                 row: row,
                 category: viewModel.categoryPresentation(for: row.topic.categoryId)
             )
+            .contextMenu {
+                FireTopicContextMenu(
+                    row: row,
+                    shareURL: row.fireTopicURL(baseURL: baseURLString),
+                    onOpen: {
+                        presentRoute(.topic(
+                            row: row,
+                            postNumber: row.topic.bookmarkedPostNumber ?? row.topic.lastReadPostNumber
+                        ))
+                    },
+                    onBookmark: {
+                        editingContext = editorContext(for: row)
+                    },
+                    onMute: {
+                        muteTopic(row)
+                    }
+                )
+            }
         }
     }
 
@@ -458,6 +489,8 @@ struct FireBookmarksView: View {
             bookmarkID: row.topic.bookmarkId,
             bookmarkableID: row.topic.id,
             bookmarkableType: row.topic.bookmarkableType ?? "Topic",
+            topicID: row.topic.id,
+            postNumber: row.topic.bookmarkedPostNumber,
             title: row.topic.title,
             initialName: row.topic.bookmarkName,
             initialReminderAt: row.topic.bookmarkReminderAt,
@@ -468,7 +501,7 @@ struct FireBookmarksView: View {
     private func deleteBookmark(for row: FireTopicRowPresentation) async {
         guard let bookmarkID = row.topic.bookmarkId else { return }
         do {
-            try await viewModel.deleteBookmark(bookmarkID: bookmarkID)
+            try await viewModel.topicInteraction.deleteBookmark(bookmarkID: bookmarkID)
             await bookmarksViewModel.refresh()
         } catch {
             bookmarksViewModel.errorMessage = error.localizedDescription
@@ -480,5 +513,19 @@ struct FireBookmarksView: View {
             return
         }
         selectedRoute = route
+    }
+
+    private func muteTopic(_ row: FireTopicRowPresentation) {
+        Task {
+            do {
+                try await viewModel.topicInteraction.setTopicNotificationLevel(
+                    topicID: row.topic.id,
+                    notificationLevel: FireTopicNotificationLevelOption.muted.rawValue
+                )
+                toast = FireToast(message: "已静音话题", style: .success)
+            } catch {
+                topicActionNotice = error.localizedDescription
+            }
+        }
     }
 }

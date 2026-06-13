@@ -673,12 +673,6 @@ public actor FireSessionStore {
         }
     }
 
-    public func fetchPostReplies(postID: UInt64, after: UInt32? = 1) async throws -> [TopicPostState] {
-        try await runPersistingSessionChanges {
-            try await core.topics().fetchPostReplies(postId: postID, after: after)
-        }
-    }
-
     public func fetchPostReplyIds(postID: UInt64) async throws -> [UInt64] {
         try await runPersistingSessionChanges {
             try await core.topics().fetchPostReplyIds(postId: postID)
@@ -860,6 +854,12 @@ public actor FireSessionStore {
         }
     }
 
+    public func fetchReactionUsers(postID: UInt64) async throws -> [ReactionUsersGroupState] {
+        try await runPersistingSessionChanges {
+            try await core.topics().fetchReactionUsers(postId: postID)
+        }
+    }
+
     public func votePoll(
         postID: UInt64,
         pollName: String,
@@ -1025,6 +1025,78 @@ public actor FireSessionStore {
         }
     }
 
+    public func ldcAuthorizationUrl() async throws -> LdcAuthorizationUrlState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcAuthorizationUrl()
+        }
+    }
+
+    public func ldcApprovalLink(authorizationURL: String) async throws -> String {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcApprovalLink(authorizationUrl: authorizationURL)
+        }
+    }
+
+    public func ldcApprove(approvePath: String) async throws -> LdcApprovalStatusState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcApprove(approvePath: approvePath)
+        }
+    }
+
+    public func ldcCallback(code: String, state: String) async throws {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcCallback(code: code, state: state)
+        }
+    }
+
+    public func ldcUserInfo() async throws -> LdcUserInfoState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcUserInfo()
+        }
+    }
+
+    public func ldcLogout() async throws {
+        try await runPersistingSessionChanges {
+            try await core.ldc().ldcLogout()
+        }
+    }
+
+    public func cdkAuthorizationUrl() async throws -> CdkAuthorizationUrlState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkAuthorizationUrl()
+        }
+    }
+
+    public func cdkApprovalLink(authorizationURL: String) async throws -> String {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkApprovalLink(authorizationUrl: authorizationURL)
+        }
+    }
+
+    public func cdkApprove(approvePath: String) async throws -> LdcApprovalStatusState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkApprove(approvePath: approvePath)
+        }
+    }
+
+    public func cdkCallback(code: String, state: String) async throws {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkCallback(code: code, state: state)
+        }
+    }
+
+    public func cdkUserInfo() async throws -> CdkUserInfoState {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkUserInfo()
+        }
+    }
+
+    public func cdkLogout() async throws {
+        try await runPersistingSessionChanges {
+            try await core.ldc().cdkLogout()
+        }
+    }
+
     @discardableResult
     public func restoreSessionJSON(_ json: String) throws -> SessionState {
         let state = try core.session().restoreSessionJson(json: json)
@@ -1161,7 +1233,34 @@ public actor FireSessionStore {
             withIntermediateDirectories: true,
             attributes: nil
         )
+        try repairDiagnosticsDirectoryIfNeeded(
+            workspaceDirectory: fireDirectory,
+            fileManager: fileManager
+        )
         return fireDirectory.path
+    }
+
+    private static func repairDiagnosticsDirectoryIfNeeded(
+        workspaceDirectory: URL,
+        fileManager: FileManager
+    ) throws {
+        let diagnosticsDirectory = workspaceDirectory.appendingPathComponent(
+            "diagnostics",
+            isDirectory: true
+        )
+        let diagnosticsPath = diagnosticsDirectory.path
+        guard fileManager.fileExists(atPath: diagnosticsPath) else {
+            return
+        }
+        guard fileManager.isWritableFile(atPath: diagnosticsPath) == false else {
+            return
+        }
+        try fileManager.removeItem(at: diagnosticsDirectory)
+        try fileManager.createDirectory(
+            at: diagnosticsDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
     }
 
     public static func defaultSessionFilePath(fileManager: FileManager = .default) throws -> String {

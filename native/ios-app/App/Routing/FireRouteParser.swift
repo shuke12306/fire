@@ -99,8 +99,15 @@ enum FireRouteParser {
                 components: components,
                 style: .fireScheme
             )
-        case "user", "profile":
+        case "user":
             return parseProfile(segments: Array(segments.dropFirst()))
+        case "profile":
+            let tail = Array(segments.dropFirst())
+            return tail.isEmpty ? .profileTab : parseProfile(segments: tail)
+        case "notifications":
+            return .notifications
+        case "search":
+            return .search(query: queryValue(named: "query", in: components))
         case "badge", "badges":
             return parseBadge(segments: Array(segments.dropFirst()), components: components)
         default:
@@ -211,6 +218,18 @@ enum FireRouteParser {
         let slug = querySlug ?? nextSlug ?? (UInt64(previousSlug ?? "") == nil ? previousSlug : nil)
 
         return .badge(id: badgeId, slug: slug)
+    }
+
+    private static func queryValue(
+        named name: String,
+        in components: URLComponents?
+    ) -> String? {
+        guard let value = components?.queryItems?.first(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+        })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 
     private static func pathSegments(from url: URL) -> [String] {

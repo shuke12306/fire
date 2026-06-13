@@ -38,6 +38,7 @@ final class FireTopicDetailFeedController: NSObject,
     weak var paginationCoordinator: FireTopicDetailPaginationCoordinator?
     weak var visibilityCoordinator: FireTopicDetailVisibilityCoordinator?
     var layoutManager: FirePostLayoutManager?
+    var diagnosticsLogger: FireHostLogger?
 
     var onRefresh: (() async -> Void)?
     var onBackgroundTap: (() -> Void)?
@@ -171,14 +172,47 @@ final class FireTopicDetailFeedController: NSObject,
         animated: Bool,
         completion: @escaping () -> Void
     ) {
+        let topicId = diagnosticTopicId
+        let itemDelta = nextItems.count - previousItems.count
+        let changeCount =
+            updatePlan.deletions.count
+            + updatePlan.insertions.count
+            + updatePlan.reloads.count
+            + updatePlan.postUpdateReloads.count
+        let shouldLogDiagnostics =
+            previousItems.isEmpty
+            || !isViewAttached
+            || collectionNode.isProcessingUpdates
+            || changeCount >= fireTopicDetailCollectionUpdateDiagnosticChangeThreshold
+            || abs(itemDelta) >= fireTopicDetailCollectionUpdateDiagnosticChangeThreshold
+        if shouldLogDiagnostics {
+            diagnosticsLogger?.debug(
+                "topic detail feed controller apply collection update start topic_id=\(topicId) deletions=\(updatePlan.deletions.count) insertions=\(updatePlan.insertions.count) reloads=\(updatePlan.reloads.count) previous_item_count=\(previousItems.count) next_item_count=\(nextItems.count) animated=\(animated) is_processing_updates=\(collectionNode.isProcessingUpdates) is_view_attached=\(isViewAttached)"
+            )
+        }
         guard updatePlan.hasBatchUpdates else {
+            if shouldLogDiagnostics {
+                diagnosticsLogger?.debug("topic detail feed controller apply collection update no_batch topic_id=\(topicId)")
+            }
             completion()
             return
         }
 
-        guard previousItems.isEmpty == false,
-              collectionNode.view.window != nil else {
-            collectionNode.reloadData { [weak self] in
+        if fireTopicDetailShouldBypassTextureReloadCompletion(
+            previousItemsIsEmpty: previousItems.isEmpty,
+            isViewAttached: collectionNode.view.window != nil
+        ) {
+            if shouldLogDiagnostics {
+                diagnosticsLogger?.debug(
+                    "topic detail feed controller reloadData bypass start topic_id=\(topicId) previous_items_empty=\(previousItems.isEmpty) is_view_attached=\(isViewAttached)"
+                )
+            }
+            reloadDataCompletingOnNextRunLoop { [weak self] in
+                if shouldLogDiagnostics {
+                    self?.diagnosticsLogger?.debug(
+                        "topic detail feed controller reloadData bypass completion topic_id=\(topicId)"
+                    )
+                }
                 self?.drainPendingCollectionUpdateIfPossible()
                 completion()
             }
@@ -186,6 +220,7 @@ final class FireTopicDetailFeedController: NSObject,
         }
 
         guard collectionNode.isProcessingUpdates == false else {
+            diagnosticsLogger?.debug("topic detail feed controller enqueue pending update topic_id=\(topicId)")
             enqueuePendingCollectionUpdate(
                 updatePlan: updatePlan,
                 previousItems: previousItems,
@@ -196,7 +231,13 @@ final class FireTopicDetailFeedController: NSObject,
             return
         }
 
+        if shouldLogDiagnostics {
+            diagnosticsLogger?.debug("topic detail feed controller performBatch dispatch topic_id=\(topicId)")
+        }
         collectionNode.performBatch(animated: animated, updates: { [self] in
+            if shouldLogDiagnostics {
+                diagnosticsLogger?.debug("topic detail feed controller performBatch updates start topic_id=\(topicId)")
+            }
             if !updatePlan.deletions.isEmpty {
                 collectionNode.deleteItems(at: updatePlan.deletions)
             }
@@ -206,7 +247,13 @@ final class FireTopicDetailFeedController: NSObject,
             if !updatePlan.reloads.isEmpty {
                 collectionNode.reloadItems(at: updatePlan.reloads)
             }
+            if shouldLogDiagnostics {
+                diagnosticsLogger?.debug("topic detail feed controller performBatch updates complete topic_id=\(topicId)")
+            }
         }, completion: { [weak self] _ in
+            if shouldLogDiagnostics {
+                self?.diagnosticsLogger?.debug("topic detail feed controller performBatch completion topic_id=\(topicId)")
+            }
             self?.drainPendingCollectionUpdateIfPossible()
             completion()
         })
@@ -463,8 +510,8 @@ final class FireTopicDetailFeedController: NSObject,
                         replyTargetPostNumber: postContext.replyTargetPostNumber,
                         replyShortcutCount: postContext.replyShortcutCount,
                         isLoadingReplyContext: postContext.isLoadingReplyContext,
-                        replyContextError: postContext.replyContextError,
                         textExpansionState: postContext.textExpansionState,
+                        isSearchHighlighted: capturedConfiguration.isSearchHighlighted(postID: postContext.post.id),
                         showsDivider: postContext.showsDivider,
                         layoutWidth: capturedLayoutWidth,
                         boostAnimationsEnabled: capturedBoostAnimationsEnabled,
@@ -547,6 +594,8 @@ final class FireTopicDetailFeedController: NSObject,
             onOpenImage: configuration.onOpenImage,
             onToggleLike: configuration.onToggleLike,
             onSelectReaction: configuration.onSelectReaction,
+            onOpenReactionPicker: configuration.onOpenReactionPicker,
+            onQuotePost: configuration.onQuotePost,
             onEditPost: configuration.onEditPost,
             onBookmarkPost: configuration.onBookmarkPost,
             onDeletePost: configuration.onDeletePost,
@@ -585,8 +634,8 @@ final class FireTopicDetailFeedController: NSObject,
                 replyTargetPostNumber: context.replyTargetPostNumber,
                 replyShortcutCount: context.replyShortcutCount,
                 isLoadingReplyContext: context.isLoadingReplyContext,
-                replyContextError: context.replyContextError,
                 textExpansionState: context.textExpansionState,
+                isSearchHighlighted: configuration.isSearchHighlighted(postID: context.post.id),
                 showsDivider: context.showsDivider,
                 layoutWidth: width,
                 boostAnimationsEnabled: !isScrollInteractionActive,
@@ -607,7 +656,6 @@ final class FireTopicDetailFeedController: NSObject,
         let textContentID = [
             String(context.post.id),
             context.renderContent.signature.token,
-            String(context.replyShortcutCount != nil),
             String(context.textExpansionState.isExpanded),
             String(context.textExpansionState.isCollapsible),
         ].joined(separator: "\u{1F}")
@@ -718,7 +766,7 @@ final class FireTopicDetailFeedController: NSObject,
             guard pendingCollectionUpdateAttempts < Self.maxPendingCollectionUpdateAttempts else {
                 self.pendingCollectionUpdate = nil
                 self.pendingCollectionUpdateAttempts = 0
-                collectionNode.reloadData(completion: pendingCollectionUpdate.completion)
+                reloadDataCompletingOnNextRunLoop(completion: pendingCollectionUpdate.completion)
                 return
             }
             schedulePendingCollectionUpdateDrain()
@@ -756,6 +804,20 @@ final class FireTopicDetailFeedController: NSObject,
             )
         }
         updateVisibleBoostAnimationState()
+    }
+
+    private func reloadDataCompletingOnNextRunLoop(completion: @escaping () -> Void) {
+        let topicId = diagnosticTopicId
+        diagnosticsLogger?.debug("topic detail feed controller reloadData call start topic_id=\(topicId)")
+        collectionNode.reloadData()
+        diagnosticsLogger?.debug("topic detail feed controller reloadData call returned topic_id=\(topicId)")
+        DispatchQueue.main.async {
+            completion()
+        }
+    }
+
+    private var diagnosticTopicId: UInt64 {
+        currentConfiguration?.row.topic.id ?? 0
     }
 
     private func publishScrollInteractionStateIfNeeded() {

@@ -140,6 +140,9 @@ struct FireTopicRoutePayload: Hashable {
 enum FireAppRoute: Hashable, Identifiable {
     case topic(payload: FireTopicRoutePayload)
     case profile(username: String)
+    case profileTab
+    case notifications
+    case search(query: String?)
     case badge(id: UInt64, slug: String?)
 
     static func topic(
@@ -190,6 +193,15 @@ enum FireAppRoute: Hashable, Identifiable {
             return "topic:\(payload.topicId):\(payload.postNumber.map(String.init) ?? "nil")"
         case .profile(let username):
             return "profile:\(username.lowercased())"
+        case .profileTab:
+            return "profile-tab"
+        case .notifications:
+            return "notifications"
+        case .search(let query):
+            let normalizedQuery = query?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return "search:\(normalizedQuery ?? "")"
         case .badge(let id, let slug):
             return "badge:\(id):\(slug?.lowercased() ?? "nil")"
         }
@@ -202,6 +214,24 @@ enum FireAppRoute: Hashable, Identifiable {
         return false
     }
 
+    var diagnosticsSummary: String {
+        switch self {
+        case .topic(let payload):
+            return "route_id=\(id) route_kind=topic topic_id=\(payload.topicId) post_number=\(payload.postNumber.map(String.init) ?? "nil") has_preview=\(payload.preview != nil)"
+        case .profile(let username):
+            return "route_id=\(id) route_kind=profile username_length=\(username.count)"
+        case .profileTab:
+            return "route_id=\(id) route_kind=profile_tab"
+        case .notifications:
+            return "route_id=\(id) route_kind=notifications"
+        case .search(let query):
+            let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return "route_id=\(id) route_kind=search query_length=\(trimmed.count)"
+        case .badge(let badgeID, let slug):
+            return "route_id=\(id) route_kind=badge badge_id=\(badgeID) has_slug=\(slug != nil)"
+        }
+    }
+
     func overlayPreview(_ preview: FireTopicRoutePreview?) -> FireAppRoute {
         guard let preview else { return self }
         switch self {
@@ -211,7 +241,7 @@ enum FireAppRoute: Hashable, Identifiable {
                 postNumber: payload.postNumber,
                 preview: payload.preview ?? preview
             ))
-        default:
+        case .profile, .profileTab, .notifications, .search, .badge:
             return self
         }
     }

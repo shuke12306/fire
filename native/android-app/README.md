@@ -10,23 +10,31 @@ the shared Rust core at build time.
 - `MainActivity.kt` hosts the `NavHostFragment` and bottom navigation tabs:
   Home, Notifications, and Profile. Tab selection uses Navigation saved-state
   restoration so loaded tab fragments keep their back stack and ViewModel state
-  when switching between the three primary tabs.
+  when switching between the three primary tabs. It enables edge-to-edge
+  rendering and keeps the existing root inset listener as the single content
+  padding authority around system bars.
+- `FireApplication.kt` applies Material You dynamic colors when available and
+  exposes a themed context for programmatic Fire color resolution; XML-heavy
+  branded surfaces keep the Fire palette resources as their fallback identity.
 - `PreheatGateFragment` is the startup authority boundary: it restores the
-  persisted Rust session, waits for preloaded data, runs Rust's login-state
-  probe, and routes to Home or Onboarding. During that check it reuses the
-  onboarding visual shell, keeps the login action hidden, and leaves failures on
-  the same screen with a retry action. `OnboardingFragment` is only the explicit
+  persisted Rust session, waits for preloaded data, makes a non-destructive
+  login-state decision, and routes to Home or Onboarding. During that check it
+  reuses the onboarding visual shell, and failures expose a login action without
+  clearing the local session cache. `OnboardingFragment` is only the explicit
   login entry, and `LoginWebViewFragment` owns interactive login.
 - `HomeFragment` renders the Rust-backed topic feed with feed-kind, category,
   tag filtering, pull refresh, and debounced MessageBus-triggered Paging
   refresh. Topic-scoped latest events are coalesced for rate limiting, but the
   Android host still refreshes the active Paging source rather than merging
-  `topic_ids` rows in place. New Topic opens `TopicComposerSheet`; successful
-  creation opens the native topic detail screen. Topic compose supports Rust-backed tag
-  suggestions, `@mention` suggestions, image upload insertion, and shared Rust
-  draft restore/autosave/delete, and local Markdown preview with upload-image
-  preview. Empty initial Paging loads render topic-row skeletons in the list area
-  instead of a separate blocking spinner.
+  `topic_ids` rows in place. Topic row opens are single-flight until the user
+  returns from native topic detail. New Topic opens `TopicComposerSheet`;
+  successful creation opens the native topic detail screen. Topic compose supports
+  Rust-backed tag suggestions, `@mention` suggestions, image upload insertion, selection-aware
+  Markdown formatting, shared Rust draft restore/autosave/delete, and local
+  Markdown preview with upload-image preview. Reply compose also accepts quote
+  prefill from topic detail while preserving restored drafts. Empty initial
+  Paging loads render shimmered topic-row skeletons in the list area instead of
+  a separate blocking spinner.
 - `SearchFragment` is a Navigation destination reachable from Home. It calls
   Rust search APIs for all/topic/post/user scopes, renders labeled result
   sections, loads additional full-page results while scrolling, and routes
@@ -34,11 +42,23 @@ the shared Rust core at build time.
 - `NotificationsFragment` renders paginated notifications, supports single/all
   mark-read, refreshes the bottom-tab unread badge, and routes notifications to
   topic detail or profile.
+- `FireFirebaseMessagingService` receives Firebase Cloud Messaging payloads
+  when `google-services.json` is supplied locally or by CI. Android owns the
+  local notification channel/display and tap routing to native topic/profile
+  destinations, while Rust remains the authority for notification state refresh.
+  FCM token backend registration is intentionally pending a shared Rust/core
+  registration API instead of being implemented as a platform-only backend
+  client.
 - `ProfileFragment` renders current or public profiles, summary stats, badges,
   profile bio through the shared rich-text renderer, follow/unfollow, and top
   topic navigation. Public profiles expose a private-message composer when the
-  backend permits it; the current-user profile exposes Bookmarks and Messages
-  entry points.
+  backend permits it; the current-user profile exposes Bookmarks, Drafts, Read
+  History, Messages, LDC Credit, and CDK connection entry points.
+- `LDCFragment` and `CDKFragment` share a fixed ViewBinding screen backed by
+  `LdcCdkViewModel`. They display Rust-owned user-info records, run the
+  authorization URL -> approval link -> approve redirect -> callback sequence
+  through `FireSessionStore`, and expose logout without owning cookies or
+  WebView/browser session state.
 - `BookmarksFragment` renders the current user's Rust-backed bookmark topic
   list and opens topics at `bookmarkedPostNumber` when the backend provides a
   floor anchor.
@@ -46,10 +66,14 @@ the shared Rust core at build time.
   inbox/sent switching plus a New Message action. Public-profile compose
   pre-fills the target user; mailbox compose accepts searched usernames,
   multiple recipients with token chips, body `@mention` suggestions, image
-  upload insertion, shared Rust draft restore/autosave/delete, and local
-  Markdown preview with upload-image preview.
+  upload insertion, selection-aware Markdown formatting, shared Rust draft
+  restore/autosave/delete, and local Markdown preview with upload-image preview.
 - `TopicDetailActivity` is still the authoritative Android topic detail surface.
   It is intentionally a dedicated activity outside the main tab `NavHost`.
+- `core/ui/FireToast.kt` is the shared Material Snackbar wrapper for transient
+  success/error/info/warning feedback. Composer sheets and topic-detail action
+  flows use it at the UI boundary; ViewModels continue to expose business state
+  and never own Android views.
 
 ## Topic Detail
 
@@ -60,6 +84,14 @@ hierarchy metadata plus the optional first-unread-root suggestion. It renders a
 `ConcatAdapter` made of the topic header, original post, reply rows, and a
 loading footer. Load-more is driven only by the Rust source cursor over raw
 `post_stream.stream`, not by host-managed row windows.
+
+Topic detail preserves Rust tree row order and indentation for Fire's
+reply-shaped reading experience, but defaults secondary and deeper replies to a
+root-row “查看更多 N 条回复” shortcut so deeply nested threads do not overwhelm
+the main reading flow. Explicit target post numbers keep their visible ancestry
+while scrolling to the target. Android keeps this on the same RecyclerView,
+`ConcatAdapter`, and `PostListAdapter` path, without a parallel source or
+host-owned display data model.
 
 When Rust returns `firstUnreadRootPostNumber`, Android consumes it only for the
 initial topic-detail load with no explicit notification/search/bookmark/share
@@ -89,9 +121,13 @@ images that were not represented by render-tree image blocks instead of parsing
 Current topic-detail interactions:
 
 - topic-level reply FAB through `ReplyComposerSheet`, with `@mention`
-  suggestions, image upload insertion, shared Rust draft restore/autosave/delete,
-  and local Markdown preview with upload-image preview
+  suggestions, image upload insertion, selection-aware Markdown formatting,
+  shared Rust draft restore/autosave/delete, and local Markdown preview with
+  upload-image preview
 - per-post reply from the post row
+- per-post quote reply from the post row, using Rust-provided
+  `RenderDocumentState.plainText` for the quoted body instead of parsing cooked
+  HTML on Android
 - per-post heart like/unlike through shared Rust interaction APIs
 - per-post custom reaction selection from Rust bootstrap-enabled reactions
 - topic and per-post bookmark create/update/delete through shared Rust
@@ -128,16 +164,30 @@ Current topic-detail interactions:
   row binding path
 - original-post body, poll, Boost, and action surfaces use the same content
   width as the topic title instead of inheriting the reply avatar-column inset
-- Boost short replies render from Rust-owned `TopicPostBoostState.displayText`
-  and `renderDocument` as a body overlay/barrage for original posts with
-  visible body text, and as a fixed-height two-row manual horizontal chip
-  scroller for replies or posts without a body text target, without
-  Android-side Boost HTML parsing; overlay mode caps visible boosts to five
-  display lines, uses at most five lanes, and pauses/resumes animation timing
-  around active RecyclerView scrolling to avoid overlap and broad body-text
-  occlusion, while reply/comment Boost chips move only through user swipes
-- reaction-user lookup from the rendered post reaction summary
-- topic notification-level selection for non-private-message topics
+- Boost short replies render as body-only content from Rust-owned
+  `TopicPostBoostState.displayText` and `renderDocument`, stripping leading
+  `@username:` attribution instead of showing or re-adding the Boost author
+  prefix. They use a body overlay/barrage for original posts with visible body
+  text, and a compact one-or-two-row manual horizontal chip scroller for
+  replies or posts without a body text target, without Android-side Boost HTML
+  parsing; manual chips fill the first row left-to-right, expand to the second
+  row only when needed, then continue as the next two-row horizontal page under
+  user swipes. Overlay mode caps visible boosts to five display lines, uses at
+  most five lanes, plays each post/Boost batch once before hiding, and
+  pauses/resumes animation timing around active RecyclerView scrolling to avoid
+  overlap and broad body-text occlusion, while reply/comment Boost chips move
+  only through user swipes
+- searchable full reaction picker from Rust-provided enabled reactions, with
+  reaction-user lookup from both the rendered summary and picker rows
+- toolbar bell notification-level selection for non-private-message topics
+- bookmark reminder date/time picker with host-owned local notifications after
+  successful Rust bookmark mutations
+- in-topic search over already loaded Rust `RenderDocumentState.plainText`, with
+  active-result highlight and previous/next floor navigation
+- FCM push payloads are parsed in the Android host for local display only:
+  topic ids, post numbers, profile usernames, and LinuxDo/fire deep links route
+  to existing native surfaces, then Rust notification state is refreshed through
+  the existing session store path when possible
 - reply-context lookup from the rendered reply target, showing source and
   direct replies
 - post delete/recover actions when the backend exposes those permissions
@@ -151,6 +201,9 @@ Current topic-detail interactions:
   so live updates do not rebind the visible post list mid-scroll
 - identical refreshed detail / row payloads are now dropped before they hit the
   observable UI state, avoiding redundant header and post-list submissions
+- initial-load topic-detail failures render as a solid top error banner with
+  retry, while refresh, load-more, and MessageBus failures remain transient
+  toast errors so stale page-level errors do not float over later topics
 
 Current iOS/Rust expose topic voter lookup and poll counts/votes, but not a
 poll-option voter-list API or iOS poll-voter sheet; Android follows that same
@@ -164,14 +217,16 @@ Android now keeps request-failure handling single-path:
   `FireSessionStoreRepository.get(context)` IO path before returning to UI
   work, including startup preheat and other Fragment/Activity entry points.
   Startup preheat logs timing fields for session-store get/create,
-  startup-session preparation, preloaded-data wait, and the login probe.
+  startup-session preparation, preloaded-data wait, and the non-destructive
+  login-state decision.
 - `LoginRequired` no longer auto-opens login UI and no longer triggers local
   logout side effects during ordinary request handling; navigation back to
   onboarding still depends on the authoritative Rust session snapshot.
 - Foreground-capable `CloudflareChallenge` requests now go through a registered
   host-owned challenge Activity, which waits for a new `cf_clearance` and then
   returns the relevant browser cookies to Rust so Rust can retry the original
-  request once.
+  request once. The challenge Activity owns its edge-to-edge system bar insets
+  so the title and close action remain outside the status-bar touch area.
 - Background or silent `CloudflareChallenge` work does not steal focus; the
   platform returns an incomplete challenge result and Rust surfaces the error.
 - Rust marks the user-opened notification history request as foreground-capable
@@ -200,6 +255,9 @@ MessageBus, and Cloudflare/login error classification.
 
 - `FireSessionStore.kt` owns `FireAppCore` and passes `filesDir/fire` as the
   shared Rust workspace root.
+- `FireSessionStore.kt` also wraps `core.ldc()` for LDC/CDK OAuth user-info,
+  authorization, callback, and logout calls. The UI layer keeps only transient
+  presentation state while Rust owns API orchestration.
 - The persisted session snapshot lives at `filesDir/fire/session.json`.
 - Shared logs and diagnostics are rooted under `filesDir/fire/logs` and
   `filesDir/fire/diagnostics`.

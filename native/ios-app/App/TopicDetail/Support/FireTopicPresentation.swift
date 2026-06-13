@@ -180,6 +180,11 @@ struct FireReactionOption: Identifiable, Hashable, Sendable {
     let label: String
 }
 
+struct FireTopicSearchMatch: Equatable, Sendable {
+    let postID: UInt64
+    let postNumber: UInt32
+}
+
 enum FireTopicPresentation {
     static func isPrivateMessageArchetype(_ archetype: String?) -> Bool {
         let trimmed = archetype?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -216,6 +221,31 @@ enum FireTopicPresentation {
 
     static func compactCount(_ value: UInt32) -> String {
         compactCount(UInt64(value))
+    }
+
+    static func topicSearchMatches(
+        query: String,
+        posts: [TopicPostState]
+    ) -> [FireTopicSearchMatch] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            return []
+        }
+
+        var seenPostIDs = Set<UInt64>()
+        return posts
+            .filter { seenPostIDs.insert($0.id).inserted }
+            .filter { post in
+                let plainText = post.renderDocument?.plainText ?? ""
+                return plainText.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+            .sorted { lhs, rhs in
+                if lhs.postNumber == rhs.postNumber {
+                    return lhs.id < rhs.id
+                }
+                return lhs.postNumber < rhs.postNumber
+            }
+            .map { FireTopicSearchMatch(postID: $0.id, postNumber: $0.postNumber) }
     }
 
     static func imageAttachments(from document: RenderDocumentState) -> [FireCookedImage] {
@@ -735,12 +765,38 @@ enum FireTopicPresentation {
     }
 
     static func enabledReactionOptions(from reactionIDs: [String]) -> [FireReactionOption] {
-        let ids = reactionIDs.isEmpty ? ["heart"] : reactionIDs
+        reactionOptions(from: reactionIDs, currentReactionID: nil)
+    }
+
+    static func reactionOptions(
+        from reactionIDs: [String],
+        currentReactionID: String?
+    ) -> [FireReactionOption] {
+        var ids = reactionIDs.isEmpty ? ["heart"] : reactionIDs
+        if let currentReactionID = currentReactionID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !currentReactionID.isEmpty {
+            ids.append(currentReactionID)
+        }
         return ids.reduce(into: [FireReactionOption]()) { result, reactionID in
-            guard !result.contains(where: { $0.id == reactionID }) else {
+            let trimmedReactionID = reactionID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedReactionID.isEmpty,
+                  !result.contains(where: { $0.id.caseInsensitiveCompare(trimmedReactionID) == .orderedSame }) else {
                 return
             }
-            result.append(reactionOption(for: reactionID))
+            result.append(reactionOption(for: trimmedReactionID))
+        }
+    }
+
+    static func filterReactionOptions(
+        _ options: [FireReactionOption],
+        query: String
+    ) -> [FireReactionOption] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return options }
+        return options.filter { option in
+            option.id.lowercased().contains(needle)
+                || option.label.lowercased().contains(needle)
+                || option.symbol.contains(needle)
         }
     }
 

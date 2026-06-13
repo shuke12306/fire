@@ -11,6 +11,11 @@ import uniffi.fire_uniffi_diagnostics.LogFileSummaryState
 import uniffi.fire_uniffi_diagnostics.NetworkTraceDetailState
 import uniffi.fire_uniffi_diagnostics.NetworkTraceSummaryState
 import uniffi.fire_uniffi_diagnostics.HostLogLevelState
+import uniffi.fire_uniffi_ldc.CdkAuthorizationUrlState
+import uniffi.fire_uniffi_ldc.CdkUserInfoState
+import uniffi.fire_uniffi_ldc.LdcApprovalStatusState
+import uniffi.fire_uniffi_ldc.LdcAuthorizationUrlState
+import uniffi.fire_uniffi_ldc.LdcUserInfoState
 import uniffi.fire_uniffi_messagebus.MessageBusClientModeState
 import uniffi.fire_uniffi_messagebus.MessageBusEventHandler
 import uniffi.fire_uniffi_messagebus.MessageBusSubscriptionScopeState
@@ -36,6 +41,7 @@ import uniffi.fire_uniffi_session.PlatformCookieState
 import uniffi.fire_uniffi_session.RefreshTriggerState
 import uniffi.fire_uniffi_session.SessionState
 import uniffi.fire_uniffi_types.DraftDataState
+import uniffi.fire_uniffi_types.DraftListResponseState
 import uniffi.fire_uniffi_types.DraftState
 import uniffi.fire_uniffi_topics.PollState
 import uniffi.fire_uniffi_topics.PostActionTypeState
@@ -53,6 +59,8 @@ import uniffi.fire_uniffi_topics.TopicDetailSourceSnapshotState
 import uniffi.fire_uniffi_topics.LoadMoreTopicPostsQueryState
 import uniffi.fire_uniffi_topics.TopicListQueryState
 import uniffi.fire_uniffi_topics.TopicLoadMoreOutcomeState
+import uniffi.fire_uniffi_topics.TopicTimingEntryState
+import uniffi.fire_uniffi_topics.TopicTimingsRequestState
 import uniffi.fire_uniffi_topics.TopicPostState
 import uniffi.fire_uniffi_topics.TopicReplyRequestState
 import uniffi.fire_uniffi_topics.TopicUpdateRequestState
@@ -256,6 +264,11 @@ class FireSessionStore(
             core.notifications().fetchReadHistory(page)
         }
 
+    suspend fun fetchDrafts(offset: UInt? = null, limit: UInt? = null): DraftListResponseState =
+        withContext(Dispatchers.IO) {
+            core.notifications().fetchDrafts(offset, limit)
+        }
+
     suspend fun fetchDraft(draftKey: String): DraftState? = withContext(Dispatchers.IO) {
         core.notifications().fetchDraft(draftKey)
     }
@@ -342,6 +355,58 @@ class FireSessionStore(
 
     suspend fun searchUsers(query: UserMentionQueryState): UserMentionResultState = withContext(Dispatchers.IO) {
         core.search().searchUsers(query)
+    }
+
+    suspend fun ldcAuthorizationUrl(): LdcAuthorizationUrlState = withContext(Dispatchers.IO) {
+        core.ldc().ldcAuthorizationUrl()
+    }
+
+    suspend fun ldcApprovalLink(authorizationUrl: String): String = withContext(Dispatchers.IO) {
+        core.ldc().ldcApprovalLink(authorizationUrl)
+    }
+
+    suspend fun ldcApprove(approvePath: String): LdcApprovalStatusState = withContext(Dispatchers.IO) {
+        core.ldc().ldcApprove(approvePath)
+    }
+
+    suspend fun ldcCallback(code: String, state: String) = withContext(Dispatchers.IO) {
+        core.ldc().ldcCallback(code, state)
+        persistCurrentSession()
+    }
+
+    suspend fun ldcUserInfo(): LdcUserInfoState = withContext(Dispatchers.IO) {
+        core.ldc().ldcUserInfo()
+    }
+
+    suspend fun ldcLogout() = withContext(Dispatchers.IO) {
+        core.ldc().ldcLogout()
+        persistCurrentSession()
+    }
+
+    suspend fun cdkAuthorizationUrl(): CdkAuthorizationUrlState = withContext(Dispatchers.IO) {
+        core.ldc().cdkAuthorizationUrl()
+    }
+
+    suspend fun cdkApprovalLink(authorizationUrl: String): String = withContext(Dispatchers.IO) {
+        core.ldc().cdkApprovalLink(authorizationUrl)
+    }
+
+    suspend fun cdkApprove(approvePath: String): LdcApprovalStatusState = withContext(Dispatchers.IO) {
+        core.ldc().cdkApprove(approvePath)
+    }
+
+    suspend fun cdkCallback(code: String, state: String) = withContext(Dispatchers.IO) {
+        core.ldc().cdkCallback(code, state)
+        persistCurrentSession()
+    }
+
+    suspend fun cdkUserInfo(): CdkUserInfoState = withContext(Dispatchers.IO) {
+        core.ldc().cdkUserInfo()
+    }
+
+    suspend fun cdkLogout() = withContext(Dispatchers.IO) {
+        core.ldc().cdkLogout()
+        persistCurrentSession()
     }
 
     suspend fun restoreSessionJson(json: String): SessionState = withContext(Dispatchers.Default) {
@@ -502,10 +567,6 @@ class FireSessionStore(
         core.topics().lookupUploadUrls(shortUrls)
     }
 
-    suspend fun fetchPostReplies(postId: ULong, after: UInt? = 1u): List<TopicPostState> = withContext(Dispatchers.IO) {
-        core.topics().fetchPostReplies(postId, after)
-    }
-
     suspend fun fetchPostReplyIds(postId: ULong): List<ULong> = withContext(Dispatchers.IO) {
         core.topics().fetchPostReplyIds(postId)
     }
@@ -565,6 +626,38 @@ class FireSessionStore(
 
     suspend fun fetchTopicVoters(topicId: ULong): List<VotedUserState> = withContext(Dispatchers.IO) {
         core.topics().fetchTopicVoters(topicId)
+    }
+
+    suspend fun reportTopicTimings(
+        topicId: ULong,
+        topicTimeMs: UInt,
+        timings: Map<UInt, UInt>,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (topicId == 0uL || topicTimeMs == 0u) {
+            return@withContext true
+        }
+        val timingEntries = timings
+            .asSequence()
+            .filter { (postNumber, milliseconds) -> postNumber > 0u && milliseconds > 0u }
+            .sortedBy { (postNumber, _) -> postNumber }
+            .map { (postNumber, milliseconds) ->
+                TopicTimingEntryState(
+                    postNumber = postNumber,
+                    milliseconds = milliseconds,
+                )
+            }
+            .toList()
+        if (timingEntries.isEmpty()) {
+            return@withContext true
+        }
+
+        core.topics().reportTopicTimings(
+            TopicTimingsRequestState(
+                topicId = topicId,
+                topicTimeMs = topicTimeMs,
+                timings = timingEntries,
+            ),
+        )
     }
 
     suspend fun deletePost(postId: ULong) = withContext(Dispatchers.IO) {

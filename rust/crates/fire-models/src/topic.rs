@@ -264,4 +264,6 @@ pub struct TopicListResponse {
     pub rows: Vec<TopicRow>,
     pub more_topics_url: Option<String>,
     pub next_page: Option<u32>,
+    #[serde(default)]
+    pub is_cached: bool,
 }

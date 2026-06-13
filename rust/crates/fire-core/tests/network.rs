@@ -96,6 +96,44 @@ async fn fetch_topic_list_parses_latest_payload() {
         response.rows[0].last_poster_username.as_deref(),
         Some("alice")
     );
+    assert!(!response.is_cached);
+}
+
+#[tokio::test]
+async fn fetch_topic_list_returns_cached_page_on_network_error() {
+    let responses = vec![raw_json_response(
+        200,
+        "application/json",
+        &sample_latest_json(),
+    )];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+
+    let live = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("live topic list");
+    assert!(!live.is_cached);
+
+    let cached = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("cached topic list");
+    let _ = server.shutdown().await;
+
+    assert!(cached.is_cached);
+    assert_eq!(cached.rows.len(), 1);
+    assert_eq!(cached.rows[0].topic.id, live.rows[0].topic.id);
 }
 
 #[tokio::test]
@@ -1463,12 +1501,23 @@ async fn fetch_topic_detail_source_snapshot_preserves_target_anchor_and_source_c
         .and_then(Value::as_object_mut)
         .expect("top-level post stream object")
         .extend([
-            ("posts".into(), Value::Array(vec![body_post, target_root])),
+            ("posts".into(), Value::Array(vec![body_post])),
             ("stream".into(), json!(root_stream.clone())),
         ]);
 
     let responses = vec![
         raw_json_response(200, "application/json", &top_level_payload.to_string()),
+        raw_json_response(
+            200,
+            "application/json",
+            &json!({
+                "post_stream": {
+                    "posts": [target_root],
+                    "stream": [9014]
+                }
+            })
+            .to_string(),
+        ),
         raw_json_response(
             200,
             "application/json",
@@ -1513,9 +1562,12 @@ async fn fetch_topic_detail_source_snapshot_preserves_target_anchor_and_source_c
     assert_eq!(next_cursor.topic_id, 123);
     assert_eq!(next_cursor.next_stream_offset, 10);
     assert_eq!(next_cursor.batch_size, 10);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert!(requests[0].contains("GET /t/123/14.json?track_visit=true&forceLoad=true HTTP/1.1"));
     assert!(requests[1].contains("GET /t/123/posts.json"));
+    assert!(requests[1].contains("post_number=14"));
+    assert!(requests[1].contains("asc=true"));
+    assert!(requests[2].contains("GET /t/123/posts.json"));
 }
 
 #[tokio::test]

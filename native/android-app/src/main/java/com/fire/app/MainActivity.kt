@@ -3,6 +3,7 @@ package com.fire.app
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -21,6 +22,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -31,6 +33,7 @@ class MainActivity : AppCompatActivity() {
         val navController = navHostFragment.navController
 
         configureBottomNavigation(navController)
+        handleWidgetDeepLink(navController)
 
         refreshNotificationBadge()
     }
@@ -67,6 +70,17 @@ class MainActivity : AppCompatActivity() {
                 binding.bottomNav.menu.findItem(destination.id)?.isChecked = true
             }
         }
+    }
+
+    private fun handleWidgetDeepLink(navController: NavController) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "fire") return
+        val destinationId = when (uri.host) {
+            "notifications" -> R.id.notificationsFragment
+            else -> return
+        }
+        navController.navigate(destinationId)
+        binding.bottomNav.menu.findItem(destinationId)?.isChecked = true
     }
 
     fun refreshNotificationBadge() {

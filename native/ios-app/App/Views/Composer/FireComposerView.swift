@@ -33,6 +33,78 @@ func normalizedPrivateMessageRecipients(_ recipients: [String]) -> [String] {
     return normalized.sorted()
 }
 
+enum FireQuoteMarkdown {
+    static func build(
+        username: String,
+        postNumber: UInt32,
+        topicID: UInt64,
+        plainText: String
+    ) -> String? {
+        let body = plainText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else {
+            return nil
+        }
+
+        let author = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\"", with: "'")
+            .ifEmpty("unknown")
+        return "[quote=\"\(author), post:\(postNumber), topic:\(topicID)\"]\n" +
+            body +
+            "\n[/quote]\n\n"
+    }
+}
+
+enum FireComposerInitialBody {
+    static func merge(
+        initialBody: String,
+        currentBody: String,
+        preferredSelectionLocation: Int? = nil
+    ) -> FireMarkdownInsertionResult {
+        let initialLength = (initialBody as NSString).length
+        let preferredSelection = min(max(preferredSelectionLocation ?? initialLength, 0), initialLength)
+        guard !initialBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return FireMarkdownInsertionResult(
+                text: currentBody,
+                selectedRange: NSRange(location: (currentBody as NSString).length, length: 0)
+            )
+        }
+
+        let currentSource = currentBody as NSString
+        let exactRange = currentSource.range(of: initialBody)
+        if exactRange.location != NSNotFound {
+            return FireMarkdownInsertionResult(
+                text: currentBody,
+                selectedRange: NSRange(location: exactRange.location + preferredSelection, length: 0)
+            )
+        }
+
+        let trimmedInitial = initialBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRange = currentSource.range(of: trimmedInitial)
+        if trimmedRange.location != NSNotFound {
+            let trimmedSelection = min(preferredSelection, (trimmedInitial as NSString).length)
+            return FireMarkdownInsertionResult(
+                text: currentBody,
+                selectedRange: NSRange(location: trimmedRange.location + trimmedSelection, length: 0)
+            )
+        }
+
+        guard !currentBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return FireMarkdownInsertionResult(
+                text: initialBody,
+                selectedRange: NSRange(location: preferredSelection, length: 0)
+            )
+        }
+
+        let separator = initialBody.hasSuffix("\n\n") || currentBody.hasPrefix("\n") ? "" : "\n\n"
+        return FireMarkdownInsertionResult(
+            text: initialBody + separator + currentBody,
+            selectedRange: NSRange(location: preferredSelection, length: 0)
+        )
+    }
+}
+
 struct FireComposerRoute: Identifiable, Equatable {
     enum Kind: Equatable {
         case createTopic
@@ -188,6 +260,283 @@ private struct FireComposerMarkdownImage: Identifiable, Hashable {
     var id: String { urlString }
 }
 
+enum FireMarkdownFormatAction: CaseIterable, Identifiable {
+    case bold
+    case italic
+    case strikethrough
+    case inlineCode
+    case codeBlock
+    case quote
+    case unorderedList
+    case orderedList
+    case link
+    case image
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .bold:
+            return "B"
+        case .italic:
+            return "I"
+        case .strikethrough:
+            return "S"
+        case .inlineCode:
+            return "<>"
+        case .codeBlock:
+            return "```"
+        case .quote:
+            return "Quote"
+        case .unorderedList:
+            return "UL"
+        case .orderedList:
+            return "OL"
+        case .link:
+            return "Link"
+        case .image:
+            return "Image"
+        }
+    }
+
+    var systemImage: String? {
+        switch self {
+        case .bold, .italic, .strikethrough:
+            return nil
+        case .inlineCode:
+            return "chevron.left.forwardslash.chevron.right"
+        case .codeBlock:
+            return "curlybraces"
+        case .quote:
+            return "text.quote"
+        case .unorderedList:
+            return "list.bullet"
+        case .orderedList:
+            return "list.number"
+        case .link:
+            return "link"
+        case .image:
+            return "photo"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .bold:
+            return "加粗"
+        case .italic:
+            return "斜体"
+        case .strikethrough:
+            return "删除线"
+        case .inlineCode:
+            return "行内代码"
+        case .codeBlock:
+            return "代码块"
+        case .quote:
+            return "引用"
+        case .unorderedList:
+            return "项目列表"
+        case .orderedList:
+            return "编号列表"
+        case .link:
+            return "链接"
+        case .image:
+            return "图片标记"
+        }
+    }
+}
+
+struct FireMarkdownInsertionResult: Equatable {
+    let text: String
+    let selectedRange: NSRange
+}
+
+enum FireMarkdownInsertion {
+    static func apply(
+        _ action: FireMarkdownFormatAction,
+        text: String,
+        selectedRange: NSRange
+    ) -> FireMarkdownInsertionResult {
+        switch action {
+        case .bold:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "**", suffix: "**", placeholder: "")
+        case .italic:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "*", suffix: "*", placeholder: "")
+        case .strikethrough:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "~~", suffix: "~~", placeholder: "")
+        case .inlineCode:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "`", suffix: "`", placeholder: "")
+        case .codeBlock:
+            return codeBlock(text: text, selectedRange: selectedRange)
+        case .quote:
+            return prefixLines(text: text, selectedRange: selectedRange) { _ in "> " }
+        case .unorderedList:
+            return prefixLines(text: text, selectedRange: selectedRange) { _ in "- " }
+        case .orderedList:
+            return prefixLines(text: text, selectedRange: selectedRange) { index in "\(index + 1). " }
+        case .link:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "[", suffix: "](url)", placeholder: "text")
+        case .image:
+            return wrap(text: text, selectedRange: selectedRange, prefix: "![", suffix: "](url)", placeholder: "alt")
+        }
+    }
+
+    private static func wrap(
+        text: String,
+        selectedRange: NSRange,
+        prefix: String,
+        suffix: String,
+        placeholder: String
+    ) -> FireMarkdownInsertionResult {
+        let source = text as NSString
+        let safeRange = boundedRange(selectedRange, in: source)
+        let selectedText = safeRange.length > 0 ? source.substring(with: safeRange) : placeholder
+        let replacement = "\(prefix)\(selectedText)\(suffix)"
+        let nextText = source.replacingCharacters(in: safeRange, with: replacement)
+        let selectedLength = safeRange.length > 0
+            ? safeRange.length
+            : (placeholder as NSString).length
+        return FireMarkdownInsertionResult(
+            text: nextText,
+            selectedRange: NSRange(
+                location: safeRange.location + (prefix as NSString).length,
+                length: selectedLength
+            )
+        )
+    }
+
+    private static func codeBlock(
+        text: String,
+        selectedRange: NSRange
+    ) -> FireMarkdownInsertionResult {
+        let source = text as NSString
+        let safeRange = boundedRange(selectedRange, in: source)
+        let selectedText = safeRange.length > 0 ? source.substring(with: safeRange) : ""
+        let startsLine = safeRange.location == 0
+            || source.substring(with: NSRange(location: safeRange.location - 1, length: 1)) == "\n"
+        let endLocation = safeRange.location + safeRange.length
+        let endsLine = endLocation >= source.length
+            || source.substring(with: NSRange(location: endLocation, length: 1)) == "\n"
+        let leadingBreak = startsLine ? "" : "\n"
+        let trailingBreak = endsLine ? "" : "\n"
+        let replacement = "\(leadingBreak)```\n\(selectedText)\n```\(trailingBreak)"
+        let nextText = source.replacingCharacters(in: safeRange, with: replacement)
+        let selectionLocation = safeRange.location
+            + (leadingBreak as NSString).length
+            + ("```\n" as NSString).length
+        let selectionLength = safeRange.length > 0 ? (selectedText as NSString).length : 0
+        return FireMarkdownInsertionResult(
+            text: nextText,
+            selectedRange: NSRange(location: selectionLocation, length: selectionLength)
+        )
+    }
+
+    private static func prefixLines(
+        text: String,
+        selectedRange: NSRange,
+        prefix: (Int) -> String
+    ) -> FireMarkdownInsertionResult {
+        let source = text as NSString
+        let safeRange = boundedRange(selectedRange, in: source)
+        if safeRange.length == 0 {
+            let lineRange = source.lineRange(for: safeRange)
+            let linePrefix = prefix(0)
+            let nextText = source.replacingCharacters(
+                in: NSRange(location: lineRange.location, length: 0),
+                with: linePrefix
+            )
+            return FireMarkdownInsertionResult(
+                text: nextText,
+                selectedRange: NSRange(
+                    location: safeRange.location + (linePrefix as NSString).length,
+                    length: 0
+                )
+            )
+        }
+
+        let lineRange = source.lineRange(for: safeRange)
+        let selectedLines = source.substring(with: lineRange)
+        let preservesTrailingNewline = selectedLines.hasSuffix("\n")
+        let body = preservesTrailingNewline ? String(selectedLines.dropLast()) : selectedLines
+        let prefixedBody = body
+            .components(separatedBy: "\n")
+            .enumerated()
+            .map { index, line in "\(prefix(index))\(line)" }
+            .joined(separator: "\n")
+        let replacement = prefixedBody + (preservesTrailingNewline ? "\n" : "")
+        let nextText = source.replacingCharacters(in: lineRange, with: replacement)
+        return FireMarkdownInsertionResult(
+            text: nextText,
+            selectedRange: NSRange(location: lineRange.location, length: (replacement as NSString).length)
+        )
+    }
+
+    private static func boundedRange(_ range: NSRange, in source: NSString) -> NSRange {
+        let location = min(max(range.location, 0), source.length)
+        let length = min(max(range.length, 0), max(0, source.length - location))
+        return NSRange(location: location, length: length)
+    }
+}
+
+struct FireMarkdownToolbar: View {
+    let onFormat: (FireMarkdownFormatAction) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(FireMarkdownFormatAction.allCases) { action in
+                    toolbarButton(action)
+                }
+            }
+            .padding(.horizontal, 6)
+        }
+        .frame(height: 42)
+        .background(
+            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                .fill(FireTheme.chrome)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                .strokeBorder(FireTheme.divider, lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func toolbarButton(_ action: FireMarkdownFormatAction) -> some View {
+        Button {
+            onFormat(action)
+        } label: {
+            Group {
+                if let systemImage = action.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                } else {
+                    Text(action.title)
+                        .font(toolbarFont(for: action))
+                        .strikethrough(action == .strikethrough)
+                }
+            }
+            .frame(width: 36, height: 34)
+            .foregroundStyle(FireTheme.ink)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.accessibilityLabel)
+    }
+
+    private func toolbarFont(for action: FireMarkdownFormatAction) -> Font {
+        switch action {
+        case .bold:
+            return .system(size: 15, weight: .bold)
+        case .italic:
+            return .system(size: 15, weight: .medium).italic()
+        default:
+            return .system(size: 14, weight: .semibold)
+        }
+    }
+}
+
 enum FireComposerValidation {
     struct State: Equatable {
         let canSubmit: Bool
@@ -336,6 +685,7 @@ struct FireComposerView: View {
     @ObservedObject var viewModel: FireAppViewModel
     let route: FireComposerRoute
     var initialBody: String? = nil
+    var initialBodySelectionLocation: Int? = nil
     var initialCategoryID: UInt64? = nil
     var initialTags: [String] = []
     var onTopicCreated: ((UInt64) -> Void)?
@@ -376,6 +726,7 @@ struct FireComposerView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var resolvedUploads: [String: ResolvedUploadUrlState] = [:]
     @State private var saveCompletionPulse: Int = 0
+    @State private var errorFeedbackPulse: Int = 0
 
     private var baseURLString: String {
         let trimmed = viewModel.session.bootstrap.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -548,7 +899,7 @@ struct FireComposerView: View {
             .padding(.top, 16)
             .padding(.bottom, 120)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(FireTheme.canvas)
         .navigationTitle(route.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -567,6 +918,8 @@ struct FireComposerView: View {
             }
         }
         .interactiveDismissDisabled(isSubmitting)
+        .fireSuccessFeedback(trigger: saveCompletionPulse)
+        .fireErrorFeedback(trigger: errorFeedbackPulse)
         .safeAreaInset(edge: .bottom) {
             bottomActionBar
         }
@@ -644,22 +997,27 @@ struct FireComposerView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "folder")
+                            .accessibilityHidden(true)
                             .foregroundStyle(FireTheme.accent)
                         Text(selectedCategory.map(categoryDisplayName(for:)) ?? "选择分类")
                             .foregroundStyle(selectedCategory == nil ? .secondary : .primary)
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
+                            .accessibilityHidden(true)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 12)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
+                        RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
+                            .fill(FireTheme.surface)
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(
+                    selectedCategory.map { "选择分类，当前 \(categoryDisplayName(for: $0))" } ?? "选择分类"
+                )
             }
 
             createTopicRequirementsCard
@@ -710,6 +1068,7 @@ struct FireComposerView: View {
                                     .padding(.vertical, 10)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel("添加标签 \(item.name)")
 
                                 if item.name != tagResults.last?.name {
                                     Divider()
@@ -717,8 +1076,8 @@ struct FireComposerView: View {
                             }
                         }
                         .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(.secondarySystemBackground))
+                            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
+                                .fill(FireTheme.surface)
                         )
                     }
 
@@ -776,8 +1135,8 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -820,8 +1179,8 @@ struct FireComposerView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -833,6 +1192,8 @@ struct FireComposerView: View {
                     .font(.subheadline.weight(.semibold))
             }
             .disabled(isUploadingImage || isSubmitting)
+            .accessibilityLabel("上传图片")
+            .accessibilityValue(isUploadingImage ? "上传中" : "未上传")
 
             Button {
                 previewMode.toggle()
@@ -841,6 +1202,8 @@ struct FireComposerView: View {
                     .font(.subheadline.weight(.semibold))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("切换预览")
+            .accessibilityValue(previewMode ? "正在预览" : "正在编辑")
 
             Spacer()
 
@@ -862,6 +1225,8 @@ struct FireComposerView: View {
 
     private var editorContent: some View {
         VStack(alignment: .leading, spacing: 12) {
+            FireMarkdownToolbar(onFormat: applyMarkdownFormat)
+
             FireComposerTextView(
                 text: $bodyText,
                 selectedRange: $bodySelection,
@@ -869,12 +1234,12 @@ struct FireComposerView: View {
             )
             .frame(minHeight: 260)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                    .fill(FireTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                    .strokeBorder(FireTheme.divider, lineWidth: 1)
             )
 
             if let mentionContext, (!mentionUsers.isEmpty || !mentionGroups.isEmpty) {
@@ -951,7 +1316,7 @@ struct FireComposerView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .clipShape(
-                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                                         )
                                 case .failure:
                                     previewImageFallback(label: image.altText ?? image.urlString)
@@ -969,8 +1334,8 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
@@ -1005,6 +1370,7 @@ struct FireComposerView: View {
                         if isSubmitting {
                             ProgressView()
                                 .tint(.white)
+                                .accessibilityHidden(true)
                         }
                         Text(route.submitLabel)
                             .font(.headline)
@@ -1019,8 +1385,8 @@ struct FireComposerView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSubmit)
+                .accessibilityLabel(route.submitLabel)
                 .fireCTAPress()
-                .fireSuccessFeedback(trigger: saveCompletionPulse)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -1031,6 +1397,7 @@ struct FireComposerView: View {
     private func noticeBanner(_ message: String, tint: Color) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: tint == .red ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .accessibilityHidden(true)
                 .foregroundStyle(tint)
             Text(message)
                 .font(.subheadline)
@@ -1039,7 +1406,7 @@ struct FireComposerView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                 .fill(tint.opacity(0.12))
         )
     }
@@ -1052,6 +1419,7 @@ struct FireComposerView: View {
                 Text("#\(tag)")
                     .font(.caption.weight(.medium))
                 Image(systemName: "xmark")
+                    .accessibilityHidden(true)
                     .font(.system(size: 8, weight: .bold))
             }
             .foregroundStyle(FireTheme.accent)
@@ -1062,6 +1430,7 @@ struct FireComposerView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("移除标签 \(tag)")
     }
 
     private func suggestedTagChip(_ tag: String) -> some View {
@@ -1070,6 +1439,7 @@ struct FireComposerView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
+                    .accessibilityHidden(true)
                     .font(.system(size: 9, weight: .bold))
                 Text("#\(tag)")
                     .font(.caption.weight(.medium))
@@ -1082,6 +1452,7 @@ struct FireComposerView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("添加标签 \(tag)")
     }
 
     private func mentionResultsList(mentionContext: FireComposerMentionContext) -> some View {
@@ -1096,6 +1467,7 @@ struct FireComposerView: View {
                             .foregroundStyle(.white)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(FireTheme.accent))
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("@\(user.username)")
                                 .foregroundStyle(.primary)
@@ -1111,6 +1483,10 @@ struct FireComposerView: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(user.name?.isEmpty == false
+                    ? "提及 @\(user.username)，\(user.name ?? "")"
+                    : "提及 @\(user.username)"
+                )
 
                 if user.username != mentionUsers.last?.username || !mentionGroups.isEmpty {
                     Divider()
@@ -1123,6 +1499,7 @@ struct FireComposerView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "person.3.fill")
+                            .accessibilityHidden(true)
                             .foregroundStyle(FireTheme.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("@\(group.name)")
@@ -1139,6 +1516,10 @@ struct FireComposerView: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(group.fullName?.isEmpty == false
+                    ? "提及群组 @\(group.name)，\(group.fullName ?? "")"
+                    : "提及群组 @\(group.name)"
+                )
 
                 if group.name != mentionGroups.last?.name {
                     Divider()
@@ -1146,14 +1527,15 @@ struct FireComposerView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
+                .fill(FireTheme.surface)
         )
     }
 
     private func previewImageFallback(label: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "photo")
+                .accessibilityHidden(true)
                 .foregroundStyle(.secondary)
             Text(label)
                 .font(.caption)
@@ -1162,7 +1544,7 @@ struct FireComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.cornerRadius, style: .continuous)
                 .fill(Color(.tertiarySystemFill))
         )
     }
@@ -1233,7 +1615,7 @@ struct FireComposerView: View {
             do {
                 try await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled else { return }
-                let result = try await viewModel.searchUsers(
+                let result = try await viewModel.searchService.searchUsers(
                     term: mentionContext.term,
                     includeGroups: !route.isPrivateMessage,
                     limit: 8,
@@ -1267,7 +1649,7 @@ struct FireComposerView: View {
             do {
                 try await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled else { return }
-                let result = try await viewModel.searchUsers(
+                let result = try await viewModel.searchService.searchUsers(
                     term: trimmed,
                     includeGroups: false,
                     limit: 8,
@@ -1303,7 +1685,7 @@ struct FireComposerView: View {
             do {
                 try await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
-                let result = try await viewModel.searchTags(
+                let result = try await viewModel.searchService.searchTags(
                     query: trimmed,
                     filterForInput: true,
                     limit: 12,
@@ -1385,6 +1767,8 @@ struct FireComposerView: View {
             errorMessage = error.localizedDescription
         }
 
+        applyInitialBodyIfNeeded()
+
         if case .createTopic = route.kind {
             applyDefaultCategoryIfNeeded()
             applyCategoryTemplateIfNeeded()
@@ -1417,6 +1801,19 @@ struct FireComposerView: View {
             lastInjectedTemplate = template
             bodySelection = NSRange(location: (template as NSString).length, length: 0)
         }
+    }
+
+    private func applyInitialBodyIfNeeded() {
+        guard let initialBody else {
+            return
+        }
+        let result = FireComposerInitialBody.merge(
+            initialBody: initialBody,
+            currentBody: bodyText,
+            preferredSelectionLocation: initialBodySelectionLocation
+        )
+        bodyText = result.text
+        bodySelection = result.selectedRange
     }
 
     private func scheduleAutosave() {
@@ -1501,27 +1898,27 @@ struct FireComposerView: View {
         switch route.kind {
         case .createTopic:
             guard !trimmedTitle.isEmpty else {
-                errorMessage = "标题不能为空。"
+                showSubmissionError("标题不能为空。")
                 return
             }
             guard trimmedTitle.count >= minimumTitleLength else {
-                errorMessage = "标题至少需要 \(minimumTitleLength) 个字。"
+                showSubmissionError("标题至少需要 \(minimumTitleLength) 个字。")
                 return
             }
             guard let selectedCategoryID else {
-                errorMessage = "请选择分类。"
+                showSubmissionError("请选择分类。")
                 return
             }
             guard !trimmedBody.isEmpty else {
-                errorMessage = "正文不能为空。"
+                showSubmissionError("正文不能为空。")
                 return
             }
             guard trimmedBody.count >= minimumBodyLength else {
-                errorMessage = "正文至少需要 \(minimumBodyLength) 个字。"
+                showSubmissionError("正文至少需要 \(minimumBodyLength) 个字。")
                 return
             }
             guard selectedTags.count >= selectedCategoryMinimumTags else {
-                errorMessage = "当前分类至少需要 \(selectedCategoryMinimumTags) 个标签。"
+                showSubmissionError("当前分类至少需要 \(selectedCategoryMinimumTags) 个标签。")
                 return
             }
 
@@ -1550,29 +1947,29 @@ struct FireComposerView: View {
                         dismiss()
                         return
                     }
-                    errorMessage = message
+                    showSubmissionError(message)
                 }
             }
 
         case .privateMessage:
             guard !trimmedTitle.isEmpty else {
-                errorMessage = "标题不能为空。"
+                showSubmissionError("标题不能为空。")
                 return
             }
             guard trimmedTitle.count >= minimumTitleLength else {
-                errorMessage = "标题至少需要 \(minimumTitleLength) 个字。"
+                showSubmissionError("标题至少需要 \(minimumTitleLength) 个字。")
                 return
             }
             guard !trimmedBody.isEmpty else {
-                errorMessage = "正文不能为空。"
+                showSubmissionError("正文不能为空。")
                 return
             }
             guard trimmedBody.count >= minimumBodyLength else {
-                errorMessage = "正文至少需要 \(minimumBodyLength) 个字。"
+                showSubmissionError("正文至少需要 \(minimumBodyLength) 个字。")
                 return
             }
             guard !selectedRecipients.isEmpty else {
-                errorMessage = "请至少添加一个收件人。"
+                showSubmissionError("请至少添加一个收件人。")
                 return
             }
 
@@ -1600,17 +1997,17 @@ struct FireComposerView: View {
                         dismiss()
                         return
                     }
-                    errorMessage = message
+                    showSubmissionError(message)
                 }
             }
 
         case .advancedReply(let topicID, _, _, let replyToPostNumber, _, _):
             guard !trimmedBody.isEmpty else {
-                errorMessage = "回复内容不能为空。"
+                showSubmissionError("回复内容不能为空。")
                 return
             }
             guard trimmedBody.count >= minimumBodyLength else {
-                errorMessage = "回复至少需要 \(minimumBodyLength) 个字。"
+                showSubmissionError("回复至少需要 \(minimumBodyLength) 个字。")
                 return
             }
 
@@ -1639,10 +2036,15 @@ struct FireComposerView: View {
                         dismiss()
                         return
                     }
-                    errorMessage = message
+                    showSubmissionError(message)
                 }
             }
         }
+    }
+
+    private func showSubmissionError(_ message: String) {
+        errorMessage = message
+        errorFeedbackPulse += 1
     }
 
     private func insertMention(_ mention: String) {
@@ -1650,6 +2052,17 @@ struct FireComposerView: View {
         mentionContext = nil
         mentionUsers = []
         mentionGroups = []
+    }
+
+    private func applyMarkdownFormat(_ action: FireMarkdownFormatAction) {
+        let result = FireMarkdownInsertion.apply(
+            action,
+            text: bodyText,
+            selectedRange: bodySelection
+        )
+        bodyText = result.text
+        bodySelection = result.selectedRange
+        isBodyFocused = true
     }
 
     private func replaceText(in range: NSRange, with replacement: String) {
@@ -1795,18 +2208,21 @@ private struct FireComposerCategorySheet: View {
                     Spacer()
                     if selectedCategoryID == category.id {
                         Image(systemName: "checkmark")
+                            .accessibilityHidden(true)
                             .foregroundStyle(FireTheme.accent)
                     }
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(categoryLabel(category))
+            .accessibilityValue(selectedCategoryID == category.id ? "已选择" : "")
         }
         .navigationTitle("选择分类")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-private struct FireComposerTextView: UIViewRepresentable {
+struct FireComposerTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
     @Binding var isFirstResponder: Bool

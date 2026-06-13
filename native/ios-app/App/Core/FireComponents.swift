@@ -2,6 +2,181 @@ import Nuke
 import SwiftUI
 import UIKit
 
+// MARK: - Toast
+
+enum FireToastStyle: Equatable {
+    case success
+    case error
+    case info
+    case warning
+
+    var iconName: String {
+        switch self {
+        case .success:
+            return "checkmark.circle.fill"
+        case .error:
+            return "xmark.circle.fill"
+        case .info:
+            return "info.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .success:
+            return FireTheme.success
+        case .error:
+            return Color.red
+        case .info:
+            return FireTheme.accent
+        case .warning:
+            return FireTheme.warning
+        }
+    }
+}
+
+struct FireToast: Equatable, Identifiable {
+    let id: UUID
+    let message: String
+    let style: FireToastStyle
+
+    init(message: String, style: FireToastStyle = .info) {
+        self.id = UUID()
+        self.message = message
+        self.style = style
+    }
+}
+
+struct FireToastView: View {
+    let toast: FireToast
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: toast.style.iconName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(toast.style.tintColor)
+                .accessibilityHidden(true)
+
+            Text(toast.message)
+                .font(.subheadline)
+                .foregroundStyle(FireTheme.ink)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                .fill(FireTheme.chromeStrong)
+                .overlay(
+                    RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                        .strokeBorder(FireTheme.chromeBorder, lineWidth: 1)
+                )
+        )
+        .shadow(color: FireTheme.panelShadow, radius: 12, y: 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(toast.message)
+    }
+}
+
+private struct FireToastModifier: ViewModifier {
+    @Binding var toast: FireToast?
+    let topPadding: CGFloat
+    @State private var dismissTask: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let toast {
+                    FireToastView(toast: toast)
+                        .padding(.top, topPadding)
+                        .padding(.horizontal, 16)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: toast)
+            .onChange(of: toast) { _, newToast in
+                scheduleDismiss(for: newToast)
+            }
+            .onDisappear {
+                dismissTask?.cancel()
+                dismissTask = nil
+            }
+    }
+
+    private func scheduleDismiss(for toast: FireToast?) {
+        dismissTask?.cancel()
+        guard let toast else {
+            dismissTask = nil
+            return
+        }
+        let toastID = toast.id
+        dismissTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2.5))
+            } catch {
+                return
+            }
+            guard self.toast?.id == toastID else {
+                return
+            }
+            withAnimation(.easeOut(duration: 0.25)) {
+                self.toast = nil
+            }
+        }
+    }
+}
+
+extension View {
+    func fireToast(_ toast: Binding<FireToast?>, topPadding: CGFloat = 60) -> some View {
+        modifier(FireToastModifier(toast: toast, topPadding: topPadding))
+    }
+}
+
+// MARK: - Offline Banner
+
+struct FireOfflineBanner: View {
+    let message: String
+
+    init(_ message: String = "正在显示离线缓存") {
+        self.message = message
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.slash")
+                .font(.footnote.weight(.semibold))
+                .accessibilityHidden(true)
+
+            Text(message)
+                .font(.footnote.weight(.medium))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(FireTheme.warning)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                .fill(FireTheme.warning.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                        .strokeBorder(FireTheme.warning.opacity(0.35), lineWidth: 1)
+                )
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message)
+    }
+}
+
 // MARK: - Scene Background
 
 struct FireSceneBackground: View {
@@ -89,9 +264,9 @@ struct FirePanel<Content: View>: View {
     private var shadowColor: Color {
         switch style {
         case .contrast:
-            return Color.black.opacity(0.14)
+            return FireTheme.contrastPanelShadow
         case .chrome, .quiet:
-            return Color.black.opacity(0.06)
+            return FireTheme.panelShadow
         }
     }
 
@@ -267,7 +442,7 @@ struct FireMetricTile: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                 .fill(backgroundColor)
         )
     }
@@ -355,10 +530,10 @@ struct FireErrorBanner: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                 .fill(FireTheme.softSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FireTheme.smallCornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: FireTheme.mediumCornerRadius, style: .continuous)
                         .strokeBorder(FireTheme.warning.opacity(0.28), lineWidth: 1)
                 )
         )
@@ -415,15 +590,39 @@ struct FireBlockingErrorState: View {
 // MARK: - Empty Feed State
 
 struct FireEmptyFeedState: View {
+    let systemImage: String
+    let title: String?
     let message: String
-    let actionTitle: String
-    let action: () -> Void
+    let actionTitle: String?
+    let action: (() -> Void)?
+
+    init(
+        systemImage: String = "text.bubble",
+        title: String? = nil,
+        message: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "text.bubble")
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
                 .font(.title2)
                 .foregroundStyle(FireTheme.accent)
+
+            if let title {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
 
             Text(message)
                 .font(.subheadline)
@@ -431,8 +630,10 @@ struct FireEmptyFeedState: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(actionTitle, action: action)
-                .buttonStyle(FireSecondaryButtonStyle())
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(FireSecondaryButtonStyle())
+            }
         }
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
@@ -441,40 +642,111 @@ struct FireEmptyFeedState: View {
 
 // MARK: - Skeleton List
 
+struct FireTopicSkeletonRow: View {
+    var avatarSize: CGFloat = 38
+    var subtitleWidth: CGFloat = 120
+    var showsTrailingMeta = true
+    var verticalPadding: CGFloat = 12
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(FireTheme.track)
+                .frame(width: avatarSize, height: avatarSize)
+
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(FireTheme.chromeStrong)
+                    .frame(height: 14)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(FireTheme.track)
+                    .frame(width: subtitleWidth, height: 10)
+            }
+
+            Spacer()
+
+            if showsTrailingMeta {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(FireTheme.track)
+                    .frame(width: 28, height: 20)
+            }
+        }
+        .padding(.vertical, verticalPadding)
+        .fireShimmer()
+        .accessibilityHidden(true)
+    }
+}
+
 struct FireTopicSkeletonList: View {
+    var rowCount = 6
+    var avatarSize: CGFloat = 38
+    var subtitleWidth: CGFloat = 120
+    var showsTrailingMeta = true
+    var verticalPadding: CGFloat = 12
+
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(0..<6, id: \.self) { index in
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(FireTheme.track)
-                        .frame(width: 38, height: 38)
+            ForEach(0..<rowCount, id: \.self) { index in
+                FireTopicSkeletonRow(
+                    avatarSize: avatarSize,
+                    subtitleWidth: subtitleWidth,
+                    showsTrailingMeta: showsTrailingMeta,
+                    verticalPadding: verticalPadding
+                )
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(FireTheme.chromeStrong)
-                            .frame(height: 14)
-
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(FireTheme.track)
-                            .frame(width: 120, height: 10)
-                    }
-
-                    Spacer()
-
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(FireTheme.track)
-                        .frame(width: 28, height: 20)
-                }
-                .padding(.vertical, 12)
-                .redacted(reason: .placeholder)
-
-                if index != 5 {
+                if index != rowCount - 1 {
                     Divider()
                         .overlay(FireTheme.divider)
                 }
             }
         }
+        .accessibilityHidden(true)
+    }
+}
+
+struct FireNotificationSkeletonRow: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: 7, height: 7)
+                .padding(.top, 6)
+
+            Circle()
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color(.tertiarySystemFill))
+                    .frame(height: 13)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color(.quaternarySystemFill))
+                    .frame(width: 80, height: 10)
+            }
+        }
+        .padding(.vertical, 10)
+        .fireShimmer()
+        .accessibilityHidden(true)
+    }
+}
+
+struct FireNotificationSkeletonList: View {
+    var rowCount = 8
+
+    var body: some View {
+        List {
+            ForEach(0..<rowCount, id: \.self) { _ in
+                FireNotificationSkeletonRow()
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
+        }
+        .listStyle(.plain)
+        .accessibilityHidden(true)
     }
 }
 

@@ -154,4 +154,29 @@ final class FireAppRouteTests: XCTestCase {
 
         XCTAssertNil(FireAppRoute.topic(action: action))
     }
+
+    @MainActor
+    func testNavigationStateKeepsFirstPresentedTopicRoute() {
+        let navigationState = FireNavigationState()
+        let firstRoute = FireAppRoute.topic(topicId: 321, postNumber: nil)
+        let nextRoute = FireAppRoute.topic(topicId: 654, postNumber: nil)
+
+        navigationState.presentTopicRoute(firstRoute)
+        navigationState.presentTopicRoute(nextRoute)
+
+        XCTAssertEqual(navigationState.presentedTopicRoute, firstRoute)
+    }
+
+    @MainActor
+    func testNavigationStateAcceptsTopicRouteAfterDismiss() {
+        let navigationState = FireNavigationState()
+        let firstRoute = FireAppRoute.topic(topicId: 321, postNumber: nil)
+        let nextRoute = FireAppRoute.topic(topicId: 654, postNumber: 2)
+
+        navigationState.presentTopicRoute(firstRoute)
+        navigationState.dismissPresentedTopicRoute()
+        navigationState.presentTopicRoute(nextRoute)
+
+        XCTAssertEqual(navigationState.presentedTopicRoute, nextRoute)
+    }
 }

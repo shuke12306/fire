@@ -1,32 +1,34 @@
-# 认证与会话管理 API
+# 认证与会话 API
 
-> 对应 FluxDO 源文档第 4-5 节
+LinuxDo 使用 Discourse 的 Cookie 会话认证。官方登录流程运行在网页中；第三方客户端通常应通过浏览器或 WebView 完成登录、Cloudflare challenge、OAuth、PassKey 等交互，然后把得到的站点 Cookie 同步给程序化 HTTP 客户端。
 
----
+## 1. 当前会话
 
-## 1. 检查登录状态（带服务端验证）
-
-```
+```http
 GET /session/current.json
 ```
 
-**场景**：应用启动时验证本地会话是否仍然有效。
+用于验证当前 Cookie 是否对应一个有效登录用户。
 
 ### Query Parameters
 
 | 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `_` | int | 否 | 时间戳（`DateTime.now().millisecondsSinceEpoch`），防缓存 |
+|---|---|---:|---|
+| `_` | integer | 否 | 防缓存时间戳 |
 
-### Request Headers
+### Request
 
+```http
+GET https://linux.do/session/current.json
+Accept: application/json, text/javascript, */*; q=0.01
+Cookie: _t=...; _forum_session=...
 ```
-（继承全局 Header，额外标记）
-skipAuthCheck: true
-skipCsrf: true
-```
 
-### Response (200)
+This endpoint does not require a CSRF token.
+
+### Response
+
+Authenticated response:
 
 ```json
 {
@@ -34,114 +36,58 @@ skipCsrf: true
     "id": 12345,
     "username": "example",
     "name": "Example User",
-    "avatar_template": "/user_avatar/...",
+    "avatar_template": "/user_avatar/linux.do/example/{size}/1.png",
     "trust_level": 2
   }
 }
 ```
 
-- 若 `current_user` 存在：会话有效，更新本地缓存的用户信息和 token。
-- 若 `current_user` 不存在：会话失效，执行登出。
+Unauthenticated or invalid sessions can appear as:
 
-### 其他响应
+- `404`
+- `401` / `403`
+- `200` with no `current_user`
+- A structured error body such as `{"error_type":"not_logged_in"}`
 
-| 状态码 | 处理 |
-|--------|------|
-| 404 | 会话失效（无用户） |
-| 401/403 | 会话失效 |
-| 网络异常 | 保守保留本地状态（不登出） |
+Recommended normalization:
 
----
+| Result | Meaning |
+|---|---|
+| `current_user` object exists | Session is valid |
+| `404`, `not_logged_in`, or no `current_user` | Session is invalid |
+| Network failure, Cloudflare challenge, timeout | Session state is inconclusive; do not destructively log out based on this result alone |
 
-## 2. 会话 Probe（内部机制）
+## 2. Conservative Session Probe
 
-```
-GET /session/current.json
-```
+Use `GET /session/current.json` as the authority before clearing local session state.
 
-**场景**：收到 `discourse-logged-out` 响应 Header 或 `not_logged_in` 错误后的二次验证。
+Recommended policy:
 
-与“检查登录状态”相同接口，但行为不同：
+- Treat `not_logged_in` and `401/403` responses with `discourse-logged-out` as strong invalid-session signals.
+- Treat successful responses that include `discourse-logged-out` as weak signals.
+- Do not log out solely because of `BAD CSRF`, ordinary `403 invalid_access`, a Cloudflare challenge, or a transient network error.
+- Fold concurrent probes so multiple failing requests trigger only one session verification.
+- Keep `cf_clearance` when clearing a user session; it is a Cloudflare clearance cookie, not a Discourse identity cookie.
 
-- `not_logged_in` 或 `401/403 + discourse-logged-out` 记为**强信号**
-- `2xx + discourse-logged-out` 记为**弱信号**
-- 平台不得因为一次 `LoginRequired`、普通 `403`、`invalid_access`、`BAD CSRF`、或 Cloudflare 命中而本地登出
-- 返回值：
-  - `true` — 会话有效，重置 strike
-  - `false` — 确认失效，Rust 被动登出并保留 `cf_clearance`
-  - `null` — 无法判断，进入冷却期；若当前 strike 已达弱信号阈值则升级为被动登出
+This is a client policy recommendation. The backend authority remains the `/session/current.json` response.
 
-### Probe 防护机制
+## 3. CSRF Token
 
-| 机制 | 说明 |
-|------|------|
-| 防并发折叠 | 多个信号只发一次 probe |
-| 冷却期 | inconclusive 后 30 秒内抑制弱信号 |
-| Strike 累积 | 强信号 1 次即触发 probe，弱信号需 2 次 |
-| `invalid_access` | 普通权限失败，不参与 auth strike |
-
----
-
-## 3. 请求错误展示边界
-
-普通请求返回 `LoginRequired`、普通 `403`、`invalid_access`、`BAD CSRF` 或
-Cloudflare challenge 时，平台层不得自行清除登录态或自动打开登录页。平台只展示该请求的失败状态；是否进入 onboarding/login 由 Rust session snapshot 的
-权威状态变更驱动。
-
-Cloudflare challenge 由 Rust 依据响应状态、Cloudflare header 和 HTML/body
-特征分类。前台用户操作可以调用平台拥有的 WebView challenge handler；平台完成验证后只把新的 `cf_clearance`、相关 Cookie 和浏览器 UA 回灌给 Rust，由 Rust
-重试原请求一次。后台、静默或 MessageBus 类请求不抢占前台 UI，直接返回
-`CloudflareChallenge` 请求失败或等待后续用户操作。
-
----
-
-## 4. 登出
-
-```
-DELETE /session/{username}
-```
-
-**场景**：用户主动登出或会话失效被动登出。
-
-### Path Parameters
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `username` | string | 是 | 当前登录用户的用户名 |
-
-### 执行流程
-
-1. 切断所有在途请求（advance session generation）
-2. 停止后台 Service（MessageBus、CF Refresh）
-3. 调用登出 API（可选，被动登出时 `callApi=false`）
-4. 清除内存状态（token、username、缓存）
-5. 清除 Cookie（保留 `cf_clearance`）
-6. 刷新预加载数据
-7. 广播状态变更
-
----
-
-## 5. CSRF Token
-
-### 5.1 获取 CSRF Token
-
-```
+```http
 GET /session/csrf
 ```
 
-**场景**：发起 POST/PUT/DELETE 请求前，若本地无 CSRF token 则自动获取。带防并发去重（多个并发请求共享同一个 CSRF 刷新请求）。
+Fetches a CSRF token suitable for mutating Discourse requests.
 
-#### Request Headers
+### Request
 
-```
-（使用 Rust/openwire 请求路径，带 Cookie 管理但跳过 CSRF/auth 前置检查）
-skipCsrf: true
-skipAuthCheck: true
-isSilent: true
-skipScheduler: true
+```http
+GET https://linux.do/session/csrf
+Accept: application/json, text/javascript, */*; q=0.01
+Cookie: _forum_session=...; _t=...
 ```
 
-#### Response (200)
+### Response
 
 ```json
 {
@@ -149,11 +95,49 @@ skipScheduler: true
 }
 ```
 
-### 5.2 CSRF 策略
+### Strategy
 
-| 规则 | 说明 |
-|------|------|
-| 非 GET 请求前检查 | 若 CSRF token 为空 → 先调用 `/session/csrf` 获取；构造请求时仍允许发送 `X-CSRF-Token: undefined` 以触发服务端 `BAD CSRF` |
-| 403 + BAD CSRF | 清空 token → 重新获取 → 重试原请求（仅一次） |
-| 2xx `/session/csrf` + `discourse-logged-out` | 接受新的 CSRF token，不立即登出；仅记录弱 auth signal |
-| HTML 提取 | CSRF token 也可从首页 HTML 的 `<meta name="csrf-token">` 中提取 |
+| Case | Recommended handling |
+|---|---|
+| Bootstrap HTML has `<meta name="csrf-token">` | Cache that token |
+| No cached token before a mutating request | Fetch `/session/csrf` |
+| `403` body contains `BAD CSRF` | Clear cached token, fetch a new token, retry the original request once |
+| `/session/csrf` succeeds but response includes `discourse-logged-out` | Keep the token but verify session separately before destructive logout |
+
+## 4. Logout
+
+```http
+DELETE /session/{username}
+```
+
+Logs out the current Discourse session on the server.
+
+### Path Parameters
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `username` | string | 是 | 当前登录用户名 |
+
+### Request
+
+```http
+DELETE https://linux.do/session/example
+X-CSRF-Token: <csrf token>
+Cookie: _t=...; _forum_session=...
+```
+
+### Response
+
+Discourse logout responses vary by server version and plugin state. Clients should treat any `2xx` response as successful logout and then clear local identity cookies such as `_t` and `_forum_session`. Preserve unrelated cookies such as `cf_clearance` unless the user requested a full site-data reset.
+
+## 5. Login Boundary
+
+Login itself is not a stable JSON API contract for third-party clients. The robust path is:
+
+1. Open the Discourse login URL in a browser-capable context.
+2. Let the server handle password login, OAuth, PassKey, hCaptcha, and Cloudflare challenge pages.
+3. After navigation indicates a logged-in state, copy cookies for `https://linux.do` into the HTTP client cookie store.
+4. Validate with `GET /session/current.json`.
+5. Fetch CSRF before mutating requests.
+
+See [../discourse-webview-login-guide.md](../discourse-webview-login-guide.md) for the stack-neutral browser-login protocol notes.
