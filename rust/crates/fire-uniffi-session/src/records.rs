@@ -3,10 +3,14 @@ use fire_core::{
     FireSessionPersistenceState as CoreSessionPersistenceState,
 };
 use fire_models::{
-    AppStateRefreshEvent, BootstrapArtifacts, CloudflareChallengeRequest,
-    CloudflareChallengeResult, CookieSnapshot, HomeTopicListScope, LoginFinalizationResult,
-    LoginPhase, LoginSyncInput, PassiveLogoutTrigger, PlatformCookie, ProbeResult, RefreshBatch,
-    SessionReadiness, SessionSnapshot, SignalStrength, TopicCategory,
+    AppStateRefreshEvent, BootstrapArtifacts, CanonicalCookie, CloudflareChallengeRequest,
+    CloudflareChallengeResult, CookieSameSite, CookieSelfHealingPhase, CookieSelfHealingRequest,
+    CookieSelfHealingResult, CookieSnapshot, CookieSource, CookieSweepIntent, CookieSweepPlan,
+    HomeTopicListScope, LoginFailure, LoginFailureKind, LoginFinalizationResult, LoginPhase,
+    LoginSyncInput, NuclearResetPlan, PassiveLogoutTrigger, PlatformCookie, ProbeResult,
+    RefreshBatch, SecondFactorRequirement, SessionReadiness, SessionSnapshot, SignalStrength,
+    TopicCategory, WebViewCookieAction, WebViewCookieInfo, WebViewLoginDecision,
+    WebViewLoginJsResult, WebViewLoginPhase,
 };
 use fire_store::cookie_replay::CookieReplayEntry;
 
@@ -93,6 +97,267 @@ impl From<PlatformCookieState> for PlatformCookie {
     }
 }
 
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum CookieSameSiteState {
+    Unspecified,
+    Lax,
+    Strict,
+    None,
+}
+
+impl From<CookieSameSite> for CookieSameSiteState {
+    fn from(value: CookieSameSite) -> Self {
+        match value {
+            CookieSameSite::Unspecified => Self::Unspecified,
+            CookieSameSite::Lax => Self::Lax,
+            CookieSameSite::Strict => Self::Strict,
+            CookieSameSite::None => Self::None,
+        }
+    }
+}
+
+impl From<CookieSameSiteState> for CookieSameSite {
+    fn from(value: CookieSameSiteState) -> Self {
+        match value {
+            CookieSameSiteState::Unspecified => Self::Unspecified,
+            CookieSameSiteState::Lax => Self::Lax,
+            CookieSameSiteState::Strict => Self::Strict,
+            CookieSameSiteState::None => Self::None,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum CookieSourceState {
+    Unknown,
+    NetworkSetCookie,
+    WebViewLogin,
+    WebViewChallenge,
+    WebViewBulkRead,
+    ManualRestore,
+}
+
+impl From<CookieSource> for CookieSourceState {
+    fn from(value: CookieSource) -> Self {
+        match value {
+            CookieSource::Unknown => Self::Unknown,
+            CookieSource::NetworkSetCookie => Self::NetworkSetCookie,
+            CookieSource::WebViewLogin => Self::WebViewLogin,
+            CookieSource::WebViewChallenge => Self::WebViewChallenge,
+            CookieSource::WebViewBulkRead => Self::WebViewBulkRead,
+            CookieSource::ManualRestore => Self::ManualRestore,
+        }
+    }
+}
+
+impl From<CookieSourceState> for CookieSource {
+    fn from(value: CookieSourceState) -> Self {
+        match value {
+            CookieSourceState::Unknown => Self::Unknown,
+            CookieSourceState::NetworkSetCookie => Self::NetworkSetCookie,
+            CookieSourceState::WebViewLogin => Self::WebViewLogin,
+            CookieSourceState::WebViewChallenge => Self::WebViewChallenge,
+            CookieSourceState::WebViewBulkRead => Self::WebViewBulkRead,
+            CookieSourceState::ManualRestore => Self::ManualRestore,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct CanonicalCookieState {
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: String,
+    pub host_only: bool,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: CookieSameSiteState,
+    pub partition_key: Option<String>,
+    pub partitioned: bool,
+    pub expires_at_unix_ms: Option<i64>,
+    pub max_age_seconds: Option<i64>,
+    pub creation_time_unix_ms: i64,
+    pub last_access_time_unix_ms: i64,
+    pub version: u64,
+    pub source: CookieSourceState,
+    pub raw_set_cookie: Option<String>,
+    pub origin_url: Option<String>,
+}
+
+impl From<CanonicalCookie> for CanonicalCookieState {
+    fn from(value: CanonicalCookie) -> Self {
+        Self {
+            name: value.name,
+            value: value.value,
+            domain: value.domain,
+            path: value.path,
+            host_only: value.host_only,
+            secure: value.secure,
+            http_only: value.http_only,
+            same_site: value.same_site.into(),
+            partition_key: value.partition_key,
+            partitioned: value.partitioned,
+            expires_at_unix_ms: value.expires_at_unix_ms,
+            max_age_seconds: value.max_age_seconds,
+            creation_time_unix_ms: value.creation_time_unix_ms,
+            last_access_time_unix_ms: value.last_access_time_unix_ms,
+            version: value.version,
+            source: value.source.into(),
+            raw_set_cookie: value.raw_set_cookie,
+            origin_url: value.origin_url,
+        }
+    }
+}
+
+impl From<CanonicalCookieState> for CanonicalCookie {
+    fn from(value: CanonicalCookieState) -> Self {
+        Self {
+            name: value.name,
+            value: value.value,
+            domain: value.domain,
+            path: value.path,
+            host_only: value.host_only,
+            secure: value.secure,
+            http_only: value.http_only,
+            same_site: value.same_site.into(),
+            partition_key: value.partition_key,
+            partitioned: value.partitioned,
+            expires_at_unix_ms: value.expires_at_unix_ms,
+            max_age_seconds: value.max_age_seconds,
+            creation_time_unix_ms: value.creation_time_unix_ms,
+            last_access_time_unix_ms: value.last_access_time_unix_ms,
+            version: value.version,
+            source: value.source.into(),
+            raw_set_cookie: value.raw_set_cookie,
+            origin_url: value.origin_url,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone)]
+pub enum WebViewCookieActionState {
+    SetRaw {
+        url: String,
+        set_cookie: String,
+    },
+    DeleteExact {
+        url: String,
+        name: String,
+        domain: Option<String>,
+        path: String,
+    },
+    DeleteByName {
+        url: String,
+        name: String,
+    },
+}
+
+impl From<WebViewCookieAction> for WebViewCookieActionState {
+    fn from(value: WebViewCookieAction) -> Self {
+        match value {
+            WebViewCookieAction::SetRaw { url, set_cookie } => Self::SetRaw { url, set_cookie },
+            WebViewCookieAction::DeleteExact {
+                url,
+                name,
+                domain,
+                path,
+            } => Self::DeleteExact {
+                url,
+                name,
+                domain,
+                path,
+            },
+            WebViewCookieAction::DeleteByName { url, name } => Self::DeleteByName { url, name },
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct WebViewCookieInfoState {
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: Option<String>,
+    pub host_only: Option<bool>,
+    pub secure: Option<bool>,
+    pub http_only: Option<bool>,
+    pub same_site: Option<CookieSameSiteState>,
+    pub expires_at_unix_ms: Option<i64>,
+}
+
+impl From<WebViewCookieInfoState> for WebViewCookieInfo {
+    fn from(value: WebViewCookieInfoState) -> Self {
+        Self {
+            name: value.name,
+            value: value.value,
+            domain: value.domain,
+            path: value.path,
+            host_only: value.host_only,
+            secure: value.secure,
+            http_only: value.http_only,
+            same_site: value.same_site.map(Into::into),
+            expires_at_unix_ms: value.expires_at_unix_ms,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum CookieSweepIntentState {
+    EnsureUnique,
+    Delete,
+}
+
+impl From<CookieSweepIntent> for CookieSweepIntentState {
+    fn from(value: CookieSweepIntent) -> Self {
+        match value {
+            CookieSweepIntent::EnsureUnique => Self::EnsureUnique,
+            CookieSweepIntent::Delete => Self::Delete,
+        }
+    }
+}
+
+impl From<CookieSweepIntentState> for CookieSweepIntent {
+    fn from(value: CookieSweepIntentState) -> Self {
+        match value {
+            CookieSweepIntentState::EnsureUnique => Self::EnsureUnique,
+            CookieSweepIntentState::Delete => Self::Delete,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct CookieSweepPlanState {
+    pub name: String,
+    pub intent: CookieSweepIntentState,
+    pub actions: Vec<WebViewCookieActionState>,
+    pub selected_winner: Option<CanonicalCookieState>,
+}
+
+impl From<CookieSweepPlan> for CookieSweepPlanState {
+    fn from(value: CookieSweepPlan) -> Self {
+        Self {
+            name: value.name,
+            intent: value.intent.into(),
+            actions: value.actions.into_iter().map(Into::into).collect(),
+            selected_winner: value.selected_winner.map(Into::into),
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct NuclearResetPlanState {
+    pub actions: Vec<WebViewCookieActionState>,
+}
+
+impl From<NuclearResetPlan> for NuclearResetPlanState {
+    fn from(value: NuclearResetPlan) -> Self {
+        Self {
+            actions: value.actions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct CookieState {
     pub t_token: Option<String>,
@@ -100,6 +365,7 @@ pub struct CookieState {
     pub cf_clearance: Option<String>,
     pub csrf_token: Option<String>,
     pub platform_cookies: Vec<PlatformCookieState>,
+    pub canonical_cookies: Vec<CanonicalCookieState>,
 }
 
 impl From<CookieSnapshot> for CookieState {
@@ -110,6 +376,11 @@ impl From<CookieSnapshot> for CookieState {
             cf_clearance: value.cf_clearance,
             csrf_token: value.csrf_token,
             platform_cookies: value.platform_cookies.into_iter().map(Into::into).collect(),
+            canonical_cookies: value
+                .canonical_cookies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -122,6 +393,11 @@ impl From<CookieState> for CookieSnapshot {
             cf_clearance: value.cf_clearance,
             csrf_token: value.csrf_token,
             platform_cookies: value.platform_cookies.into_iter().map(Into::into).collect(),
+            canonical_cookies: value
+                .canonical_cookies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -310,6 +586,151 @@ pub struct LoginSyncState {
     pub home_html: Option<String>,
     pub browser_user_agent: Option<String>,
     pub cookies: Vec<PlatformCookieState>,
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum WebViewLoginPhaseState {
+    Csrf,
+    Hcaptcha,
+    Session,
+    Exception,
+}
+
+impl From<WebViewLoginPhaseState> for WebViewLoginPhase {
+    fn from(value: WebViewLoginPhaseState) -> Self {
+        match value {
+            WebViewLoginPhaseState::Csrf => Self::Csrf,
+            WebViewLoginPhaseState::Hcaptcha => Self::Hcaptcha,
+            WebViewLoginPhaseState::Session => Self::Session,
+            WebViewLoginPhaseState::Exception => Self::Exception,
+        }
+    }
+}
+
+impl From<WebViewLoginPhase> for WebViewLoginPhaseState {
+    fn from(value: WebViewLoginPhase) -> Self {
+        match value {
+            WebViewLoginPhase::Csrf => Self::Csrf,
+            WebViewLoginPhase::Hcaptcha => Self::Hcaptcha,
+            WebViewLoginPhase::Session => Self::Session,
+            WebViewLoginPhase::Exception => Self::Exception,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct WebViewLoginJsResultState {
+    pub phase: WebViewLoginPhaseState,
+    pub status: u16,
+    pub body: String,
+}
+
+impl From<WebViewLoginJsResultState> for WebViewLoginJsResult {
+    fn from(value: WebViewLoginJsResultState) -> Self {
+        Self {
+            phase: value.phase.into(),
+            status: value.status,
+            body: value.body,
+        }
+    }
+}
+
+impl From<WebViewLoginJsResult> for WebViewLoginJsResultState {
+    fn from(value: WebViewLoginJsResult) -> Self {
+        Self {
+            phase: value.phase.into(),
+            status: value.status,
+            body: value.body,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum LoginFailureKindState {
+    InvalidCredentials,
+    NotActivated,
+    NotApproved,
+    PasswordExpired,
+    Network,
+    Unknown,
+}
+
+impl From<LoginFailureKind> for LoginFailureKindState {
+    fn from(value: LoginFailureKind) -> Self {
+        match value {
+            LoginFailureKind::InvalidCredentials => Self::InvalidCredentials,
+            LoginFailureKind::NotActivated => Self::NotActivated,
+            LoginFailureKind::NotApproved => Self::NotApproved,
+            LoginFailureKind::PasswordExpired => Self::PasswordExpired,
+            LoginFailureKind::Network => Self::Network,
+            LoginFailureKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct LoginFailureState {
+    pub kind: LoginFailureKindState,
+    pub message: Option<String>,
+    pub sent_to_email: Option<String>,
+    pub current_email: Option<String>,
+}
+
+impl From<LoginFailure> for LoginFailureState {
+    fn from(value: LoginFailure) -> Self {
+        Self {
+            kind: value.kind.into(),
+            message: value.message,
+            sent_to_email: value.sent_to_email,
+            current_email: value.current_email,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct SecondFactorRequirementState {
+    pub totp_enabled: bool,
+    pub security_key_enabled: bool,
+    pub backup_enabled: bool,
+    pub message: Option<String>,
+}
+
+impl From<SecondFactorRequirement> for SecondFactorRequirementState {
+    fn from(value: SecondFactorRequirement) -> Self {
+        Self {
+            totp_enabled: value.totp_enabled,
+            security_key_enabled: value.security_key_enabled,
+            backup_enabled: value.backup_enabled,
+            message: value.message,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone)]
+pub enum WebViewLoginDecisionState {
+    Success,
+    NeedSecondFactor {
+        requirement: SecondFactorRequirementState,
+    },
+    RetryCloudflare,
+    Failure {
+        failure: LoginFailureState,
+    },
+}
+
+impl From<WebViewLoginDecision> for WebViewLoginDecisionState {
+    fn from(value: WebViewLoginDecision) -> Self {
+        match value {
+            WebViewLoginDecision::Success => Self::Success,
+            WebViewLoginDecision::NeedSecondFactor(requirement) => Self::NeedSecondFactor {
+                requirement: requirement.into(),
+            },
+            WebViewLoginDecision::RetryCloudflare => Self::RetryCloudflare,
+            WebViewLoginDecision::Failure(failure) => Self::Failure {
+                failure: failure.into(),
+            },
+        }
+    }
 }
 
 impl From<LoginSyncInput> for LoginSyncState {
@@ -512,6 +933,7 @@ impl From<CloudflareChallengeRequest> for CloudflareChallengeRequestState {
 pub struct CloudflareChallengeResultState {
     pub completed: bool,
     pub user_cancelled: bool,
+    pub fresh_cf_clearance: Option<String>,
     pub cookies: Vec<PlatformCookieState>,
     pub browser_user_agent: Option<String>,
 }
@@ -521,8 +943,73 @@ impl From<CloudflareChallengeResultState> for CloudflareChallengeResult {
         Self {
             completed: value.completed,
             user_cancelled: value.user_cancelled,
+            fresh_cf_clearance: value.fresh_cf_clearance,
             cookies: value.cookies.into_iter().map(Into::into).collect(),
             browser_user_agent: value.browser_user_agent,
+        }
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy)]
+pub enum CookieSelfHealingPhaseState {
+    Sweep,
+    NuclearReset,
+}
+
+impl From<CookieSelfHealingPhase> for CookieSelfHealingPhaseState {
+    fn from(value: CookieSelfHealingPhase) -> Self {
+        match value {
+            CookieSelfHealingPhase::Sweep => Self::Sweep,
+            CookieSelfHealingPhase::NuclearReset => Self::NuclearReset,
+        }
+    }
+}
+
+impl From<CookieSelfHealingPhaseState> for CookieSelfHealingPhase {
+    fn from(value: CookieSelfHealingPhaseState) -> Self {
+        match value {
+            CookieSelfHealingPhaseState::Sweep => Self::Sweep,
+            CookieSelfHealingPhaseState::NuclearReset => Self::NuclearReset,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct CookieSelfHealingRequestState {
+    pub operation: String,
+    pub request_url: String,
+    pub target_url: String,
+    pub phase: CookieSelfHealingPhaseState,
+    pub attempt: u8,
+    pub cookie_names: Vec<String>,
+    pub session_epoch: u64,
+}
+
+impl From<CookieSelfHealingRequest> for CookieSelfHealingRequestState {
+    fn from(value: CookieSelfHealingRequest) -> Self {
+        Self {
+            operation: value.operation,
+            request_url: value.request_url,
+            target_url: value.target_url,
+            phase: value.phase.into(),
+            attempt: value.attempt,
+            cookie_names: value.cookie_names,
+            session_epoch: value.session_epoch,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct CookieSelfHealingResultState {
+    pub completed: bool,
+    pub session_epoch: u64,
+}
+
+impl From<CookieSelfHealingResultState> for CookieSelfHealingResult {
+    fn from(value: CookieSelfHealingResultState) -> Self {
+        Self {
+            completed: value.completed,
+            session_epoch: value.session_epoch,
         }
     }
 }
@@ -675,4 +1162,9 @@ pub trait CloudflareChallengeHandler: Send + Sync {
         &self,
         request: CloudflareChallengeRequestState,
     ) -> CloudflareChallengeResultState;
+}
+
+#[uniffi::export(with_foreign)]
+pub trait CookieSelfHealingHandler: Send + Sync {
+    fn heal_cookies(&self, request: CookieSelfHealingRequestState) -> CookieSelfHealingResultState;
 }

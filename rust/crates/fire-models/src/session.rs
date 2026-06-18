@@ -251,6 +251,62 @@ pub struct LoginSyncInput {
     pub cookies: Vec<PlatformCookie>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebViewLoginPhase {
+    Csrf,
+    Hcaptcha,
+    Session,
+    Exception,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebViewLoginJsResult {
+    pub phase: WebViewLoginPhase,
+    pub status: u16,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LoginFailureKind {
+    InvalidCredentials,
+    NotActivated,
+    NotApproved,
+    PasswordExpired,
+    Network,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoginFailure {
+    pub kind: LoginFailureKind,
+    pub message: Option<String>,
+    pub sent_to_email: Option<String>,
+    pub current_email: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecondFactorRequirement {
+    pub totp_enabled: bool,
+    pub security_key_enabled: bool,
+    pub backup_enabled: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebViewLoginDecision {
+    Success,
+    NeedSecondFactor(SecondFactorRequirement),
+    RetryCloudflare,
+    Failure(LoginFailure),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CloudflareRequestMode {
+    Silent,
+    Action,
+    Data,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionSnapshot {
     pub cookies: CookieSnapshot,
@@ -522,8 +578,32 @@ pub struct CloudflareChallengeRequest {
 pub struct CloudflareChallengeResult {
     pub completed: bool,
     pub user_cancelled: bool,
+    pub fresh_cf_clearance: Option<String>,
     pub cookies: Vec<PlatformCookie>,
     pub browser_user_agent: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CookieSelfHealingPhase {
+    Sweep,
+    NuclearReset,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CookieSelfHealingRequest {
+    pub operation: String,
+    pub request_url: String,
+    pub target_url: String,
+    pub phase: CookieSelfHealingPhase,
+    pub attempt: u8,
+    pub cookie_names: Vec<String>,
+    pub session_epoch: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CookieSelfHealingResult {
+    pub completed: bool,
+    pub session_epoch: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

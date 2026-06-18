@@ -31,15 +31,22 @@ import uniffi.fire_uniffi_search.UserMentionQueryState
 import uniffi.fire_uniffi_search.UserMentionResultState
 import uniffi.fire_uniffi_session.AppStateRefreshHandler
 import uniffi.fire_uniffi_session.CloudflareChallengeHandler
+import uniffi.fire_uniffi_session.CookieSelfHealingHandler
 import uniffi.fire_uniffi_session.CookieReplayEntryState
+import uniffi.fire_uniffi_session.CookieSweepPlanState
 import uniffi.fire_uniffi_session.CurrentUserSnapshotState
 import uniffi.fire_uniffi_session.HomeTopicListScopeState
 import uniffi.fire_uniffi_session.LoginFinalizationResultState
 import uniffi.fire_uniffi_session.LoginStateDeterminationState
 import uniffi.fire_uniffi_session.LoginSyncState
+import uniffi.fire_uniffi_session.NuclearResetPlanState
 import uniffi.fire_uniffi_session.PlatformCookieState
 import uniffi.fire_uniffi_session.RefreshTriggerState
 import uniffi.fire_uniffi_session.SessionState
+import uniffi.fire_uniffi_session.WebViewCookieActionState
+import uniffi.fire_uniffi_session.WebViewCookieInfoState
+import uniffi.fire_uniffi_session.WebViewLoginDecisionState
+import uniffi.fire_uniffi_session.WebViewLoginJsResultState
 import uniffi.fire_uniffi_types.DraftDataState
 import uniffi.fire_uniffi_types.DraftListResponseState
 import uniffi.fire_uniffi_types.DraftState
@@ -106,6 +113,14 @@ class FireSessionStore(
         core.session().unregisterCloudflareChallengeHandler()
     }
 
+    fun registerCookieSelfHealingHandler(handler: CookieSelfHealingHandler) {
+        core.session().registerCookieSelfHealingHandler(handler)
+    }
+
+    fun unregisterCookieSelfHealingHandler() {
+        core.session().unregisterCookieSelfHealingHandler()
+    }
+
     suspend fun restorePersistedSessionIfAvailable(): SessionState? = withContext(Dispatchers.IO) {
         if (!sessionFile.exists()) {
             return@withContext null
@@ -147,7 +162,7 @@ class FireSessionStore(
 
     suspend fun finalizeLoginFromWebView(
         captured: FireCapturedLoginState,
-        allowLowConfidenceSessionCookies: Boolean = true,
+        allowLowConfidenceSessionCookies: Boolean = false,
     ): LoginFinalizationResultState = withContext(Dispatchers.Default) {
         val result = core.session().finalizeLoginFromWebview(
             username = captured.username.orEmpty(),
@@ -167,6 +182,63 @@ class FireSessionStore(
             persistCurrentSession()
             state
         }
+
+    suspend fun completeCloudflareChallenge(
+        cookies: List<PlatformCookieState>,
+        freshCfClearance: String,
+        browserUserAgent: String?,
+    ): SessionState = withContext(Dispatchers.Default) {
+        val state = core.session().completeCloudflareChallenge(
+            cookies = cookies,
+            freshCfClearance = freshCfClearance,
+            browserUserAgent = browserUserAgent,
+        )
+        persistCurrentSession()
+        state
+    }
+
+    suspend fun classifyWebViewLoginResult(
+        result: WebViewLoginJsResultState,
+    ): WebViewLoginDecisionState = withContext(Dispatchers.Default) {
+        core.session().classifyWebviewLoginResult(result)
+    }
+
+    suspend fun webViewPrimingPayload(
+        targetUrl: String? = null,
+    ): List<WebViewCookieActionState> = withContext(Dispatchers.Default) {
+        core.session().webviewPrimingPayload(targetUrl)
+    }
+
+    suspend fun cookieSweepPlan(
+        targetUrl: String? = null,
+        name: String,
+        webViewCookies: List<WebViewCookieInfoState>,
+    ): CookieSweepPlanState = withContext(Dispatchers.Default) {
+        core.session().cookieSweepPlan(targetUrl, name, webViewCookies)
+    }
+
+    suspend fun cookieNuclearResetPlan(
+        targetUrl: String? = null,
+        webViewCookies: List<WebViewCookieInfoState>,
+    ): NuclearResetPlanState = withContext(Dispatchers.Default) {
+        core.session().cookieNuclearResetPlan(targetUrl, webViewCookies)
+    }
+
+    suspend fun commitCookieSweepResult(
+        targetUrl: String? = null,
+        name: String,
+        intent: uniffi.fire_uniffi_session.CookieSweepIntentState,
+        webViewCookies: List<WebViewCookieInfoState>,
+    ): SessionState = withContext(Dispatchers.Default) {
+        val state = core.session().commitCookieSweepResult(
+            targetUrl,
+            name,
+            intent,
+            webViewCookies,
+        )
+        persistCurrentSession()
+        state
+    }
 
     suspend fun refreshBootstrapIfNeeded(): SessionState = withContext(Dispatchers.IO) {
         val refreshed = core.session().refreshBootstrapIfNeeded()

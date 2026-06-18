@@ -1,6 +1,17 @@
 import Foundation
 import WebKit
 
+private enum FireCfClearanceRefreshError: LocalizedError {
+    case missingCloudflareClearance
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCloudflareClearance:
+            return "Cloudflare refresh completed without a readable cf_clearance cookie"
+        }
+    }
+}
+
 @MainActor
 final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     static let shared = FireCfClearanceRefreshService()
@@ -106,6 +117,7 @@ final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScr
     private var retryTask: Task<Void, Never>?
     private var initialSolveTimeoutTask: Task<Void, Never>?
     private var webView: WKWebView?
+    private var manualChallengePauseCount = 0
     private var loadContinuation: CheckedContinuation<Void, Error>?
     private var generation: UInt64 = 0
     private var consecutiveFailureCount = 0
@@ -154,6 +166,19 @@ final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScr
     func setLoginStateConfirmed(_ confirmed: Bool) {
         loginStateConfirmed = confirmed
         reconfigureRuntime(reason: confirmed ? "login_state_confirmed" : "login_state_unconfirmed")
+    }
+
+    func beginManualChallenge(reason: String) {
+        manualChallengePauseCount += 1
+        stopRuntime(reason: reason)
+    }
+
+    func endManualChallenge(reason: String) {
+        if manualChallengePauseCount > 0 {
+            manualChallengePauseCount -= 1
+        }
+        guard manualChallengePauseCount == 0 else { return }
+        reconfigureRuntime(reason: reason)
     }
 
     nonisolated static func shouldAutoRefresh(
@@ -249,11 +274,12 @@ final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScr
     }
 
     private var shouldRun: Bool {
-        Self.shouldAutoRefresh(
-            session: session,
-            sceneActive: sceneActive,
-            loginStateConfirmed: loginStateConfirmed
-        )
+        manualChallengePauseCount == 0
+            && Self.shouldAutoRefresh(
+                session: session,
+                sceneActive: sceneActive,
+                loginStateConfirmed: loginStateConfirmed
+            )
     }
 
     private var normalizedTurnstileSitekey: String? {
@@ -695,7 +721,23 @@ final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScr
                 return
             }
 
-            let refreshed = try await loginCoordinator.refreshPlatformCookies()
+            let platformCookies = try await loginCoordinator.platformCookiesForSessionResync()
+            guard let freshCfClearance = Self.cloudflareClearanceValue(
+                in: platformCookies,
+                previousValue: session.cookies.cfClearance
+            ) else {
+                throw FireCfClearanceRefreshError.missingCloudflareClearance
+            }
+
+            let challengeCookies = FireCloudflareChallengeCoordinator.challengeResultCookies(
+                platformCookies,
+                freshCfClearance: freshCfClearance
+            )
+            let refreshed = try await loginCoordinator.completeCloudflareChallenge(
+                cookies: challengeCookies,
+                freshCfClearance: freshCfClearance,
+                browserUserAgent: webView?.customUserAgent ?? activeUserAgent
+            )
             guard isCurrentRuntime(generation: generation, runtimeToken: runtimeToken) else {
                 return
             }
@@ -778,6 +820,24 @@ final class FireCfClearanceRefreshService: NSObject, WKNavigationDelegate, WKScr
                 }
             }
         }
+    }
+
+    nonisolated static func cloudflareClearanceValue(
+        in cookies: [PlatformCookieState],
+        previousValue: String?
+    ) -> String? {
+        let values = cookies
+            .filter { $0.name.caseInsensitiveCompare("cf_clearance") == .orderedSame }
+            .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !values.isEmpty else { return nil }
+
+        if let previousValue = previousValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !previousValue.isEmpty,
+           let changedValue = values.first(where: { $0 != previousValue }) {
+            return changedValue
+        }
+        return values.first
     }
 
     nonisolated private static func javaScriptStringLiteral(_ value: String) -> String {

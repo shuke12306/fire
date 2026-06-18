@@ -53,42 +53,44 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - centralizes the embedded auth-browser profile used by explicit login/remediation WebViews
   - gives `WKWebView` a Mobile Safari-style user agent when no captured browser user agent is available
   - keeps the auth browser on the default persistent `WKWebsiteDataStore` without a custom process pool, enables JavaScript/new-window handling/media playback, and injects color-scheme plus small compatibility polyfills used by the auth browser and offscreen Turnstile runtime
-  - installs the login-specific `WKUserScript` set for preloaded bootstrap capture, credential hook/auto-fill, and fingerprint completion reporting
+  - provides a lean login configuration that registers only the hCaptcha and `login_result` bridge handlers needed by the minimal WebView login document
 - `FireWebViewLoginCoordinator.swift`
-  - reads `WKWebView` cookies, `current-username`, `csrf-token`, captured `window.__rawPreloaded`, and the live browser user agent
-  - continuously supports login readiness probing: navigation, scene-activation, debounced WebKit cookie-store changes, and WebView loading transitions all re-check the same readiness used by the `完成登录` button
-  - treats the persistent `WKWebsiteDataStore` as the authoritative browser cookie source: login/challenge/clearance refresh only read browser cookies back into Rust, and shared session updates never write Rust cookies back into WebKit
-  - only treats login as ready to sync once it can read `current-username`, same-site auth cookies, and reusable bootstrap HTML
-  - completes login through the Rust-owned `finalize_login_from_webview` path, defaulting production login finalization to high-confidence session cookies and only following up with bootstrap refresh when the captured preloaded bootstrap is still incomplete
+  - primes a specific login `WKWebView` from Rust canonical cookie action plans before the first WebView-owned login fetch
+  - extracts live WebKit cookies and the browser user agent before the login WebView is disposed
+  - executes Rust `SetRaw`, `DeleteExact`, and `DeleteByName` WebView cookie action plans against `WKHTTPCookieStore`
+  - completes minimal JS login through the Rust-owned `finalize_login_from_webview` path, defaulting production login finalization to high-confidence session cookies and following up with bootstrap refresh when needed
   - persists captured credentials in Keychain on the host side and leaves missing or stale CSRF repair to the shared authenticated-write preflight instead of an eager login-time refresh
   - if the follow-up Rust bootstrap refresh still fails, it now surfaces that request failure directly instead of locally logging the user out or starting an automatic recovery path
   - clears host-side LinuxDo auth cookies after a successful explicit logout while preserving `cf_clearance`
 - `FireCloudflareChallengeCoordinator.swift`
-  - implements the registered Rust `CloudflareChallengeHandler` bridge for foreground-capable iOS requests
-  - opens a host-owned full-screen `WKWebView`, records the baseline `cf_clearance`, waits for a new clearance plus the absence of active challenge markers, and then returns only the relevant browser cookies back to Rust
-  - leaves background/silent work on the non-interactive path: if the request was not marked foreground-capable, the handler returns an incomplete result and Rust surfaces `CloudflareChallenge`
-  - relies on Rust request-level presentation context, so user-opened notification history refreshes are foreground-capable while recent notification cache refreshes and other silent work stay non-interactive
+  - implements the registered Rust `CloudflareChallengeHandler` bridge for iOS requests that hit Cloudflare, including background/silent operations while the app can present UI
+  - opens a host-owned full-screen `WKWebView`, records and deletes the baseline `cf_clearance`, waits for a fresh clearance plus the absence of active challenge markers, and returns both the fresh value and relevant browser cookies back to Rust
+  - observes cookie-store changes, navigation commits, injected `/cdn-cgi/challenge-platform/` fetch/XHR signals, pagehide/beforeunload events, and a 1-second polling fallback so completion is not dependent on a single WebKit callback
+  - restores the deleted baseline clearance if the user cancels or verification does not complete
+  - pauses the offscreen `FireCfClearanceRefreshService` runtime while manual verification is active so the hidden Turnstile refresh path cannot race the manual challenge cookie write
 - `FireCfClearanceRefreshService.swift`
   - owns an offscreen `WKWebView` that keeps a Turnstile widget alive once the shared session is authenticated, scene-active, and bootstrap has exposed a Turnstile sitekey
   - configures that hidden WebView with the captured login browser user agent exposed on `SessionState`, falling back to the same Mobile Safari-style profile used by login
   - injects a fetch interceptor before `api.js` loads, replays `/cdn-cgi/challenge-platform/.../rc/...` through native `URLSession`, and feeds the real response back into the page so `cf_clearance` can auto-renew without foreground UI
-  - re-syncs refreshed WebKit cookies back into Rust and then pushes the updated session back through `FireAppViewModel.applySession`, which keeps native `HTTPCookieStorage` aligned for URLSession/media requests without overwriting the active WebKit cookie store
+  - merges the confirmed refreshed `cf_clearance` back into Rust through the challenge-completion path and then pushes the updated session through `FireAppViewModel.applySession`, which keeps native `HTTPCookieStorage` aligned for URLSession/media requests without letting a partial WebKit snapshot clear `_t` / `_forum_session`
   - records APM breadcrumbs plus bounded retry failures for background clearance refresh attempts
-- `App/FireLoginWebView.swift`
-  - presents the host-owned auth browser as a full-screen flow for explicit login
-  - now wraps the embedded `WKWebView` in a full-screen native browser shell with adaptive light/dark chrome, a compact top bar, and a bottom command dock
-  - uses the shared auth-browser profile so login, OAuth redirects, and Cloudflare challenge pages see a Safari-compatible user agent and light/dark color-scheme support
-  - waits for the host `FireAppViewModel` to replay queued `Set-Cookie` headers into WebKit before the first login navigation, so browser login always starts from the Rust-authenticated cookie boundary
-  - exposes back, forward, reload, and explicit primary actions so OAuth hops can return to LinuxDo without closing the flow
-  - does not try to bypass providers that reject embedded browsers; Google OAuth can still fail with `disallowed_useragent`, which requires a system auth/Safari fallback plus a way to import the resulting LinuxDo session back into Fire
-  - enables back/forward swipe gestures on the embedded `WKWebView`
-  - avoids mutating observed browser state from `UIViewRepresentable.updateUIView`, so SwiftUI updates do not loop back into `WKWebView` host state and freeze the login entry flow
+- `App/Startup/FireOnboardingCredentialFormView.swift`
+  - presents explicit password login as a pure-native UIKit form (username/password fields, remember-password state, forgot-password, and other-method fallback entry points) embedded inside the unified onboarding page's `.credential` phase
+  - does not create a login `WKWebView` when the form opens; Cloudflare clearance and hCaptcha login work start only after the user enters credentials and taps login
+  - is presented and driven by `FireOnboardingViewController`, which constructs `FireCaptchaLoginDialogController` as the live hCaptcha + `window.__fireLogin` sheet and passes its still-alive `WKWebView` into `FireAppViewModel.completeMinimalLogin(from:identifier:password:rememberCredential:)` before dismissal
+  - handles Rust-classified login decisions for success, TOTP retry, one CSRF-phase Cloudflare retry, and login failure while preserving the live dialog WebView for cookie extraction and retry windows
+- `App/Views/Other/FireCaptchaLoginDialogController.swift`
+  - loads inline same-origin hCaptcha HTML with base URL `https://linux.do/`, primes Rust canonical cookies into WebKit, and routes hCaptcha / login-result bridge messages back to the login page
+  - keeps the same live `WKWebView` for TOTP and Cloudflare retry so short-lived cookies and the failed CSRF attempt arguments can be reused
+- `App/Views/Other/FireWebViewBrowserViewController.swift`
+  - provides the full WebView fallback for Discourse `/login` OAuth/Passkey flows and `/password-reset`
+  - uses the shared login browser profile, polls for auth cookies, waits for `FireWebViewLoginCoordinator.probeLoginSyncReadiness(from:)`, and finalizes through `FireAppViewModel.completeLogin(from:)`
 - `App/Core/FireAppDelegate.swift`
   - is the UIKit `@main` entry point, starts APM, registers background refresh, owns the notification center delegate, and forwards notification taps into the shared typed route dispatcher
 - `App/Core/FireSceneDelegate.swift`
   - owns the `UIWindow`, creates `FireRootCoordinator`, and routes custom scheme / universal link opens from scene connection and continuation callbacks
 - `App/Core/FireRootCoordinator.swift`
-  - owns preheat, onboarding, authenticated root switching, auth modal presentation, typed pending-route consumption, topic full-screen presentation, scene-phase diagnostics, APNs refresh, and appearance override
+  - owns launch↔main two-state root switching (the former preheat/onboarding split and auth modal presentation have been removed and consolidated into the unified onboarding launch page), typed pending-route consumption, topic full-screen presentation, scene-phase diagnostics, APNs refresh, and appearance override
 - `App/Core/FireMainTabBarController.swift`
   - owns the authenticated UIKit `UITabBarController`; each tab is hosted in a `UINavigationController` while the tab contents continue their page-by-page UIKit migration
 - `App/Routing/`
@@ -98,16 +100,16 @@ Current host-side app wiring lives under `Sources/FireAppSession/` plus `App/`:
   - presents the login browser immediately, then runs a lightweight best-effort network warm-up in the background
   - still tries to move the first system-level network prompt, when one appears on-device, out of the in-page login interaction itself, without blocking WebView presentation
   - restores the persisted session cache, replays Keychain cookies through Rust on cold start, repairs incomplete authenticated session identity through bootstrap refresh when needed, and leaves CSRF repair to the shared authenticated-write preflight
-  - keeps startup login-state verification on an onboarding-style screen: the brand shell stays visible, and PreheatGate failures show a login action without clearing the local session cache
+  - keeps startup login-state verification on the unified onboarding launch page: the brand shell stays visible across `.validating` (loading), `.credential` (native login form), and `.loggingIn` phases, with startup validation failures flowing straight to the credential form without a separate preheat gate or a second manual screen transition
   - now builds `FireSessionStore` lazily on a detached task so Rust/logging initialization does not block the first SwiftUI render on the main actor
   - syncs authenticated LinuxDo cookies into native `HTTPCookieStorage` so inline media/image requests can reuse the restored session, while leaving the persistent WebKit cookie store as the authoritative browser session owned by login and Cloudflare WebViews
   - now also owns native private-message inbox/sent loading plus private-message creation on top of the shared Rust mailbox and `/posts.json` PM surfaces
   - now acts as a session/runtime facade for feature stores instead of also owning every screen's transient state directly
   - now owns the foreground MessageBus transport lifecycle on iOS and forwards runtime refresh work into the bound feature stores instead of publishing home/topic-detail state itself
-  - now registers the Rust-owned Cloudflare challenge handler on session initialization, so foreground blocked requests can complete a host-owned challenge WebView and then let Rust retry the original operation once
+  - now registers the Rust-owned Cloudflare challenge handler on session initialization, so blocked requests can complete a host-owned challenge WebView and then let Rust retry the original operation once
   - still treats `LoginRequired` as an ordinary request failure unless the authoritative Rust session snapshot has actually transitioned to logged out
   - now attempts a single-flight host cookie resync on passive reads (home feed, topic detail): if the WebKit cookie store has already rotated `_t` / `_forum_session` past the shared Rust epoch, the resync rotates the shared session in place and the read retries once; otherwise the original request failure is surfaced unchanged
-  - now probes login sync readiness from the embedded `WKWebView` and keeps the `完成登录` button disabled until the shared login prerequisites are actually satisfied
+  - now prepares the minimal login `WKWebView`, classifies JS login results through Rust, and applies the single Rust login finalization handoff after session cookies are extracted
   - now also emits host-owned APM spans for cold-start restore, login sync, bootstrap refresh, latest-feed load, topic-detail load, reply submit, notification refresh, and MessageBus start
   - now forwards LDC/CDK profile commands through `FireSessionStore`, keeping OAuth API orchestration in Rust while the profile views own only native UI state
 - `App/FireMessageBusCoordinator.swift`
@@ -220,7 +222,7 @@ Expected integration flow:
 2. Build the app target. Xcode runs `scripts/sync_uniffi_bindings.sh` before compile and refreshes the UniFFI Swift/FFI/staticlib outputs in `Generated/`.
 3. Keep the native files in `Sources/FireAppSession/` in the same Xcode target.
 4. Create a single `FireSessionStore` instance early in app launch and call `restoreColdStartSession()`.
-5. Let the login `WKWebView` probe readiness through `FireAppViewModel.refreshLoginSyncReadiness(from:)`, and only call `FireWebViewLoginCoordinator.completeLogin(from:)` once the UI has enabled `完成登录`.
+5. For explicit password login, render native username/password inputs first. After the user taps login, ensure Rust has a fresh Cloudflare clearance, present the captcha dialog, load the minimal same-origin hCaptcha document, let `window.__fireLogin` issue `/session/csrf`, hCaptcha create, and `/session.json`; if Rust classifies a CSRF result as Cloudflare retryable, run foreground verification once and re-prime the same dialog WebView before retrying; after Rust classifies the JS result as success, call `FireWebViewLoginCoordinator.completeJsLogin(from:identifier:)` before dismissing the dialog.
 6. After login or restore, let `FireCfClearanceRefreshService.shared` track the active session only after the authoritative startup/login path has confirmed the current authenticated session; once confirmed, same-site Cloudflare cookies can refresh in the background when bootstrap has a Turnstile sitekey.
 7. After login or restore, render the topic feeds through `fetchTopicList`, render iOS topic detail through Rust-owned source snapshots + tree presentation, let Rust own raw-stream append/load-more, keep targeted `fetchTopicPosts` hydration scoped to reply context/anchor repair, and fetch optional AI summaries through `fetchTopicAiSummary`.
 8. On explicit logout, clear local auth state through the login coordinator path so the Rust snapshot, persisted session file, and host-side LinuxDo auth cookies stay aligned while preserving `cf_clearance`.
@@ -269,11 +271,10 @@ Workspace note:
 Current UX note:
 
 - The app now opens login as a full-screen browser instead of a partial sheet.
-- The app now keeps the same onboarding visual shell visible during cold-start login-state verification. The login button is hidden during PreheatGate, the button slot shows the verification state, and startup failures stay on that screen with a retry action.
+- The app now uses a single unified onboarding launch page for cold-start login-state verification and native login. The page shows a shared brand shell and swaps its middle content across three phases — `.validating` (loading), `.credential` (username/password form), and `.loggingIn` (overlay) — eliminating the former three-screen preheat→onboarding→login-modal flow and the extra manual button tap. Startup validation runs `prepareStartupSession → awaitPreloadedData → determineLoginStateWithProbe` in one chain owned by the page; recoverable preload failures that still have a login cookie are preserved for Rust's startup authority instead of being forced directly to the error state.
 - iOS does not expose a production "restore existing session" action under onboarding/login. The Developer Tools "恢复会话" action is diagnostic-only and reruns the Rust-owned startup loading path.
 - Once startup or login reaches the authenticated shell, the Home list owns its data-loading presentation and renders topic-row skeletons for the initial empty load instead of showing another full-screen gate.
-- The login browser can navigate back from Google or other intermediate pages without forcing the user to close and reopen login.
-- The login browser now auto-probes whether sync would actually succeed, re-checking on navigation, scene resume, debounced WebKit auth-cookie changes, and loading-state transitions. `完成登录` stays disabled until username, auth cookies, reusable bootstrap HTML, and an idle WebView are all present.
+- The login screen uses native credential fields and an embedded hCaptcha-only `WKWebView`; the unified onboarding shell keeps the brand header compact and top-aligned so the credential form, forgot-password link, and other-method login entry remain visible. The form is keyboard-aware and dismisses editing through blank-area taps, dragging, Return/Go, or the input accessory "完成" action. Login success comes from Rust classification of the WebView-owned `/session.json` result, not from browsing to `/login` or probing page readiness.
 - The login shell and reading workspace now adapt to both light and dark system appearance while preserving the same hierarchy and contrast model.
 - The network warm-up is best-effort and no longer blocks login browser presentation. iOS does not provide a generic "internet permission" API for arbitrary web access, so this only tries to shift the first prompt/request earlier; it does not create a separate permission flow.
 - The current topic browser now runs against the real shared Rust core through generated UniFFI Swift bindings.
@@ -305,7 +306,7 @@ Current UX note:
 - The app now keeps the in-app notification list synchronized from Rust-owned notification runtime state when MessageBus notification events arrive, instead of only updating the unread badge count.
 - iOS now schedules background refresh work for `/notification-alert/{userId}` and presents host-owned local notifications from a dedicated one-shot Rust MessageBus poll path.
 - The authenticated shell now also requests APNs registration, caches the resulting device token locally, and exposes host-side registration diagnostics without attempting backend token upload yet.
-- iOS now also runs a default-on offscreen Cloudflare Turnstile runtime for authenticated sessions that still expose a Turnstile sitekey in bootstrap, replaying the internal `/rc` refresh requests through native networking and re-syncing the refreshed cookie batch back into Rust and WebKit while the scene stays active.
+- iOS now also runs a default-on offscreen Cloudflare Turnstile runtime for authenticated sessions that still expose a Turnstile sitekey in bootstrap, replaying the internal `/rc` refresh requests through native networking and merging the refreshed `cf_clearance` back into Rust while the scene stays active.
 - The app now exposes a diagnostics screen for tail-first log inspection, preview-first request-trace body paging, and local support-bundle export.
 - The profile screen now consumes Rust-derived session display labels, so authenticated recovery states are described consistently across hosts instead of being inferred separately in Swift.
 - The profile area now includes a native private-message mailbox, and public profile headers can open a pre-addressed private-message composer when the viewed user allows PMs.

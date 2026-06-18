@@ -1,11 +1,13 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use fire_models::{
     AuthRuntimeSignal, AuthRuntimeSignalKind, AuthRuntimeSignalSource, AuthRuntimeSignalStrength,
-    CloudflareChallengeRequest,
+    CloudflareChallengeRequest, CookieSelfHealingPhase, CookieSelfHealingRequest,
 };
 use http::{
-    header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_LANGUAGE, ORIGIN, REFERER, USER_AGENT},
+    header::{
+        HeaderMap, HeaderName, HeaderValue, ACCEPT_LANGUAGE, COOKIE, ORIGIN, REFERER, USER_AGENT,
+    },
     Method, Request, Response, StatusCode,
 };
 #[cfg(debug_assertions)]
@@ -52,6 +54,7 @@ const FIRE_ACCEPT_LANGUAGE: &str = "zh-CN,zh;q=0.9,en;q=0.8";
 const FIRE_JSON_ACCEPT: &str = "application/json, text/javascript, */*; q=0.01";
 const FIRE_MESSAGE_BUS_ACCEPT: &str = "text/plain, */*; q=0.01";
 const LOGIN_INVALIDATED_MESSAGE: &str = "登录状态已失效，请重新登录。";
+const COOKIE_SELF_HEALING_NAMES: &[&str] = &["_t", "_forum_session", "cf_clearance", "_cfuvid"];
 
 /// Placeholder header value used when a write request needs CSRF but Fire's
 /// preflight has not yet populated the token. Mirrors Discourse's official web
@@ -122,6 +125,7 @@ pub(crate) struct FireNetworkLayer {
     client: Client,
     diagnostics: Arc<FireDiagnosticsStore>,
     session: Arc<RwLock<super::FireSessionRuntimeState>>,
+    cloudflare_challenge_runtime: Arc<Mutex<super::cf_challenge::FireCloudflareChallengeRuntime>>,
 }
 
 #[derive(Clone)]
@@ -260,6 +264,17 @@ pub(crate) struct TracedRequest {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct FireSkipCsrfHeader;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct FireSkipCloudflareBlock;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct FireSkipCookieSelfHeal;
+
+struct FireCookieSelfHealingTarget {
+    request_url: String,
+    origin_url: Option<String>,
+}
+
 impl TracedRequest {
     pub(crate) fn with_challenge_presentation(
         mut self,
@@ -280,6 +295,14 @@ fn clone_request_for_retry(request: &Request<RequestBody>) -> Option<Request<Req
     let request_profile = request.extensions().get::<FireRequestProfile>().copied();
     let request_epoch = request.extensions().get::<FireRequestEpoch>().copied();
     let skip_csrf_header = request.extensions().get::<FireSkipCsrfHeader>().copied();
+    let skip_cloudflare_block = request
+        .extensions()
+        .get::<FireSkipCloudflareBlock>()
+        .copied();
+    let skip_cookie_self_heal = request
+        .extensions()
+        .get::<FireSkipCookieSelfHeal>()
+        .copied();
     let challenge_presentation = request
         .extensions()
         .get::<FireChallengePresentation>()
@@ -289,6 +312,9 @@ fn clone_request_for_retry(request: &Request<RequestBody>) -> Option<Request<Req
         .uri(request.uri().clone())
         .version(request.version());
     for (name, value) in request.headers() {
+        if should_rebuild_header_for_retry(name) {
+            continue;
+        }
         builder = builder.header(name, value);
     }
     let mut request = builder.body(cloned_body).ok()?;
@@ -301,10 +327,32 @@ fn clone_request_for_retry(request: &Request<RequestBody>) -> Option<Request<Req
     if let Some(skip) = skip_csrf_header {
         request.extensions_mut().insert(skip);
     }
+    if let Some(skip) = skip_cloudflare_block {
+        request.extensions_mut().insert(skip);
+    }
+    if let Some(skip) = skip_cookie_self_heal {
+        request.extensions_mut().insert(skip);
+    }
     if let Some(presentation) = challenge_presentation {
         request.extensions_mut().insert(presentation);
     }
     Some(request)
+}
+
+fn should_rebuild_header_for_retry(name: &HeaderName) -> bool {
+    name == COOKIE
+        || name == USER_AGENT
+        || name == ACCEPT_LANGUAGE
+        || name == ORIGIN
+        || name == REFERER
+        || name.as_str().eq_ignore_ascii_case("x-csrf-token")
+        || name.as_str().eq_ignore_ascii_case("x-requested-with")
+        || name.as_str().eq_ignore_ascii_case("sec-fetch-dest")
+        || name.as_str().eq_ignore_ascii_case("sec-fetch-mode")
+        || name.as_str().eq_ignore_ascii_case("sec-fetch-site")
+        || name.as_str().eq_ignore_ascii_case("priority")
+        || name.as_str().eq_ignore_ascii_case("discourse-logged-in")
+        || name.as_str().eq_ignore_ascii_case("discourse-present")
 }
 
 fn trace_request(
@@ -382,6 +430,9 @@ impl FireNetworkLayer {
         session: Arc<RwLock<super::FireSessionRuntimeState>>,
         diagnostics: Arc<FireDiagnosticsStore>,
         cookie_jar: Arc<FireSessionCookieJar>,
+        cloudflare_challenge_runtime: Arc<
+            Mutex<super::cf_challenge::FireCloudflareChallengeRuntime>,
+        >,
     ) -> Result<Self, FireCoreError> {
         let builder = Client::builder()
             .cookie_jar(cookie_jar)
@@ -411,6 +462,7 @@ impl FireNetworkLayer {
             client,
             diagnostics,
             session,
+            cloudflare_challenge_runtime,
         })
     }
 
@@ -435,6 +487,25 @@ impl FireNetworkLayer {
     ) -> Result<(u64, Response<ResponseBody>), FireCoreError> {
         let trace_id = traced.trace_id;
         let operation = traced.operation;
+        let skip_cloudflare_block = traced
+            .request
+            .extensions()
+            .get::<FireSkipCloudflareBlock>()
+            .is_some();
+        if !skip_cloudflare_block
+            && self
+                .cloudflare_challenge_runtime
+                .lock()
+                .expect("cloudflare challenge runtime mutex poisoned")
+                .in_progress
+        {
+            self.diagnostics.record_cancelled_if_in_progress(
+                trace_id,
+                "Blocked during Cloudflare challenge",
+                Some("Request was not dispatched because Cloudflare verification is in progress"),
+            );
+            return Err(FireCoreError::CloudflareChallengeInProgress { operation });
+        }
         let request_epoch = traced
             .request
             .extensions()
@@ -820,11 +891,18 @@ impl FireCore {
         options: CallOptions,
     ) -> Result<(u64, Response<ResponseBody>), FireCoreError> {
         let has_challenge_handler = self.cloudflare_challenge_handler.get().is_some();
-        let retry_request = if has_challenge_handler {
-            clone_request_for_retry(&traced.request)
-        } else {
-            None
-        };
+        let has_cookie_healing_handler = self.cookie_self_healing_handler.get().is_some();
+        let skip_cookie_self_heal = traced
+            .request
+            .extensions()
+            .get::<FireSkipCookieSelfHeal>()
+            .is_some();
+        let retry_request =
+            if has_challenge_handler || (has_cookie_healing_handler && !skip_cookie_self_heal) {
+                clone_request_for_retry(&traced.request)
+            } else {
+                None
+            };
         let request_url = request_url_string(&traced.request);
         let origin_url = request_origin_url(&self.base_url, &traced.request);
         let is_foreground = should_present_foreground_challenge(
@@ -838,91 +916,223 @@ impl FireCore {
             .execute_traced_with_options(traced, FireCallProfile::DefaultApi, options)
             .await?;
 
-        if !has_challenge_handler {
+        let response = if has_challenge_handler
+            && matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS
+            ) {
+            let status = response.status();
+            let (parts, body) = response.into_parts();
+            let body = body
+                .bytes()
+                .await
+                .map_err(|source| FireCoreError::Network { source })?;
+            let body_text = String::from_utf8_lossy(&body);
+            if !is_cloudflare_challenge_response(status.as_u16(), &parts.headers, &body_text) {
+                response_from_parts(parts, body)
+            } else {
+                self.diagnostics
+                    .record_http_status_error(trace_id, status.as_u16(), &body_text);
+                self.record_auth_runtime_signal(AuthRuntimeSignal {
+                    kind: AuthRuntimeSignalKind::CloudflareChallenge,
+                    strength: AuthRuntimeSignalStrength::Diagnostic,
+                    source: AuthRuntimeSignalSource::HttpResponse,
+                    operation: Some(operation.to_string()),
+                    status: Some(status.as_u16()),
+                });
+                let handler = match self.cloudflare_challenge_handler.get() {
+                    Some(handler) => handler,
+                    None => {
+                        return Ok((trace_id, response_from_parts(parts, body)));
+                    }
+                };
+                {
+                    let mut runtime = self
+                        .cloudflare_challenge_runtime
+                        .lock()
+                        .expect("cloudflare challenge runtime mutex poisoned");
+                    if !runtime.can_start(is_foreground) {
+                        return Err(FireCoreError::CloudflareChallenge { operation });
+                    }
+                    runtime.begin();
+                }
+
+                let challenge_result = handler(CloudflareChallengeRequest {
+                    operation: operation.to_string(),
+                    request_url: request_url.clone(),
+                    origin_url: origin_url.clone(),
+                    is_foreground,
+                    session_epoch: self.current_session_epoch(),
+                })
+                .await;
+                let resolved = if !challenge_result.completed || challenge_result.user_cancelled {
+                    Err(FireCoreError::CloudflareChallenge { operation })
+                } else {
+                    let fresh_clearance = challenge_result
+                        .fresh_cf_clearance
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string);
+                    // The platform baseline can differ from Rust's snapshot when
+                    // WebView storage was missing or had already dropped
+                    // cf_clearance. Treat the platform-reported value as the
+                    // accepted challenge result even if it matches Rust's
+                    // previous scalar value; the retry still proves whether it
+                    // is usable for the Rust network path.
+                    if fresh_clearance.is_none() {
+                        Err(FireCoreError::CloudflareChallenge { operation })
+                    } else {
+                        let session = self.complete_cloudflare_challenge(
+                            challenge_result.cookies,
+                            fresh_clearance.clone(),
+                            challenge_result.browser_user_agent,
+                        );
+                        let has_accepted_clearance = session.cookies.cf_clearance.as_deref()
+                            == fresh_clearance.as_deref()
+                            && session.cookies.has_cloudflare_clearance();
+                        if !has_accepted_clearance {
+                            Err(FireCoreError::CloudflareChallenge { operation })
+                        } else if let Some(mut retry_request) = retry_request {
+                            retry_request
+                                .extensions_mut()
+                                .insert(FireRequestEpoch(self.current_session_epoch()));
+                            retry_request
+                                .extensions_mut()
+                                .insert(FireSkipCloudflareBlock);
+                            let retry = trace_request(&self.diagnostics, operation, retry_request);
+                            self.network
+                                .execute_traced_with_options(
+                                    retry,
+                                    FireCallProfile::DefaultApi,
+                                    options,
+                                )
+                                .await
+                        } else {
+                            Err(FireCoreError::CloudflareChallenge { operation })
+                        }
+                    }
+                };
+                {
+                    let mut runtime = self
+                        .cloudflare_challenge_runtime
+                        .lock()
+                        .expect("cloudflare challenge runtime mutex poisoned");
+                    runtime.finish(resolved.is_ok());
+                }
+                return resolved;
+            }
+        } else {
+            response
+        };
+
+        if has_cookie_healing_handler && !skip_cookie_self_heal {
+            return self
+                .maybe_self_heal_response(
+                    operation,
+                    FireCookieSelfHealingTarget {
+                        request_url,
+                        origin_url,
+                    },
+                    trace_id,
+                    response,
+                    retry_request,
+                    options,
+                )
+                .await;
+        }
+
+        Ok((trace_id, response))
+    }
+
+    async fn maybe_self_heal_response(
+        &self,
+        operation: &'static str,
+        target: FireCookieSelfHealingTarget,
+        trace_id: u64,
+        response: Response<ResponseBody>,
+        retry_request: Option<Request<RequestBody>>,
+        options: CallOptions,
+    ) -> Result<(u64, Response<ResponseBody>), FireCoreError> {
+        let Some(handler) = self.cookie_self_healing_handler.get() else {
+            return Ok((trace_id, response));
+        };
+        if !cookie_self_healing_precheck(response.status(), response.headers()) {
             return Ok((trace_id, response));
         }
 
-        let status = response.status();
-        if status != StatusCode::FORBIDDEN && status != StatusCode::TOO_MANY_REQUESTS {
-            return Ok((trace_id, response));
-        }
-
-        let (parts, body) = response.into_parts();
-        let body = body
+        let mut current_trace_id = trace_id;
+        let (mut parts, body) = response.into_parts();
+        let mut body = body
             .bytes()
             .await
             .map_err(|source| FireCoreError::Network { source })?;
-        let body_text = String::from_utf8_lossy(&body);
-        if !is_cloudflare_challenge_response(status.as_u16(), &parts.headers, &body_text) {
-            return Ok((trace_id, response_from_parts(parts, body)));
+        let mut body_text = String::from_utf8_lossy(&body).to_string();
+        if !is_cookie_self_healing_response(parts.status, &parts.headers, &body_text) {
+            return Ok((current_trace_id, response_from_parts(parts, body)));
         }
 
-        self.diagnostics
-            .record_http_status_error(trace_id, status.as_u16(), &body_text);
-        self.record_auth_runtime_signal(AuthRuntimeSignal {
-            kind: AuthRuntimeSignalKind::CloudflareChallenge,
-            strength: AuthRuntimeSignalStrength::Diagnostic,
-            source: AuthRuntimeSignalSource::HttpResponse,
-            operation: Some(operation.to_string()),
-            status: Some(status.as_u16()),
-        });
-        let handler = match self.cloudflare_challenge_handler.get() {
-            Some(handler) => handler,
-            None => {
-                return Ok((trace_id, response_from_parts(parts, body)));
-            }
+        let Some(original_retry_request) = retry_request else {
+            return Ok((current_trace_id, response_from_parts(parts, body)));
         };
-        {
-            let mut runtime = self
-                .cloudflare_challenge_runtime
-                .lock()
-                .expect("cloudflare challenge runtime mutex poisoned");
-            if !runtime.can_start() {
-                return Err(FireCoreError::CloudflareChallenge { operation });
-            }
-            runtime.begin();
-        }
-
-        let challenge_result = handler(CloudflareChallengeRequest {
-            operation: operation.to_string(),
+        let FireCookieSelfHealingTarget {
             request_url,
             origin_url,
-            is_foreground,
-            session_epoch: self.current_session_epoch(),
-        })
-        .await;
-        let before_clearance = self.snapshot().cookies.cf_clearance.clone();
-        let resolved = if !challenge_result.completed || challenge_result.user_cancelled {
-            Err(FireCoreError::CloudflareChallenge { operation })
-        } else {
-            let session = self.complete_cloudflare_challenge(
-                challenge_result.cookies,
-                challenge_result.browser_user_agent,
-            );
-            let has_new_clearance = session.cookies.cf_clearance != before_clearance
-                && session.cookies.has_cloudflare_clearance();
-            if !has_new_clearance {
-                Err(FireCoreError::CloudflareChallenge { operation })
-            } else if let Some(mut retry_request) = retry_request {
-                retry_request
-                    .extensions_mut()
-                    .insert(FireRequestEpoch(self.current_session_epoch()));
-                let retry = trace_request(&self.diagnostics, operation, retry_request);
-                self.network
-                    .execute_traced_with_options(retry, FireCallProfile::DefaultApi, options)
-                    .await
-            } else {
-                Err(FireCoreError::CloudflareChallenge { operation })
+        } = target;
+        let target_url = origin_url.unwrap_or_else(|| self.base_url.as_str().to_string());
+        let cookie_names = COOKIE_SELF_HEALING_NAMES
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>();
+        let attempts = [
+            (CookieSelfHealingPhase::Sweep, 1u8),
+            (CookieSelfHealingPhase::Sweep, 2u8),
+            (CookieSelfHealingPhase::NuclearReset, 1u8),
+        ];
+
+        for (phase, attempt) in attempts {
+            let result = handler(CookieSelfHealingRequest {
+                operation: operation.to_string(),
+                request_url: request_url.clone(),
+                target_url: target_url.clone(),
+                phase,
+                attempt,
+                cookie_names: cookie_names.clone(),
+                session_epoch: self.current_session_epoch(),
+            })
+            .await;
+            if !result.completed {
+                continue;
             }
-        };
-        {
-            let mut runtime = self
-                .cloudflare_challenge_runtime
-                .lock()
-                .expect("cloudflare challenge runtime mutex poisoned");
-            runtime.finish(resolved.is_ok());
+
+            let Some(mut request) = clone_request_for_retry(&original_retry_request) else {
+                break;
+            };
+            request
+                .extensions_mut()
+                .insert(FireRequestEpoch(self.current_session_epoch()));
+            request.extensions_mut().insert(FireSkipCookieSelfHeal);
+            let retry = trace_request(&self.diagnostics, operation, request);
+            let (retry_trace_id, retry_response) =
+                Box::pin(self.execute_request_with_options(retry, options)).await?;
+
+            if !cookie_self_healing_precheck(retry_response.status(), retry_response.headers()) {
+                return Ok((retry_trace_id, retry_response));
+            }
+            current_trace_id = retry_trace_id;
+            let (retry_parts, retry_body) = retry_response.into_parts();
+            parts = retry_parts;
+            body = retry_body
+                .bytes()
+                .await
+                .map_err(|source| FireCoreError::Network { source })?;
+            body_text = String::from_utf8_lossy(&body).to_string();
+            if !is_cookie_self_healing_response(parts.status, &parts.headers, &body_text) {
+                return Ok((current_trace_id, response_from_parts(parts, body)));
+            }
         }
-        resolved
+
+        Ok((current_trace_id, response_from_parts(parts, body)))
     }
 
     pub(crate) async fn read_response_text(
@@ -1004,6 +1214,33 @@ impl FireCore {
         let body = self.read_response_text(trace_id, response).await?;
         self.diagnostics
             .record_http_status_error(trace_id, StatusCode::FORBIDDEN.as_u16(), &body);
+
+        if is_bad_csrf_body(&body) {
+            info!(
+                operation,
+                trace_id, "received BAD CSRF, refreshing token and retrying"
+            );
+            let _ = self.clear_csrf_token();
+            let refreshed = self.refresh_csrf_token_if_needed().await?;
+            if !refreshed.cookies.can_authenticate_requests() {
+                warn!(
+                    operation,
+                    trace_id, "skipping BAD CSRF retry because login cookies are unavailable"
+                );
+                return Err(FireCoreError::MissingLoginSession);
+            }
+            if !refreshed.cookies.has_csrf_token() {
+                warn!(
+                    operation,
+                    trace_id, "skipping BAD CSRF retry because refresh did not produce a token"
+                );
+                return Err(FireCoreError::MissingCsrfToken);
+            }
+
+            let retry = make_request()?;
+            return self.execute_request(retry).await;
+        }
+
         if let Some(error) = response_login_invalidation_error(
             operation,
             trace_id,
@@ -1035,45 +1272,19 @@ impl FireCore {
             let _ = self.process_auth_runtime_signal(signal, operation).await;
         }
 
-        if !is_bad_csrf_body(&body) {
-            warn!(
-                operation,
-                trace_id,
-                status = 403u16,
-                body_prefix = %body.chars().take(200).collect::<String>(),
-                "request rejected with 403 (not a CSRF error)"
-            );
-            return Err(classify_http_status_error(
-                operation,
-                StatusCode::FORBIDDEN.as_u16(),
-                &response_headers,
-                body,
-            ));
-        }
-
-        info!(
+        warn!(
             operation,
-            trace_id, "received BAD CSRF, refreshing token and retrying"
+            trace_id,
+            status = 403u16,
+            body_prefix = %body.chars().take(200).collect::<String>(),
+            "request rejected with 403 (not a CSRF error)"
         );
-        let _ = self.clear_csrf_token();
-        let refreshed = self.refresh_csrf_token_if_needed().await?;
-        if !refreshed.cookies.can_authenticate_requests() {
-            warn!(
-                operation,
-                trace_id, "skipping BAD CSRF retry because login cookies are unavailable"
-            );
-            return Err(FireCoreError::MissingLoginSession);
-        }
-        if !refreshed.cookies.has_csrf_token() {
-            warn!(
-                operation,
-                trace_id, "skipping BAD CSRF retry because refresh did not produce a token"
-            );
-            return Err(FireCoreError::MissingCsrfToken);
-        }
-
-        let retry = make_request()?;
-        self.execute_request(retry).await
+        Err(classify_http_status_error(
+            operation,
+            StatusCode::FORBIDDEN.as_u16(),
+            &response_headers,
+            body,
+        ))
     }
 
     pub(crate) async fn read_response_json_with_diagnostics<T>(
@@ -1467,6 +1678,27 @@ fn response_login_invalidation_error(
     })
 }
 
+fn cookie_self_healing_precheck(status: StatusCode, headers: &HeaderMap) -> bool {
+    matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN)
+        || status.as_u16() == 419
+        || response_login_invalidation_signal(headers).discourse_logged_out
+}
+
+fn is_cookie_self_healing_response(status: StatusCode, headers: &HeaderMap, body: &str) -> bool {
+    if is_invalid_access_forbidden(status, body)
+        || is_cloudflare_challenge_response(status.as_u16(), headers, body)
+        || is_bad_csrf_body(body)
+        || not_logged_in_message(status.as_u16(), body).is_some()
+    {
+        return false;
+    }
+    if status == StatusCode::UNAUTHORIZED || status.as_u16() == 419 {
+        return true;
+    }
+    let invalidation = response_login_invalidation_signal(headers);
+    status.is_client_error() && invalidation.discourse_logged_out
+}
+
 pub(crate) fn is_cloudflare_challenge_body(body: &str) -> bool {
     let normalized = body.to_ascii_lowercase();
     normalized.contains("cf_chl_opt")
@@ -1490,14 +1722,14 @@ pub(crate) fn is_cloudflare_challenge_response(
         return false;
     }
 
-    let content_type = header_value(headers, "content-type").unwrap_or_default();
-    if !content_type.to_ascii_lowercase().contains("text/html") {
-        return false;
-    }
-
     let cf_mitigated = header_value(headers, "cf-mitigated").unwrap_or_default();
     if cf_mitigated.to_ascii_lowercase().contains("challenge") {
         return true;
+    }
+
+    let content_type = header_value(headers, "content-type").unwrap_or_default();
+    if !content_type.to_ascii_lowercase().contains("text/html") {
+        return false;
     }
 
     is_cloudflare_challenge_body(body)
@@ -1717,6 +1949,12 @@ mod tests {
         let mut request = Request::builder()
             .method(Method::GET)
             .uri("https://example.com/latest.json")
+            .header("Cookie", "cf_clearance=stale")
+            .header("User-Agent", "stale-agent")
+            .header("X-CSRF-Token", "stale-csrf")
+            .header("Sec-Fetch-Site", "same-origin")
+            .header("Discourse-Logged-In", "true")
+            .header("Discourse-Track-View", "1")
             .body(RequestBody::empty())
             .expect("request");
         request.extensions_mut().insert(FireRequestProfile::JsonApi);
@@ -1731,6 +1969,21 @@ mod tests {
             .extensions()
             .get::<crate::diagnostics::FireRequestTraceMetadata>()
             .is_none());
+        assert!(
+            retry_request.headers().get(COOKIE).is_none(),
+            "retry clone must let the cookie jar rebuild Cookie from current session"
+        );
+        assert!(retry_request.headers().get(USER_AGENT).is_none());
+        assert!(retry_request.headers().get("X-CSRF-Token").is_none());
+        assert!(retry_request.headers().get("Sec-Fetch-Site").is_none());
+        assert!(retry_request.headers().get("Discourse-Logged-In").is_none());
+        assert_eq!(
+            retry_request
+                .headers()
+                .get("Discourse-Track-View")
+                .and_then(|value| value.to_str().ok()),
+            Some("1")
+        );
         assert!(matches!(
             retry_request
                 .extensions()

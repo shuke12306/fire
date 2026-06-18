@@ -135,6 +135,16 @@ public actor FireSessionStore {
         try core.session().unregisterCloudflareChallengeHandler()
     }
 
+    public func registerCookieSelfHealingHandler(
+        _ handler: any CookieSelfHealingHandler
+    ) throws {
+        try core.session().registerCookieSelfHealingHandler(handler: handler)
+    }
+
+    public func unregisterCookieSelfHealingHandler() throws {
+        try core.session().unregisterCookieSelfHealingHandler()
+    }
+
     public func ensurePreloadedDataLoaded() async throws {
         try await core.session().ensurePreloadedDataLoaded()
         try persistCurrentSessionIfNeeded()
@@ -307,6 +317,79 @@ public actor FireSessionStore {
     @discardableResult
     public func applyPlatformCookies(_ cookies: [PlatformCookieState]) throws -> SessionState {
         let state = try core.session().applyPlatformCookies(cookies: cookies)
+        try persistCurrentSessionIfNeeded()
+        return state
+    }
+
+    @discardableResult
+    public func mergePlatformCookies(_ cookies: [PlatformCookieState]) throws -> SessionState {
+        let state = try core.session().mergePlatformCookies(cookies: cookies)
+        try persistCurrentSessionIfNeeded()
+        return state
+    }
+
+    @discardableResult
+    public func completeCloudflareChallenge(
+        cookies: [PlatformCookieState],
+        freshCfClearance: String,
+        browserUserAgent: String?
+    ) throws -> SessionState {
+        let state = try core.session().completeCloudflareChallenge(
+            cookies: cookies,
+            freshCfClearance: freshCfClearance,
+            browserUserAgent: browserUserAgent
+        )
+        try persistCurrentSessionIfNeeded()
+        return state
+    }
+
+    public func classifyWebViewLoginResult(
+        _ result: WebViewLoginJsResultState
+    ) throws -> WebViewLoginDecisionState {
+        try core.session().classifyWebviewLoginResult(result: result)
+    }
+
+    public func webViewPrimingPayload(
+        targetURL: String? = nil
+    ) throws -> [WebViewCookieActionState] {
+        try core.session().webviewPrimingPayload(targetUrl: targetURL)
+    }
+
+    public func cookieSweepPlan(
+        targetURL: String? = nil,
+        name: String,
+        webViewCookies: [WebViewCookieInfoState]
+    ) throws -> CookieSweepPlanState {
+        try core.session().cookieSweepPlan(
+            targetUrl: targetURL,
+            name: name,
+            webviewCookies: webViewCookies
+        )
+    }
+
+    public func cookieNuclearResetPlan(
+        targetURL: String? = nil,
+        webViewCookies: [WebViewCookieInfoState]
+    ) throws -> NuclearResetPlanState {
+        try core.session().cookieNuclearResetPlan(
+            targetUrl: targetURL,
+            webviewCookies: webViewCookies
+        )
+    }
+
+    @discardableResult
+    public func commitCookieSweepResult(
+        targetURL: String? = nil,
+        name: String,
+        intent: CookieSweepIntentState,
+        webViewCookies: [WebViewCookieInfoState]
+    ) throws -> SessionState {
+        let state = try core.session().commitCookieSweepResult(
+            targetUrl: targetURL,
+            name: name,
+            intent: intent,
+            webviewCookies: webViewCookies
+        )
         try persistCurrentSessionIfNeeded()
         return state
     }
@@ -1346,8 +1429,32 @@ public actor FireSessionStore {
     private func applyPlatformCookiesForAuthenticatedWritePreflight(
         _ cookies: [PlatformCookieState]
     ) async throws -> AuthenticatedWritePreflightContext {
+        guard Self.containsActiveAuthCookies(in: cookies) else {
+            logHost(
+                level: .info,
+                target: "session.auth_write_preflight",
+                message: "Skipping authoritative platform cookie apply because host resync returned partial auth cookies."
+            )
+            return try authenticatedWritePreflightContext()
+        }
         _ = try applyPlatformCookies(cookies)
         return try authenticatedWritePreflightContext()
+    }
+
+    nonisolated private static func containsActiveAuthCookies(
+        in cookies: [PlatformCookieState]
+    ) -> Bool {
+        let activeCookies = cookies.filter { cookie in
+            let value = cookie.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !value.isEmpty && !(cookie.expiresAtUnixMs.map { $0 <= currentUnixMs() } ?? false)
+        }
+
+        return activeCookies.contains(where: { $0.name == "_t" })
+            && activeCookies.contains(where: { $0.name == "_forum_session" })
+    }
+
+    nonisolated private static func currentUnixMs() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
     }
 
     private func runAuthenticatedWritePreflight() async throws {
@@ -1423,7 +1530,7 @@ public actor FireSessionStore {
                 )
             } catch {
             }
-            await clearAuthenticatedWriteHostResyncTask(for: sessionEpoch)
+            clearAuthenticatedWriteHostResyncTask(for: sessionEpoch)
         }
         authenticatedWriteHostResyncTasks[sessionEpoch] = task
         await task.value

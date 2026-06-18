@@ -2,7 +2,10 @@ mod common;
 
 use common::{sample_home_html, temp_session_file, temp_workspace_dir};
 use fire_core::{FireCore, FireCoreConfig, FireCoreError};
-use fire_models::{BootstrapArtifacts, CookieSnapshot, LoginPhase, LoginSyncInput, PlatformCookie};
+use fire_models::{
+    BootstrapArtifacts, CanonicalCookie, CookieSameSite, CookieSnapshot, LoginPhase,
+    LoginSyncInput, PlatformCookie, WebViewCookieAction,
+};
 use serde_json::{json, Value};
 
 #[test]
@@ -83,6 +86,132 @@ fn sync_login_context_merges_platform_cookies_and_html() {
     assert_eq!(snapshot.login_phase(), LoginPhase::Ready);
     assert!(snapshot.readiness().can_write_authenticated_api);
     assert!(snapshot.readiness().can_open_message_bus);
+}
+
+#[test]
+fn cloudflare_completion_preserves_auth_when_webview_batch_lacks_forum_session() {
+    let core = FireCore::new(FireCoreConfig::default()).expect("core");
+    let _ = core.sync_login_context(LoginSyncInput {
+        username: Some("alice".into()),
+        home_html: Some(sample_home_html()),
+        csrf_token: Some("csrf-token".into()),
+        current_url: Some("https://linux.do/".into()),
+        browser_user_agent: Some("FireTests/1.0".into()),
+        cookies: vec![
+            PlatformCookie {
+                name: "_t".into(),
+                value: "token".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+            PlatformCookie {
+                name: "_forum_session".into(),
+                value: "forum".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+            PlatformCookie {
+                name: "cf_clearance".into(),
+                value: "old-clearance".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: Some("None".into()),
+            },
+        ],
+    });
+
+    let snapshot = core.complete_cloudflare_challenge(
+        vec![
+            PlatformCookie {
+                name: "_t".into(),
+                value: "token".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+            PlatformCookie {
+                name: "cf_clearance".into(),
+                value: "fresh-clearance".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: Some("None".into()),
+            },
+        ],
+        Some("fresh-clearance".into()),
+        Some("FireTests/1.0".into()),
+    );
+
+    assert_eq!(snapshot.cookies.t_token.as_deref(), Some("token"));
+    assert_eq!(snapshot.cookies.forum_session.as_deref(), Some("forum"));
+    assert_eq!(
+        snapshot.cookies.cf_clearance.as_deref(),
+        Some("fresh-clearance")
+    );
+    assert!(snapshot.readiness().can_read_authenticated_api);
+    assert!(snapshot.readiness().can_write_authenticated_api);
+}
+
+#[test]
+fn untrusted_platform_bulk_read_does_not_overwrite_newer_canonical_cookie() {
+    let core = FireCore::new(FireCoreConfig::default()).expect("core");
+    let mut trusted = CanonicalCookie::new("_t", "fresh", "https://linux.do/");
+    trusted.version = 3;
+    let _ = core.apply_cookies(CookieSnapshot {
+        canonical_cookies: vec![trusted],
+        ..CookieSnapshot::default()
+    });
+
+    let snapshot = core.merge_platform_cookies(vec![PlatformCookie {
+        name: "_t".into(),
+        value: "stale-webview".into(),
+        domain: Some("linux.do".into()),
+        path: Some("/".into()),
+        expires_at_unix_ms: None,
+        same_site: None,
+    }]);
+
+    assert_eq!(snapshot.cookies.t_token.as_deref(), Some("fresh"));
+    assert_eq!(snapshot.cookies.canonical_cookies.len(), 1);
+    assert_eq!(snapshot.cookies.canonical_cookies[0].value, "fresh");
+    assert_eq!(snapshot.cookies.canonical_cookies[0].version, 3);
+}
+
+#[test]
+fn webview_priming_payload_exports_canonical_set_cookie_actions() {
+    let core = FireCore::new(FireCoreConfig::default()).expect("core");
+    let mut clearance = CanonicalCookie::new("cf_clearance", "clear", "https://linux.do/");
+    clearance.host_only = false;
+    clearance.domain = Some(".linux.do".into());
+    clearance.secure = true;
+    clearance.same_site = CookieSameSite::None;
+    let _ = core.apply_cookies(CookieSnapshot {
+        canonical_cookies: vec![clearance],
+        ..CookieSnapshot::default()
+    });
+
+    let payload = core.webview_priming_payload(Some("https://linux.do/".into()));
+
+    assert_eq!(payload.len(), 2);
+    assert!(matches!(
+        &payload[0],
+        WebViewCookieAction::DeleteByName { url, name }
+            if url == "https://linux.do/" && name == "cf_clearance"
+    ));
+    let WebViewCookieAction::SetRaw { url, set_cookie } = &payload[1] else {
+        panic!("expected raw set-cookie action");
+    };
+    assert_eq!(url, "https://linux.do/");
+    assert!(set_cookie.contains("cf_clearance=clear"));
+    assert!(set_cookie.contains("Domain=.linux.do"));
+    assert!(set_cookie.contains("Secure"));
+    assert!(set_cookie.contains("SameSite=None"));
 }
 
 #[test]

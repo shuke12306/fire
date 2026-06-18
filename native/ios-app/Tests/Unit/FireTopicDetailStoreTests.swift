@@ -580,6 +580,40 @@ final class FireTopicDetailStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testCloudflareCompletionUsesChallengeMergePathForPartialBrowserBatch() async throws {
+        let finalState = makeSessionState(csrfToken: "csrf-token")
+        let store = MockLoginSessionStore(
+            finalizationResult: finalState,
+            bootstrapResult: finalState
+        )
+        let coordinator = FireWebViewLoginCoordinator(loginSessionStore: store)
+        let cookies = [
+            PlatformCookieState(
+                name: "cf_clearance",
+                value: "fresh-clearance",
+                domain: "linux.do",
+                path: "/",
+                expiresAtUnixMs: nil,
+                sameSite: nil
+            )
+        ]
+
+        let state = try await coordinator.completeCloudflareChallenge(
+            cookies: cookies,
+            freshCfClearance: "fresh-clearance",
+            browserUserAgent: "FireTests/1.0"
+        )
+        let calls = await store.callsSnapshot()
+        let appliedCookies = await store.appliedPlatformCookiesSnapshot()
+        let challengeCookies = await store.completedCloudflareChallengeCookiesSnapshot()
+
+        XCTAssertEqual(calls, [.completeCloudflareChallenge])
+        XCTAssertEqual(state, finalState)
+        XCTAssertTrue(appliedCookies.isEmpty)
+        XCTAssertEqual(challengeCookies, cookies)
+    }
+
+    @MainActor
     func testCompleteLoginRollsBackPartialSessionWhenBootstrapRefreshChallenges() async throws {
         let captured = FireCapturedLoginState(
             currentURL: "https://linux.do/",
@@ -595,7 +629,8 @@ final class FireTopicDetailStoreTests: XCTestCase {
                 forumSession: "forum",
                 cfClearance: "clearance",
                 csrfToken: nil,
-                platformCookies: []
+                platformCookies: [],
+                canonicalCookies: []
             ),
             bootstrap: BootstrapState(
                 baseUrl: "https://linux.do",
@@ -825,7 +860,8 @@ final class FireTopicDetailStoreTests: XCTestCase {
                 forumSession: "forum",
                 cfClearance: "clearance",
                 csrfToken: csrfToken,
-                platformCookies: []
+                platformCookies: [],
+                canonicalCookies: []
             ),
             bootstrap: BootstrapState(
                 baseUrl: "https://linux.do",
@@ -890,10 +926,15 @@ private actor MockLoginSessionStore: FireLoginSessionStoring {
         case currentSessionSnapshot
         case finalizeLoginFromWebView
         case applyPlatformCookies
+        case completeCloudflareChallenge
         case syncLoginContext
         case refreshBootstrapIfNeeded
         case refreshCsrfTokenIfNeeded
         case logoutLocal
+        case webViewPrimingPayload
+        case cookieSweepPlan
+        case cookieNuclearResetPlan
+        case commitCookieSweepResult
     }
 
     private let finalizationResult: SessionState
@@ -904,6 +945,7 @@ private actor MockLoginSessionStore: FireLoginSessionStoring {
     private let csrfError: Error?
     private var calls: [Call] = []
     private var appliedPlatformCookies: [PlatformCookieState] = []
+    private var completedCloudflareChallengeCookies: [PlatformCookieState] = []
     private var finalizedCapture: FireCapturedLoginState?
 
     init(
@@ -981,12 +1023,63 @@ private actor MockLoginSessionStore: FireLoginSessionStoring {
         return finalizationResult
     }
 
+    func completeCloudflareChallenge(
+        cookies: [PlatformCookieState],
+        freshCfClearance: String,
+        browserUserAgent: String?
+    ) async throws -> SessionState {
+        calls.append(.completeCloudflareChallenge)
+        completedCloudflareChallengeCookies = cookies
+        return finalizationResult
+    }
+
+    func webViewPrimingPayload(targetURL: String?) async throws -> [WebViewCookieActionState] {
+        calls.append(.webViewPrimingPayload)
+        return []
+    }
+
+    func cookieSweepPlan(
+        targetURL: String?,
+        name: String,
+        webViewCookies: [WebViewCookieInfoState]
+    ) async throws -> CookieSweepPlanState {
+        calls.append(.cookieSweepPlan)
+        return CookieSweepPlanState(
+            name: name,
+            intent: .ensureUnique,
+            actions: [],
+            selectedWinner: nil
+        )
+    }
+
+    func cookieNuclearResetPlan(
+        targetURL: String?,
+        webViewCookies: [WebViewCookieInfoState]
+    ) async throws -> NuclearResetPlanState {
+        calls.append(.cookieNuclearResetPlan)
+        return NuclearResetPlanState(actions: [])
+    }
+
+    func commitCookieSweepResult(
+        targetURL: String?,
+        name: String,
+        intent: CookieSweepIntentState,
+        webViewCookies: [WebViewCookieInfoState]
+    ) async throws -> SessionState {
+        calls.append(.commitCookieSweepResult)
+        return finalizationResult
+    }
+
     func callsSnapshot() -> [Call] {
         calls
     }
 
     func appliedPlatformCookiesSnapshot() -> [PlatformCookieState] {
         appliedPlatformCookies
+    }
+
+    func completedCloudflareChallengeCookiesSnapshot() -> [PlatformCookieState] {
+        completedCloudflareChallengeCookies
     }
 
     func finalizedCaptureSnapshot() -> FireCapturedLoginState? {

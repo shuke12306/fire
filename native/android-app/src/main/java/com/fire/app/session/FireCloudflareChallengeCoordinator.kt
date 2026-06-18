@@ -2,6 +2,7 @@ package com.fire.app.session
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -28,10 +29,6 @@ class FireCloudflareChallengeCoordinator(
     fun completeSynchronously(
         request: CloudflareChallengeRequestState,
     ): CloudflareChallengeResultState {
-        if (!request.isForeground) {
-            return cancelledResult(userCancelled = false)
-        }
-
         val token = UUID.randomUUID().toString()
         val pending = PendingChallenge()
         PendingChallenges.register(token, pending)
@@ -40,7 +37,7 @@ class FireCloudflareChallengeCoordinator(
             putExtra(FireCloudflareChallengeActivity.EXTRA_PENDING_TOKEN, token)
             putExtra(
                 FireCloudflareChallengeActivity.EXTRA_TARGET_URL,
-                request.originUrl ?: "https://linux.do/challenge",
+                challengeUrl(request.originUrl),
             )
         }
         context.startActivity(intent)
@@ -54,9 +51,24 @@ class FireCloudflareChallengeCoordinator(
         return CloudflareChallengeResultState(
             completed = false,
             userCancelled = userCancelled,
+            freshCfClearance = null,
             cookies = emptyList(),
             browserUserAgent = null,
         )
+    }
+
+    private fun challengeUrl(originUrl: String?): String {
+        val parsed = originUrl
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?.takeIf { !it.scheme.isNullOrBlank() && !it.host.isNullOrBlank() }
+            ?: return "https://linux.do/challenge"
+        return parsed.buildUpon()
+            .path("/challenge")
+            .clearQuery()
+            .fragment(null)
+            .build()
+            .toString()
     }
 }
 
@@ -82,6 +94,7 @@ internal class PendingChallenge {
     var result: CloudflareChallengeResultState = CloudflareChallengeResultState(
         completed = false,
         userCancelled = false,
+        freshCfClearance = null,
         cookies = emptyList(),
         browserUserAgent = null,
     )

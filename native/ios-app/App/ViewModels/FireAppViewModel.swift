@@ -28,12 +28,15 @@ final class FireAppViewModel: ObservableObject {
     @Published private(set) var canSyncLoginSession = false
     @Published private(set) var savedLoginCredential: FireSavedCredential?
     @Published var isLoggingOut = false
+    @Published private(set) var isStartupValidationComplete = false
+    private var isStartupValidationInFlight = false
 
     // MARK: - Private
 
     private var sessionStore: FireSessionStore?
     private var loginCoordinator: FireWebViewLoginCoordinator?
     private var cloudflareChallengeHandler: FireCloudflareChallengeRuntimeHandler?
+    private var cookieSelfHealingHandler: FireCookieSelfHealingRuntimeHandler?
     private var sessionStoreInitializationTask: Task<FireSessionStore, Error>?
     private var initialStateTask: Task<Void, Never>?
     private var initialStateLoadingDelayTask: Task<Void, Never>?
@@ -46,7 +49,7 @@ final class FireAppViewModel: ObservableObject {
     private var readPathLoginRecoveryTask: Task<Bool, Never>?
     private var readPathLoginRecoveryEpoch: UInt64?
     private var readPathLoginRecoveryAttemptedEpochs: Set<UInt64> = []
-    private let loginURL = URL(string: "https://linux.do/login")!
+    private let loginURL = URL(string: "https://linux.do/")!
     private let loginCoordinatorPreloader: LoginCoordinatorPreloader?
     private let loginNetworkWarmup: LoginNetworkWarmup?
     private lazy var appServiceHost = FireAppServiceHost(owner: self)
@@ -178,7 +181,7 @@ final class FireAppViewModel: ObservableObject {
             let sessionStore = try await sessionStoreValue()
             guard self.initialStateLoadGeneration == generation else { return }
             self.errorMessage = nil
-            let loginState = await sessionStore.determineLoginState()
+            let loginState = try await sessionStore.determineLoginStateWithProbe()
             guard self.initialStateLoadGeneration == generation else { return }
             switch loginState {
             case .loggedIn:
@@ -225,32 +228,53 @@ final class FireAppViewModel: ObservableObject {
         }
     }
 
-    func openLogin() {
-        guard !isPreparingLogin else {
-            if authPresentationState == nil {
-                setAuthPresentationState(.login)
-            }
-            return
+    func performStartupValidation() async {
+        guard !isStartupValidationComplete else { return }
+        guard !isStartupValidationInFlight else { return }
+        isStartupValidationInFlight = true
+        defer {
+            isStartupValidationInFlight = false
+            isStartupValidationComplete = true
         }
 
+        do {
+            let sessionStore = try await sessionStoreValue()
+            _ = try await sessionStore.prepareStartupSession()
+            do {
+                _ = try await sessionStore.awaitPreloadedData()
+            } catch {
+                let snapshot = try? await sessionStore.snapshot()
+                let readiness = snapshot?.readiness
+                guard readiness?.canReadAuthenticatedApi == true
+                    || readiness?.hasLoginCookie == true
+                else {
+                    throw error
+                }
+            }
+            await completeStartupAfterPreheat()
+        } catch {
+            completeStartupAfterPreheatFailure(message: "网络异常，请重新登录")
+        }
+    }
+
+    func prepareLoginForm() async {
+        do {
+            let sessionStore = try await sessionStoreValue()
+            savedLoginCredential = try await sessionStore.loadSavedCredential()
+            _ = try await loginCoordinatorValue()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func openLogin() {
+        guard authPresentationState == nil else { return }
         errorMessage = nil
         canSyncLoginSession = false
         cachedLoginSyncReadiness = nil
         setAuthPresentationState(.login)
-        isPreparingLogin = true
 
-        Task {
-            defer { isPreparingLogin = false }
-
-            do {
-                let sessionStore = try await sessionStoreValue()
-                savedLoginCredential = try await sessionStore.loadSavedCredential()
-                try await preloadLoginCoordinator()
-                await warmLoginNetworkAccess()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
+        Task { await prepareLoginForm() }
     }
 
     func completeLogin(from webView: WKWebView) {
@@ -286,6 +310,140 @@ final class FireAppViewModel: ObservableObject {
                 }
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    func completeMinimalLogin(
+        from webView: WKWebView,
+        identifier: String,
+        password: String,
+        rememberCredential: Bool
+    ) {
+        guard !isSyncingLoginSession else {
+            return
+        }
+
+        isSyncingLoginSession = true
+        Task {
+            defer { isSyncingLoginSession = false }
+
+            do {
+                try await FireAPMManager.shared.withSpan(.authLoginSync) {
+                    let loginCoordinator = try await loginCoordinatorValue()
+                    let sessionStore = try await sessionStoreValue()
+                    errorMessage = nil
+                    await applySession(
+                        try await loginCoordinator.completeJsLogin(
+                            from: webView,
+                            identifier: identifier
+                        ),
+                        activateMessageBus: false
+                    )
+                    if rememberCredential {
+                        try await sessionStore.saveLoginCredential(
+                            username: identifier,
+                            password: password
+                        )
+                        savedLoginCredential = try await sessionStore.loadSavedCredential()
+                    } else {
+                        try await sessionStore.clearSavedCredential()
+                        savedLoginCredential = nil
+                    }
+                    FireCfClearanceRefreshService.shared.setLoginStateConfirmed(true)
+                    try await sessionStore.triggerAppStateRefresh(
+                        .loginCompleted,
+                        handler: appStateRefreshCoordinator
+                    )
+                    setAuthPresentationState(nil)
+                    canSyncLoginSession = false
+                    cachedLoginSyncReadiness = nil
+                }
+            } catch {
+                if await handleRecoverableSessionErrorIfNeeded(error) {
+                    return
+                }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func classifyWebViewLoginResult(
+        _ result: WebViewLoginJsResultState
+    ) async throws -> WebViewLoginDecisionState {
+        let sessionStore = try await sessionStoreValue()
+        return try await sessionStore.classifyWebViewLoginResult(result)
+    }
+
+    func classifyLoginResult(
+        phase: WebViewLoginPhaseState,
+        status: UInt16,
+        body: String
+    ) async throws -> WebViewLoginDecisionState {
+        let result = WebViewLoginJsResultState(
+            phase: phase,
+            status: status,
+            body: body
+        )
+        return try await classifyWebViewLoginResult(result)
+    }
+
+    func recoverLoginCloudflareChallenge(in webView: WKWebView) async throws {
+        let sessionStore = try await sessionStoreValue()
+        try await completeLoginCloudflareChallenge(sessionStore: sessionStore)
+        try await Task.sleep(for: .milliseconds(1_500))
+        let loginCoordinator = try await loginCoordinatorValue()
+        try await loginCoordinator.primeCookies(
+            into: webView,
+            targetURL: URL(string: "https://linux.do/")
+        )
+    }
+
+    func ensureCloudflareClearance() async -> Bool {
+        do {
+            let sessionStore = try await sessionStoreValue()
+            if try await sessionStore.snapshot().readiness.hasCloudflareClearance {
+                return true
+            }
+
+            try await completeLoginCloudflareChallenge(sessionStore: sessionStore)
+            try await Task.sleep(for: .milliseconds(1_500))
+            return try await sessionStore.snapshot().readiness.hasCloudflareClearance
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func loginCoordinatorForDialog() async throws -> FireWebViewLoginCoordinator {
+        try await loginCoordinatorValue()
+    }
+
+    func probeLoginSyncReadiness(from webView: WKWebView) async throws -> FireLoginSyncReadiness {
+        let loginCoordinator = try await loginCoordinatorValue()
+        return try await loginCoordinator.probeLoginSyncReadiness(from: webView)
+    }
+
+    private func completeLoginCloudflareChallenge(
+        sessionStore: FireSessionStore
+    ) async throws {
+        let challengeCoordinator = FireCloudflareChallengeCoordinator(sessionStore: sessionStore)
+        let result = await challengeCoordinator.completeManualVerification(originURL: "https://linux.do/")
+        guard
+            result.completed,
+            let freshCfClearance = result.freshCfClearance?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            !freshCfClearance.isEmpty
+        else {
+            throw FireLoginPreparationError.cloudflareVerificationIncomplete
+        }
+
+        let session = try await sessionStore.completeCloudflareChallenge(
+            cookies: result.cookies,
+            freshCfClearance: freshCfClearance,
+            browserUserAgent: result.browserUserAgent
+        )
+        guard session.cookies.cfClearance == freshCfClearance else {
+            throw FireLoginPreparationError.cloudflareVerificationIncomplete
         }
     }
 
@@ -1443,6 +1601,16 @@ final class FireAppViewModel: ObservableObject {
         if let cloudflareChallengeHandler {
             try? await sessionStore.registerCloudflareChallengeHandler(
                 cloudflareChallengeHandler
+            )
+        }
+        if cookieSelfHealingHandler == nil {
+            cookieSelfHealingHandler = FireCookieSelfHealingRuntimeHandler(
+                loginCoordinator: loginCoordinator
+            )
+        }
+        if let cookieSelfHealingHandler {
+            try? await sessionStore.registerCookieSelfHealingHandler(
+                cookieSelfHealingHandler
             )
         }
     }

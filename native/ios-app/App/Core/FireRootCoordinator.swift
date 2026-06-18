@@ -11,8 +11,7 @@ final class FireRootCoordinator {
     }
 
     private enum RootKind: Equatable {
-        case preheat
-        case onboarding
+        case launch
         case main
     }
 
@@ -37,12 +36,7 @@ final class FireRootCoordinator {
 
     private var cancellables = Set<AnyCancellable>()
     private var rootKind: RootKind?
-    private var preheatComplete = false
-    private weak var preheatController: FirePreheatGateWaitingViewController?
-    private var preheatSessionStoreTask: Task<Void, Never>?
     private var mainTabBarController: FireMainTabBarController?
-    private weak var authController: UIViewController?
-    private weak var topicNavigationController: UINavigationController?
     private var lastAuthenticatedState: Bool?
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
@@ -64,10 +58,6 @@ final class FireRootCoordinator {
         self.profileViewModel = FireProfileViewModel(appViewModel: vm)
     }
 
-    deinit {
-        preheatSessionStoreTask?.cancel()
-    }
-
     func start() {
         guard let window else { return }
         Self.activeCoordinator = self
@@ -76,11 +66,9 @@ final class FireRootCoordinator {
         updateRoot(animated: false)
         window.makeKeyAndVisible()
 
-        viewModel.loadInitialState()
         homeFeedStore.setSceneActive(false)
         FireAPMManager.shared.setScenePhase(ScenePhaseLabel.inactive.rawValue)
         updateTopLevelAPMRoute()
-        preparePreheatSessionStoreIfNeeded()
     }
 
     func handleIncomingURL(_ url: URL) {
@@ -145,14 +133,6 @@ final class FireRootCoordinator {
             }
             .store(in: &cancellables)
 
-        viewModel.$authPresentationState
-            .removeDuplicates()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] state in
-                self?.syncAuthPresentation(state)
-            }
-            .store(in: &cancellables)
-
         navigationState.$pendingRoute
             .receive(on: RunLoop.main)
             .sink { [weak self] route in
@@ -163,7 +143,7 @@ final class FireRootCoordinator {
         navigationState.$presentedTopicRoute
             .receive(on: RunLoop.main)
             .sink { [weak self] route in
-                self?.syncTopicPresentation(route)
+                self?.handleTopicRouteRequest(route)
             }
             .store(in: &cancellables)
 
@@ -225,26 +205,13 @@ final class FireRootCoordinator {
     }
 
     private func updateRoot(animated: Bool) {
-        let nextKind: RootKind = {
-            if !preheatComplete {
-                return .preheat
-            }
-            return currentAuthenticationState ? .main : .onboarding
-        }()
-
-        guard rootKind != nextKind else {
-            if nextKind == .preheat {
-                preparePreheatSessionStoreIfNeeded()
-            }
-            return
-        }
+        let nextKind: RootKind = currentAuthenticationState ? .main : .launch
+        guard rootKind != nextKind else { return }
 
         rootKind = nextKind
         let controller: UIViewController
         switch nextKind {
-        case .preheat:
-            controller = makePreheatController()
-        case .onboarding:
+        case .launch:
             controller = makeOnboardingController()
         case .main:
             controller = makeMainTabBarController()
@@ -264,21 +231,6 @@ final class FireRootCoordinator {
                 window.rootViewController = controller
             }
         )
-    }
-
-    private func makePreheatController() -> UIViewController {
-        let controller = FirePreheatGateWaitingViewController(
-            sessionStore: viewModel.currentSessionStore(),
-            onComplete: { [weak self] in
-                self?.completePreheat()
-            },
-            onRequestLogin: { [weak self] message in
-                self?.requestLoginAfterPreheatFailure(message: message)
-            }
-        )
-        preheatController = controller
-        preparePreheatSessionStoreIfNeeded()
-        return controller
     }
 
     private func makeOnboardingController() -> UIViewController {
@@ -312,108 +264,31 @@ final class FireRootCoordinator {
         return controller
     }
 
-    private func preparePreheatSessionStoreIfNeeded() {
-        guard !preheatComplete else { return }
-        guard let preheatController else { return }
-        if let sessionStore = viewModel.currentSessionStore() {
-            preheatController.configure(with: sessionStore)
-            return
-        }
-        guard preheatSessionStoreTask == nil else { return }
-
-        preheatSessionStoreTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let sessionStore = try await self.viewModel.sessionStoreValue()
-                guard !Task.isCancelled else { return }
-                self.preheatController?.configure(with: sessionStore)
-            } catch {
-                guard !Task.isCancelled else { return }
-                self.viewModel.completeStartupAfterPreheatFailure(message: error.localizedDescription)
-                self.preheatComplete = true
-                self.updateRoot(animated: true)
-            }
-            self.preheatSessionStoreTask = nil
-        }
-    }
-
-    private func completePreheat() {
-        Task { [weak self] in
-            guard let self else { return }
-            await self.viewModel.completeStartupAfterPreheat()
-            self.preheatComplete = true
-            self.updateRoot(animated: true)
-            self.handlePendingRouteIfReady(self.navigationState.pendingRoute)
-        }
-    }
-
-    private func requestLoginAfterPreheatFailure(message: String?) {
-        viewModel.completeStartupAfterPreheatFailure(message: message)
-        preheatComplete = true
-        updateRoot(animated: true)
-        viewModel.openLogin()
-    }
-
-    private func syncAuthPresentation(_ state: FireAuthPresentationState?) {
-        if let state {
-            guard authController == nil else { return }
-            let controller = FireLoginWebViewController(
-                viewModel: viewModel,
-                presentationState: state
+    private func handleTopicRouteRequest(_ route: FireAppRoute?) {
+        guard let route else { return }
+        guard let navigationController = mainTabBarController?.selectedViewController as? UINavigationController else {
+            viewModel.topicRouteLogger()?.warning(
+                "root coordinator could not resolve selected tab nav controller for \(route.diagnosticsSummary)"
             )
-            let navigationController = UINavigationController(rootViewController: controller)
-            navigationController.modalPresentationStyle = .fullScreen
-            presentationAnchor()?.present(navigationController, animated: true)
-            authController = navigationController
             return
         }
 
-        guard let authController else {
-            syncTopicPresentation(navigationState.presentedTopicRoute)
-            return
-        }
-        authController.dismiss(animated: true) { [weak self] in
-            guard let self else { return }
-            self.authController = nil
-            self.syncTopicPresentation(self.navigationState.presentedTopicRoute)
-            self.handlePendingRouteIfReady(self.navigationState.pendingRoute)
-        }
-    }
-
-    private func syncTopicPresentation(_ route: FireAppRoute?) {
-        guard authController == nil else { return }
-
-        if let route {
-            guard topicNavigationController == nil else { return }
-            viewModel.topicRouteLogger()?.info("root coordinator presenting topic route \(route.diagnosticsSummary)")
-            let navigationController = FireAppRouteControllerFactory.makeNavigationController(
-                viewModel: viewModel,
-                topicDetailStore: topicDetailStore,
-                route: route,
-                onDismiss: { [weak self] in
-                    self?.topicPresentationDidDismiss()
-                }
-            )
-            navigationController.modalPresentationStyle = .fullScreen
-            presentationAnchor()?.present(navigationController, animated: true)
-            topicNavigationController = navigationController
-            return
-        }
-
-        guard let topicNavigationController else { return }
-        topicNavigationController.dismiss(animated: true)
-        self.topicNavigationController = nil
-    }
-
-    private func topicPresentationDidDismiss() {
-        viewModel.topicRouteLogger()?.info(
-            "root coordinator topic route dismissed current_presented_route_id=\(navigationState.presentedTopicRoute?.id ?? "nil")"
+        let topicRoutePresenter = FireAppRouteControllerFactory.makeTopicRoutePresenter(
+            viewModel: viewModel,
+            topicDetailStore: topicDetailStore,
+            navigationControllerProvider: { [weak navigationController] in navigationController }
         )
-        topicNavigationController = nil
-        if navigationState.presentedTopicRoute != nil {
-            navigationState.dismissPresentedTopicRoute()
-        }
-        updateTopLevelAPMRoute()
+        let controller = FireAppRouteControllerFactory.makeViewController(
+            viewModel: viewModel,
+            topicDetailStore: topicDetailStore,
+            route: route,
+            topicRoutePresenter: topicRoutePresenter
+        )
+        controller.hidesBottomBarWhenPushed = true
+
+        viewModel.topicRouteLogger()?.info("root coordinator pushing topic route \(route.diagnosticsSummary)")
+        navigationController.pushViewController(controller, animated: true)
+        navigationState.dismissPresentedTopicRoute()
     }
 
     private func handlePendingRouteIfReady(_ route: FireAppRoute?) {
@@ -457,24 +332,4 @@ final class FireRootCoordinator {
         }
     }
 
-    private func presentationAnchor() -> UIViewController? {
-        window?.rootViewController?.fireTopPresentedViewController
-    }
-}
-
-private extension UIViewController {
-    var fireTopPresentedViewController: UIViewController {
-        if let presentedViewController {
-            return presentedViewController.fireTopPresentedViewController
-        }
-        if let navigationController = self as? UINavigationController,
-           let visibleViewController = navigationController.visibleViewController {
-            return visibleViewController.fireTopPresentedViewController
-        }
-        if let tabBarController = self as? UITabBarController,
-           let selectedViewController = tabBarController.selectedViewController {
-            return selectedViewController.fireTopPresentedViewController
-        }
-        return self
-    }
 }

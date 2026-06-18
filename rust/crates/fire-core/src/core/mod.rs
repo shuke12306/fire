@@ -2,6 +2,7 @@ mod auth;
 mod auth_strike;
 mod cdk;
 mod cf_challenge;
+mod cookie_healing;
 mod creation;
 mod interactions;
 mod ldc;
@@ -154,6 +155,7 @@ pub struct FireCore {
     csrf_refresh: Arc<TokioMutex<()>>,
     cloudflare_challenge_handler: cf_challenge::FireCloudflareChallengeHandlerRegistry,
     cloudflare_challenge_runtime: Arc<Mutex<cf_challenge::FireCloudflareChallengeRuntime>>,
+    cookie_self_healing_handler: cookie_healing::FireCookieSelfHealingHandlerRegistry,
     preloaded_data: OnceLock<Arc<crate::preloaded_data::PreloadedDataService>>,
     app_state_refresher: OnceLock<Arc<crate::app_state_refresher::AppStateRefresher>>,
 }
@@ -198,11 +200,15 @@ impl FireCore {
             Arc::clone(&session),
             Some(Arc::clone(&shared_store)),
         ));
+        let cloudflare_challenge_runtime = Arc::new(Mutex::new(
+            cf_challenge::FireCloudflareChallengeRuntime::default(),
+        ));
         let network = network::FireNetworkLayer::new(
             &base_url,
             Arc::clone(&session),
             Arc::clone(&diagnostics),
             cookie_jar,
+            Arc::clone(&cloudflare_challenge_runtime),
         )?;
 
         Ok(Self {
@@ -224,9 +230,9 @@ impl FireCore {
             csrf_refresh: Arc::new(TokioMutex::new(())),
             cloudflare_challenge_handler:
                 cf_challenge::FireCloudflareChallengeHandlerRegistry::default(),
-            cloudflare_challenge_runtime: Arc::new(Mutex::new(
-                cf_challenge::FireCloudflareChallengeRuntime::default(),
-            )),
+            cloudflare_challenge_runtime,
+            cookie_self_healing_handler:
+                cookie_healing::FireCookieSelfHealingHandlerRegistry::default(),
             preloaded_data: OnceLock::new(),
             app_state_refresher: OnceLock::new(),
         })

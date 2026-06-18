@@ -2,8 +2,14 @@ import UIKit
 import WebKit
 
 enum FireLoginScripts {
+    static let linuxDoHcaptchaSiteKey = "a776b4ac-8c4c-441e-986a-c6ee9ed8cf08"
+
     static let loginCredentialsMessageName = "loginCredentials"
     static let fingerprintDoneMessageName = "fingerprintDone"
+    static let hcaptchaPassMessageName = "hcaptcha_pass"
+    static let hcaptchaErrorMessageName = "hcaptcha_error"
+    static let hcaptchaExpiredMessageName = "hcaptcha_expired"
+    static let loginResultMessageName = "login_result"
 
     static var preloadedDataCapture: WKUserScript {
         WKUserScript(
@@ -184,12 +190,247 @@ enum FireLoginScripts {
         "(function(){return window.__rawPreloaded||null;})()"
     }
 
+    static func minimalLoginHTML(
+        hcaptchaSiteKey: String,
+        hcaptchaCreateEndpoint: String? = nil
+    ) -> String {
+        let siteKey = jsStringLiteral(hcaptchaSiteKey)
+        let hcaptchaCreateEndpoints = jsStringArrayLiteral(
+            resolvedHcaptchaCreateEndpoints(preferred: hcaptchaCreateEndpoint)
+        )
+        return """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            html, body {
+              margin: 0;
+              min-height: 100%;
+              background: transparent;
+              color-scheme: light dark;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+            #hcaptcha {
+              display: flex;
+              min-height: 92px;
+              align-items: center;
+              justify-content: center;
+            }
+          </style>
+          <script>
+            (function() {
+              var hcaptchaSiteKey = \(siteKey);
+
+              function postNative(name, payload) {
+                try {
+                  if (
+                    !window.webkit
+                    || !window.webkit.messageHandlers
+                    || !window.webkit.messageHandlers[name]
+                  ) {
+                    return;
+                  }
+                  window.webkit.messageHandlers[name].postMessage(payload);
+                } catch (error) {}
+              }
+
+              function report(phase, status, body) {
+                postNative('\(loginResultMessageName)', {
+                  phase: phase,
+                  status: status || 0,
+                  body: body == null ? '' : String(body)
+                });
+              }
+
+              function formBody(fields) {
+                var body = new URLSearchParams();
+                Object.keys(fields).forEach(function(key) {
+                  var value = fields[key];
+                  if (value !== null && value !== undefined) {
+                    body.append(key, value);
+                  }
+                });
+                return body.toString();
+              }
+
+              async function responseText(response) {
+                try {
+                  return await response.text();
+                } catch (error) {
+                  return String(error && error.message ? error.message : error);
+                }
+              }
+
+              async function fetchCsrf() {
+                var response = await fetch('/session/csrf', {
+                  method: 'GET',
+                  credentials: 'include',
+                  cache: 'no-store',
+                  headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                  }
+                });
+                var text = await responseText(response);
+                if (!response.ok) {
+                  report('csrf', response.status, text);
+                  return null;
+                }
+                try {
+                  var parsed = JSON.parse(text);
+                  if (parsed && parsed.csrf) return parsed.csrf;
+                } catch (error) {}
+                report('csrf', response.status, text);
+                return null;
+              }
+
+              async function createHcaptcha(csrf, token) {
+                if (token === null || token === undefined || token === '') return true;
+                var endpoints = \(hcaptchaCreateEndpoints);
+                var lastStatus = 0;
+                var lastBody = '';
+                for (var i = 0; i < endpoints.length; i++) {
+                  try {
+                    var response = await fetch(endpoints[i], {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-Token': csrf,
+                        'X-Requested-With': 'XMLHttpRequest'
+                      },
+                      body: formBody({ token: token })
+                    });
+                    var text = await responseText(response);
+                    if (response.ok) return true;
+                    lastStatus = response.status;
+                    lastBody = text;
+                    if (response.status === 404) continue;
+                    break;
+                  } catch (error) {
+                    lastStatus = 0;
+                    lastBody = String(error && error.message ? error.message : error);
+                  }
+                }
+                report('hcaptcha', lastStatus, lastBody);
+                return false;
+              }
+
+              async function submitSession(csrf, identifier, password, secondFactorToken) {
+                var fields = {
+                  login: identifier,
+                  password: password
+                };
+                if (
+                  secondFactorToken !== null
+                  && secondFactorToken !== undefined
+                  && secondFactorToken !== ''
+                ) {
+                  fields.second_factor_token = secondFactorToken;
+                  fields.second_factor_method = '1';
+                }
+                var response = await fetch('/session.json', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-Token': csrf,
+                    'X-Requested-With': 'XMLHttpRequest'
+                  },
+                  body: formBody(fields)
+                });
+                report('session', response.status, await responseText(response));
+              }
+
+              window.__fireLogin = async function(identifier, password, hcaptchaToken, secondFactorToken) {
+                try {
+                  var csrf = await fetchCsrf();
+                  if (!csrf) return;
+                  if (!(await createHcaptcha(csrf, hcaptchaToken))) return;
+                  await submitSession(csrf, identifier, password, secondFactorToken);
+                } catch (error) {
+                  report('exception', 0, String(error && error.message ? error.message : error));
+                }
+              };
+
+              window.__fireHcaptchaReady = function() {
+                try {
+                  if (!window.hcaptcha || !hcaptchaSiteKey) return;
+                  window.__fireHcaptchaWidgetId = hcaptcha.render('hcaptcha', {
+                    sitekey: hcaptchaSiteKey,
+                    callback: function(token) {
+                      postNative('\(hcaptchaPassMessageName)', token);
+                    },
+                    'error-callback': function(message) {
+                      postNative('\(hcaptchaErrorMessageName)', message || 'hcaptcha_error');
+                    },
+                    'expired-callback': function() {
+                      postNative('\(hcaptchaExpiredMessageName)', 'expired');
+                    }
+                  });
+                } catch (error) {
+                  postNative(
+                    '\(hcaptchaErrorMessageName)',
+                    String(error && error.message ? error.message : error)
+                  );
+                }
+              };
+            })();
+          </script>
+          <script
+            src="https://js.hcaptcha.com/1/api.js"
+            async
+            defer
+            onload="window.__fireHcaptchaReady && window.__fireHcaptchaReady()"
+          ></script>
+        </head>
+        <body>
+          <div id="hcaptcha"></div>
+        </body>
+        </html>
+        """
+    }
+
+    static func fireLoginInvocation(
+        identifier: String,
+        password: String,
+        hcaptchaToken: String?,
+        secondFactorToken: String?
+    ) -> String {
+        let identifier = jsStringLiteral(identifier)
+        let password = jsStringLiteral(password)
+        let hcaptchaToken = jsStringLiteral(hcaptchaToken)
+        let secondFactorToken = jsStringLiteral(secondFactorToken)
+        return "window.__fireLogin(\(identifier),\(password),\(hcaptchaToken),\(secondFactorToken));"
+    }
+
     private static func jsStringLiteral(_ value: String?) -> String {
         guard let value else {
             return "null"
         }
         let data = try? JSONEncoder().encode(value)
         return String(data: data ?? Data("null".utf8), encoding: .utf8) ?? "null"
+    }
+
+    private static func jsStringArrayLiteral(_ values: [String]) -> String {
+        let data = try? JSONEncoder().encode(values)
+        return String(data: data ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+    }
+
+    private static func resolvedHcaptchaCreateEndpoints(preferred: String?) -> [String] {
+        var endpoints: [String] = []
+        if let preferred = preferred?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !preferred.isEmpty {
+            endpoints.append(preferred)
+        }
+        for endpoint in ["/captcha/hcaptcha/create.json", "/hcaptcha/create.json"]
+            where !endpoints.contains(endpoint) {
+            endpoints.append(endpoint)
+        }
+        return endpoints
     }
 }
 
@@ -233,6 +474,21 @@ enum FireWebViewBrowserProfile {
             messageHandler,
             name: FireLoginScripts.fingerprintDoneMessageName
         )
+        return makeConfiguration(userContentController: userContentController)
+    }
+
+    static func makeMinimalLoginConfiguration(
+        messageHandler: WKScriptMessageHandler
+    ) -> WKWebViewConfiguration {
+        let userContentController = WKUserContentController()
+        [
+            FireLoginScripts.hcaptchaPassMessageName,
+            FireLoginScripts.hcaptchaErrorMessageName,
+            FireLoginScripts.hcaptchaExpiredMessageName,
+            FireLoginScripts.loginResultMessageName,
+        ].forEach { name in
+            userContentController.add(messageHandler, name: name)
+        }
         return makeConfiguration(userContentController: userContentController)
     }
 

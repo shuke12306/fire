@@ -222,16 +222,20 @@ Android now keeps request-failure handling single-path:
 - `LoginRequired` no longer auto-opens login UI and no longer triggers local
   logout side effects during ordinary request handling; navigation back to
   onboarding still depends on the authoritative Rust session snapshot.
-- Foreground-capable `CloudflareChallenge` requests now go through a registered
-  host-owned challenge Activity, which waits for a new `cf_clearance` and then
-  returns the relevant browser cookies to Rust so Rust can retry the original
-  request once. The challenge Activity owns its edge-to-edge system bar insets
-  so the title and close action remain outside the status-bar touch area.
-- Background or silent `CloudflareChallenge` work does not steal focus; the
-  platform returns an incomplete challenge result and Rust surfaces the error.
-- Rust marks the user-opened notification history request as foreground-capable
-  so notification-tab refreshes align with home, topic detail, search, and other
-  visible reads; recent notification cache refreshes remain background.
+- `CloudflareChallenge` requests now go through a registered host-owned
+  challenge Activity, including background/silent operations that hit CF while
+  the app can launch the Activity. The Activity records and clears the old
+  `cf_clearance`, waits for a fresh value, and returns that accepted value plus
+  relevant browser cookies to Rust so Rust can retry the original request once.
+  The deleted baseline clearance is restored if verification is cancelled. The
+  challenge Activity owns its edge-to-edge system bar insets so the title and
+  close action remain outside the status-bar touch area.
+- Challenge completion is checked from page/navigation callbacks,
+  `/cdn-cgi/challenge-platform/` resource signals, injected fetch/XHR and
+  pagehide/beforeunload signals, plus a 1-second cookie polling fallback.
+- Rust still supplies request presentation context for diagnostics and future
+  host-specific UI choices, but the Android bridge no longer rejects a challenge
+  solely because the triggering request was marked background.
 - Topic detail publishes loaded header counters back to the visible home list
   through a stateful `HomeTopicDetailPatchRepository`, letting already-loaded rows update
   `postsCount`, `replyCount`, `views`, `lastReadPostNumber`, and
@@ -245,6 +249,10 @@ Android now keeps request-failure handling single-path:
 - The remaining interactive browser surfaces are the explicit login WebView and
   the dedicated Cloudflare challenge Activity; both still use
   `FireWebViewSupport` and remain platform-owned.
+- Android WebView cookie extraction uses `CookieManagerCompat.getCookieInfo()`
+  for domain/path/flag metadata. Low-confidence `CookieManager.getCookie()`
+  name/value snapshots are not accepted for login finalization or trusted
+  Cloudflare challenge completion.
 
 Do not move explicit login WebView rendering, CookieManager extraction, or
 platform browser context ownership into Rust. Rust remains responsible for

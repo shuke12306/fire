@@ -10,12 +10,18 @@ pub mod records;
 
 pub use records::{
     format_probe_result, AppStateRefreshEventState, AppStateRefreshHandler, AuthRecoveryHintState,
-    BootstrapState, CloudflareChallengeHandler, CloudflareChallengeRequestState,
-    CloudflareChallengeResultState, CookieReplayEntryState, CookieState, CurrentUserSnapshotState,
-    HomeTopicListScopeState, LoginFinalizationResultState, LoginPhaseState,
-    LoginStateDeterminationState, LoginSyncState, PassiveLogoutTriggerState, PlatformCookieState,
-    PreloadedDataStateState, RefreshBatchState, RefreshTriggerState, SessionPersistenceState,
-    SessionReadinessState, SessionState, TopicCategoryState,
+    BootstrapState, CanonicalCookieState, CloudflareChallengeHandler,
+    CloudflareChallengeRequestState, CloudflareChallengeResultState, CookieReplayEntryState,
+    CookieSameSiteState, CookieSelfHealingHandler, CookieSelfHealingPhaseState,
+    CookieSelfHealingRequestState, CookieSelfHealingResultState, CookieSourceState, CookieState,
+    CookieSweepIntentState, CookieSweepPlanState, CurrentUserSnapshotState,
+    HomeTopicListScopeState, LoginFailureKindState, LoginFailureState,
+    LoginFinalizationResultState, LoginPhaseState, LoginStateDeterminationState, LoginSyncState,
+    NuclearResetPlanState, PassiveLogoutTriggerState, PlatformCookieState, PreloadedDataStateState,
+    RefreshBatchState, RefreshTriggerState, SecondFactorRequirementState, SessionPersistenceState,
+    SessionReadinessState, SessionState, TopicCategoryState, WebViewCookieActionState,
+    WebViewCookieInfoState, WebViewLoginDecisionState, WebViewLoginJsResultState,
+    WebViewLoginPhaseState,
 };
 
 #[derive(uniffi::Object)]
@@ -192,6 +198,34 @@ impl FireSessionHandle {
         )
     }
 
+    pub fn register_cookie_self_healing_handler(
+        &self,
+        handler: Arc<dyn CookieSelfHealingHandler>,
+    ) -> Result<(), FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "register_cookie_self_healing_handler",
+            move |inner| {
+                inner.set_cookie_self_healing_handler(move |request| {
+                    let handler = Arc::clone(&handler);
+                    async move { handler.heal_cookies(request.into()).into() }
+                });
+            },
+        )
+    }
+
+    pub fn unregister_cookie_self_healing_handler(&self) -> Result<(), FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "unregister_cookie_self_healing_handler",
+            move |inner| {
+                inner.clear_cookie_self_healing_handler();
+            },
+        )
+    }
+
     pub fn save_session_to_path(&self, path: String) -> Result<(), FireUniFfiError> {
         run_fallible(
             &self.shared.panic_state,
@@ -273,6 +307,26 @@ impl FireSessionHandle {
         )
     }
 
+    pub fn complete_cloudflare_challenge(
+        &self,
+        cookies: Vec<PlatformCookieState>,
+        fresh_cf_clearance: String,
+        browser_user_agent: Option<String>,
+    ) -> Result<SessionState, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "complete_cloudflare_challenge",
+            move |inner| {
+                SessionState::from_snapshot(inner.complete_cloudflare_challenge(
+                    cookies.into_iter().map(Into::into).collect(),
+                    Some(fresh_cf_clearance),
+                    browser_user_agent,
+                ))
+            },
+        )
+    }
+
     pub fn apply_bootstrap(
         &self,
         bootstrap: BootstrapState,
@@ -321,6 +375,100 @@ impl FireSessionHandle {
             &self.shared.core,
             "sync_login_context",
             move |inner| SessionState::from_snapshot(inner.sync_login_context(context.into())),
+        )
+    }
+
+    pub fn classify_webview_login_result(
+        &self,
+        result: WebViewLoginJsResultState,
+    ) -> Result<WebViewLoginDecisionState, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "classify_webview_login_result",
+            move |inner| inner.classify_webview_login_result(result.into()).into(),
+        )
+    }
+
+    pub fn webview_priming_payload(
+        &self,
+        target_url: Option<String>,
+    ) -> Result<Vec<WebViewCookieActionState>, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "webview_priming_payload",
+            move |inner| {
+                inner
+                    .webview_priming_payload(target_url)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect()
+            },
+        )
+    }
+
+    pub fn cookie_sweep_plan(
+        &self,
+        target_url: Option<String>,
+        name: String,
+        webview_cookies: Vec<WebViewCookieInfoState>,
+    ) -> Result<CookieSweepPlanState, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "cookie_sweep_plan",
+            move |inner| {
+                inner
+                    .cookie_sweep_plan(
+                        target_url,
+                        name,
+                        webview_cookies.into_iter().map(Into::into).collect(),
+                    )
+                    .into()
+            },
+        )
+    }
+
+    pub fn cookie_nuclear_reset_plan(
+        &self,
+        target_url: Option<String>,
+        webview_cookies: Vec<WebViewCookieInfoState>,
+    ) -> Result<NuclearResetPlanState, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "cookie_nuclear_reset_plan",
+            move |inner| {
+                inner
+                    .cookie_nuclear_reset_plan(
+                        target_url,
+                        webview_cookies.into_iter().map(Into::into).collect(),
+                    )
+                    .into()
+            },
+        )
+    }
+
+    pub fn commit_cookie_sweep_result(
+        &self,
+        target_url: Option<String>,
+        name: String,
+        intent: CookieSweepIntentState,
+        webview_cookies: Vec<WebViewCookieInfoState>,
+    ) -> Result<SessionState, FireUniFfiError> {
+        run_infallible(
+            &self.shared.panic_state,
+            &self.shared.core,
+            "commit_cookie_sweep_result",
+            move |inner| {
+                SessionState::from_snapshot(inner.commit_cookie_sweep_result(
+                    target_url,
+                    name,
+                    intent.into(),
+                    webview_cookies.into_iter().map(Into::into).collect(),
+                ))
+            },
         )
     }
 

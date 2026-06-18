@@ -1,6 +1,9 @@
 mod common;
 
-use std::sync::atomic::Ordering;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 use common::{
     raw_cloudflare_challenge_response, raw_json_response, raw_text_response, sample_home_html,
@@ -10,11 +13,15 @@ use fire_core::{
     FireAuthRecoveryHint, FireAuthRecoveryHintReason, FireCore, FireCoreConfig, FireCoreError,
 };
 use fire_models::{
-    LoginSyncInput, PlatformCookie, TopicDetailQuery, TopicDetailSourceQuery, TopicListKind,
-    TopicListQuery, TopicReplyRequest, TopicTag,
+    CookieSelfHealingPhase, CookieSelfHealingResult, LoginSyncInput, PlatformCookie,
+    TopicDetailQuery, TopicDetailSourceQuery, TopicListKind, TopicListQuery, TopicReplyRequest,
+    TopicTag,
 };
 use serde_json::{json, Value};
-use tokio::time::{sleep, Duration};
+use tokio::{
+    sync::Notify,
+    time::{sleep, Duration},
+};
 
 #[tokio::test]
 async fn fetch_topic_list_parses_latest_payload() {
@@ -570,14 +577,25 @@ async fn fetch_topic_list_retries_once_after_cloudflare_challenge_completion() {
         fire_models::CloudflareChallengeResult {
             completed: true,
             user_cancelled: false,
-            cookies: vec![PlatformCookie {
-                name: "cf_clearance".into(),
-                value: "new-clearance".into(),
-                domain: Some("linux.do".into()),
-                path: Some("/".into()),
-                expires_at_unix_ms: None,
-                same_site: None,
-            }],
+            fresh_cf_clearance: Some("new-clearance".into()),
+            cookies: vec![
+                PlatformCookie {
+                    name: "cf_clearance".into(),
+                    value: "new-clearance".into(),
+                    domain: Some("linux.do".into()),
+                    path: Some("/".into()),
+                    expires_at_unix_ms: None,
+                    same_site: None,
+                },
+                PlatformCookie {
+                    name: "cf_clearance".into(),
+                    value: "stale-clearance".into(),
+                    domain: Some(".linux.do".into()),
+                    path: Some("/".into()),
+                    expires_at_unix_ms: None,
+                    same_site: None,
+                },
+            ],
             browser_user_agent: Some("FireBrowser/1.0".into()),
         }
     });
@@ -593,6 +611,20 @@ async fn fetch_topic_list_retries_once_after_cloudflare_challenge_completion() {
 
     assert_eq!(response.rows.len(), 1);
     assert_eq!(requests.len(), 2);
+    let retry_request = &requests[1];
+    let retry_request_lower = retry_request.to_ascii_lowercase();
+    assert!(
+        retry_request_lower.contains("cookie: cf_clearance=new-clearance"),
+        "retry request should send fresh cf_clearance:\n{retry_request}"
+    );
+    assert!(
+        !retry_request.contains("stale-clearance"),
+        "retry request must not send stale cf_clearance:\n{retry_request}"
+    );
+    assert!(
+        retry_request_lower.contains("user-agent: firebrowser/1.0"),
+        "retry request should use challenge WebView user agent:\n{retry_request}"
+    );
     let snapshot = core.snapshot();
     assert_eq!(
         snapshot.cookies.cf_clearance.as_deref(),
@@ -601,6 +633,509 @@ async fn fetch_topic_list_retries_once_after_cloudflare_challenge_completion() {
     assert_eq!(
         snapshot.browser_user_agent.as_deref(),
         Some("FireBrowser/1.0")
+    );
+}
+
+#[tokio::test]
+async fn cloudflare_challenge_retry_synthesizes_confirmed_clearance_when_snapshot_missing() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    core.set_cloudflare_challenge_handler(|_| async move {
+        fire_models::CloudflareChallengeResult {
+            completed: true,
+            user_cancelled: false,
+            fresh_cf_clearance: Some("confirmed-clearance".into()),
+            cookies: vec![],
+            browser_user_agent: None,
+        }
+    });
+
+    let response = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("confirmed clearance should be synthesized for retry");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[1]
+            .to_ascii_lowercase()
+            .contains("cookie: cf_clearance=confirmed-clearance"),
+        "retry request should send synthesized cf_clearance:\n{}",
+        requests[1]
+    );
+    assert_eq!(
+        core.snapshot().cookies.cf_clearance.as_deref(),
+        Some("confirmed-clearance")
+    );
+}
+
+#[tokio::test]
+async fn cloudflare_challenge_retry_synthesizes_confirmed_clearance_when_snapshot_scope_is_wrong() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    core.set_cloudflare_challenge_handler(|_| async move {
+        fire_models::CloudflareChallengeResult {
+            completed: true,
+            user_cancelled: false,
+            fresh_cf_clearance: Some("wrong-scope-clearance".into()),
+            cookies: vec![PlatformCookie {
+                name: "cf_clearance".into(),
+                value: "wrong-scope-clearance".into(),
+                domain: Some("unrelated.example".into()),
+                path: Some("/challenge".into()),
+                expires_at_unix_ms: None,
+                same_site: None,
+            }],
+            browser_user_agent: None,
+        }
+    });
+
+    let response = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("confirmed wrong-scope clearance should be synthesized for retry");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[1]
+            .to_ascii_lowercase()
+            .contains("cookie: cf_clearance=wrong-scope-clearance"),
+        "retry request should send synthesized cf_clearance:\n{}",
+        requests[1]
+    );
+    let snapshot = core.snapshot();
+    let clearance_cookie = snapshot
+        .cookies
+        .platform_cookies
+        .iter()
+        .find(|cookie| cookie.name == "cf_clearance")
+        .expect("cf_clearance platform cookie");
+    assert_eq!(clearance_cookie.path.as_deref(), Some("/"));
+    assert_ne!(
+        clearance_cookie.domain.as_deref(),
+        Some("unrelated.example")
+    );
+}
+
+#[tokio::test]
+async fn cloudflare_challenge_retry_accepts_platform_confirmed_existing_clearance() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let snapshot = core.apply_platform_cookies(vec![PlatformCookie {
+        name: "cf_clearance".into(),
+        value: "stable-clearance".into(),
+        domain: Some("linux.do".into()),
+        path: Some("/".into()),
+        expires_at_unix_ms: None,
+        same_site: None,
+    }]);
+    assert_eq!(
+        snapshot.cookies.cf_clearance.as_deref(),
+        Some("stable-clearance")
+    );
+    core.set_cloudflare_challenge_handler(|_| async move {
+        fire_models::CloudflareChallengeResult {
+            completed: true,
+            user_cancelled: false,
+            fresh_cf_clearance: Some("stable-clearance".into()),
+            cookies: vec![PlatformCookie {
+                name: "cf_clearance".into(),
+                value: "stable-clearance".into(),
+                domain: Some("linux.do".into()),
+                path: Some("/".into()),
+                expires_at_unix_ms: None,
+                same_site: None,
+            }],
+            browser_user_agent: None,
+        }
+    });
+
+    let response = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("platform-confirmed clearance should unblock retry");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        core.snapshot().cookies.cf_clearance.as_deref(),
+        Some("stable-clearance")
+    );
+}
+
+#[tokio::test]
+async fn business_request_is_blocked_while_cloudflare_challenge_is_in_progress() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let challenge_started = Arc::new(Notify::new());
+    let release_challenge = Arc::new(Notify::new());
+    {
+        let challenge_started = Arc::clone(&challenge_started);
+        let release_challenge = Arc::clone(&release_challenge);
+        core.set_cloudflare_challenge_handler(move |_| {
+            let challenge_started = Arc::clone(&challenge_started);
+            let release_challenge = Arc::clone(&release_challenge);
+            async move {
+                challenge_started.notify_waiters();
+                release_challenge.notified().await;
+                fire_models::CloudflareChallengeResult {
+                    completed: true,
+                    user_cancelled: false,
+                    fresh_cf_clearance: Some("new-clearance".into()),
+                    cookies: vec![PlatformCookie {
+                        name: "cf_clearance".into(),
+                        value: "new-clearance".into(),
+                        domain: Some("linux.do".into()),
+                        path: Some("/".into()),
+                        expires_at_unix_ms: None,
+                        same_site: None,
+                    }],
+                    browser_user_agent: None,
+                }
+            }
+        });
+    }
+
+    let first_core = core.clone();
+    let first = tokio::spawn(async move {
+        first_core
+            .fetch_topic_list(TopicListQuery {
+                kind: TopicListKind::Latest,
+                ..TopicListQuery::default()
+            })
+            .await
+    });
+    challenge_started.notified().await;
+
+    let blocked = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect_err("business request should be blocked locally");
+
+    assert!(matches!(
+        blocked,
+        FireCoreError::CloudflareChallengeInProgress {
+            operation: "fetch topic list"
+        }
+    ));
+
+    release_challenge.notify_waiters();
+    let response = first
+        .await
+        .expect("task should finish")
+        .expect("first request should retry after challenge");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 2);
+}
+
+#[tokio::test]
+async fn foreground_retry_bypasses_cloudflare_failure_cooldown() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let challenge_calls = Arc::new(AtomicUsize::new(0));
+    {
+        let challenge_calls = Arc::clone(&challenge_calls);
+        core.set_cloudflare_challenge_handler(move |_| {
+            challenge_calls.fetch_add(1, Ordering::SeqCst);
+            async move {
+                fire_models::CloudflareChallengeResult {
+                    completed: false,
+                    user_cancelled: false,
+                    fresh_cf_clearance: None,
+                    cookies: vec![],
+                    browser_user_agent: None,
+                }
+            }
+        });
+    }
+
+    for _ in 0..2 {
+        let error = core
+            .fetch_topic_list(TopicListQuery {
+                kind: TopicListKind::Latest,
+                ..TopicListQuery::default()
+            })
+            .await
+            .expect_err("challenge should remain unresolved");
+        assert!(matches!(
+            error,
+            FireCoreError::CloudflareChallenge {
+                operation: "fetch topic list"
+            }
+        ));
+    }
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(requests.len(), 2);
+    assert_eq!(challenge_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn fetch_topic_list_self_heals_unauthorized_with_sweep_retry() {
+    let responses = vec![
+        raw_json_response(
+            401,
+            "application/json",
+            r#"{"errors":["session cookie state is stale"]}"#,
+        ),
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    {
+        let calls = Arc::clone(&calls);
+        core.set_cookie_self_healing_handler(move |request| {
+            let calls = Arc::clone(&calls);
+            async move {
+                calls
+                    .lock()
+                    .expect("calls mutex")
+                    .push((request.phase, request.attempt));
+                CookieSelfHealingResult {
+                    completed: true,
+                    session_epoch: request.session_epoch,
+                }
+            }
+        });
+    }
+
+    let response = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("self-healed request should retry");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        calls.lock().expect("calls mutex").as_slice(),
+        &[(CookieSelfHealingPhase::Sweep, 1)]
+    );
+}
+
+#[tokio::test]
+async fn fetch_topic_list_does_not_self_heal_cloudflare_challenge_without_handler() {
+    let responses = vec![raw_cloudflare_challenge_response(
+        403,
+        r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+    )];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let calls = Arc::clone(&calls);
+        core.set_cookie_self_healing_handler(move |request| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            async move {
+                CookieSelfHealingResult {
+                    completed: true,
+                    session_epoch: request.session_epoch,
+                }
+            }
+        });
+    }
+
+    let error = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect_err("cloudflare challenge must not trigger cookie healing");
+    let requests = server.shutdown_with_requests().await;
+
+    assert!(matches!(
+        error,
+        FireCoreError::CloudflareChallenge {
+            operation: "fetch topic list"
+        }
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(requests.len(), 1);
+}
+
+#[tokio::test]
+async fn fetch_topic_list_does_not_self_heal_explicit_not_logged_in() {
+    let body = r#"{"errors":["You need to log in."],"error_type":"not_logged_in"}"#;
+    let responses = vec![raw_json_response(401, "application/json", body)];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let calls = Arc::clone(&calls);
+        core.set_cookie_self_healing_handler(move |request| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            async move {
+                CookieSelfHealingResult {
+                    completed: true,
+                    session_epoch: request.session_epoch,
+                }
+            }
+        });
+    }
+
+    let error = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect_err("explicit not_logged_in must surface as login required");
+    let requests = server.shutdown_with_requests().await;
+
+    assert!(matches!(error, FireCoreError::LoginRequired { .. }));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(requests.len(), 1);
+}
+
+#[tokio::test]
+async fn fetch_topic_list_self_healing_escalates_to_nuclear_reset() {
+    let unauthorized = raw_json_response(
+        401,
+        "application/json",
+        r#"{"errors":["session cookie state is stale"]}"#,
+    );
+    let responses = vec![
+        unauthorized.clone(),
+        unauthorized.clone(),
+        unauthorized,
+        raw_json_response(200, "application/json", &sample_latest_json()),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    {
+        let calls = Arc::clone(&calls);
+        core.set_cookie_self_healing_handler(move |request| {
+            let calls = Arc::clone(&calls);
+            async move {
+                calls
+                    .lock()
+                    .expect("calls mutex")
+                    .push((request.phase, request.attempt));
+                CookieSelfHealingResult {
+                    completed: true,
+                    session_epoch: request.session_epoch,
+                }
+            }
+        });
+    }
+
+    let response = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect("nuclear reset should retry once");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(response.rows.len(), 1);
+    assert_eq!(requests.len(), 4);
+    assert_eq!(
+        calls.lock().expect("calls mutex").as_slice(),
+        &[
+            (CookieSelfHealingPhase::Sweep, 1),
+            (CookieSelfHealingPhase::Sweep, 2),
+            (CookieSelfHealingPhase::NuclearReset, 1),
+        ]
     );
 }
 
@@ -624,6 +1159,37 @@ async fn fetch_topic_list_surfaces_rate_limited_cloudflare_challenge_error() {
         })
         .await
         .expect_err("429 Cloudflare challenge should surface as a challenge error");
+    let _ = server.shutdown().await;
+
+    assert!(matches!(
+        error,
+        FireCoreError::CloudflareChallenge {
+            operation: "fetch topic list"
+        }
+    ));
+}
+
+#[tokio::test]
+async fn fetch_topic_list_accepts_cf_mitigated_challenge_without_html_content_type() {
+    let body = "managed challenge";
+    let responses = vec![format!(
+        "HTTP/1.1 429 TEST\r\nServer: cloudflare\r\nContent-Type: text/plain; charset=utf-8\r\nCf-Mitigated: challenge\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+
+    let error = core
+        .fetch_topic_list(TopicListQuery {
+            kind: TopicListKind::Latest,
+            ..TopicListQuery::default()
+        })
+        .await
+        .expect_err("cf-mitigated challenge should not require HTML content type");
     let _ = server.shutdown().await;
 
     assert!(matches!(
@@ -2993,6 +3559,223 @@ async fn create_reply_refreshes_csrf_and_parses_wrapped_post_payload() {
     assert_eq!(
         core.snapshot().cookies.csrf_token.as_deref(),
         Some("fresh-csrf")
+    );
+}
+
+#[tokio::test]
+async fn create_reply_refreshes_csrf_before_logged_out_header_handling() {
+    let bad_csrf_body = r#"["BAD CSRF"]"#;
+    let bad_csrf_response = format!(
+        "HTTP/1.1 403 TEST\r\nContent-Type: application/json; charset=utf-8\r\nDiscourse-Logged-Out: 1\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{bad_csrf_body}",
+        bad_csrf_body.len()
+    );
+    let responses = vec![
+        bad_csrf_response,
+        raw_json_response(200, "application/json", r#"{"csrf":"fresh-csrf"}"#),
+        raw_json_response(
+            200,
+            "application/json",
+            r#"{
+              "post": {
+                "id": 9010,
+                "username": "alice",
+                "name": "Alice",
+                "avatar_template": "/user_avatar/linux.do/alice/{size}/1_2.png",
+                "cooked": "<p>Reply body</p>",
+                "post_number": 2,
+                "post_type": 1,
+                "created_at": "2026-03-28T00:10:00Z",
+                "updated_at": "2026-03-28T00:10:00Z",
+                "like_count": 0,
+                "reply_count": 0,
+                "reply_to_post_number": 1,
+                "bookmarked": false,
+                "bookmark_id": null,
+                "reactions": [],
+                "current_user_reaction": null,
+                "accepted_answer": false,
+                "can_edit": true,
+                "can_delete": true,
+                "can_recover": false,
+                "hidden": false
+              }
+            }"#,
+        ),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+
+    let _ = core.sync_login_context(LoginSyncInput {
+        username: Some("alice".into()),
+        home_html: None,
+        csrf_token: Some("stale-csrf".into()),
+        current_url: Some(server.base_url()),
+        browser_user_agent: None,
+        cookies: vec![
+            PlatformCookie {
+                name: "_t".into(),
+                value: "token".into(),
+                domain: None,
+                path: None,
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+            PlatformCookie {
+                name: "_forum_session".into(),
+                value: "forum".into(),
+                domain: None,
+                path: None,
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+        ],
+    });
+
+    let post = core
+        .create_reply(TopicReplyRequest {
+            topic_id: 123,
+            raw: "Reply body".into(),
+            reply_to_post_number: Some(1),
+        })
+        .await
+        .expect("create reply after BAD CSRF refresh");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(post.id, 9010);
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].contains("POST /posts.json HTTP/1.1"));
+    assert!(requests[1].contains("GET /session/csrf HTTP/1.1"));
+    assert!(requests[2].contains("POST /posts.json HTTP/1.1"));
+    assert!(requests[2]
+        .to_ascii_lowercase()
+        .contains("x-csrf-token: fresh-csrf"));
+    assert_eq!(
+        core.snapshot().cookies.csrf_token.as_deref(),
+        Some("fresh-csrf")
+    );
+}
+
+#[tokio::test]
+async fn create_reply_cloudflare_retry_rebuilds_stale_csrf_header() {
+    let responses = vec![
+        raw_cloudflare_challenge_response(
+            403,
+            r#"<html><head><title>Just a moment...</title></head><body>__cf_chl_opt</body></html>"#,
+        ),
+        raw_json_response(
+            200,
+            "application/json",
+            r#"{
+              "post": {
+                "id": 9010,
+                "username": "alice",
+                "name": "Alice",
+                "avatar_template": "/user_avatar/linux.do/alice/{size}/1_2.png",
+                "cooked": "<p>Reply body</p>",
+                "post_number": 2,
+                "post_type": 1,
+                "created_at": "2026-03-28T00:10:00Z",
+                "updated_at": "2026-03-28T00:10:00Z",
+                "like_count": 0,
+                "reply_count": 0,
+                "reply_to_post_number": 1,
+                "bookmarked": false,
+                "bookmark_id": null,
+                "reactions": [],
+                "current_user_reaction": null,
+                "accepted_answer": false,
+                "can_edit": true,
+                "can_delete": true,
+                "can_recover": false,
+                "hidden": false
+              }
+            }"#,
+        ),
+    ];
+    let server = TestServer::spawn(responses).await.expect("server");
+    let core = FireCore::new(FireCoreConfig {
+        base_url: server.base_url(),
+        workspace_path: None,
+    })
+    .expect("core");
+
+    let _ = core.sync_login_context(LoginSyncInput {
+        username: Some("alice".into()),
+        home_html: None,
+        csrf_token: Some("stale-csrf".into()),
+        current_url: Some(server.base_url()),
+        browser_user_agent: None,
+        cookies: vec![
+            PlatformCookie {
+                name: "_t".into(),
+                value: "token".into(),
+                domain: None,
+                path: None,
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+            PlatformCookie {
+                name: "_forum_session".into(),
+                value: "forum".into(),
+                domain: None,
+                path: None,
+                expires_at_unix_ms: None,
+                same_site: None,
+            },
+        ],
+    });
+    {
+        let handler_core = core.clone();
+        core.set_cloudflare_challenge_handler(move |_| {
+            let core = handler_core.clone();
+            async move {
+                let _ = core.apply_csrf_token("fresh-csrf".into());
+                fire_models::CloudflareChallengeResult {
+                    completed: true,
+                    user_cancelled: false,
+                    fresh_cf_clearance: Some("new-clearance".into()),
+                    cookies: vec![PlatformCookie {
+                        name: "cf_clearance".into(),
+                        value: "new-clearance".into(),
+                        domain: Some("linux.do".into()),
+                        path: Some("/".into()),
+                        expires_at_unix_ms: None,
+                        same_site: None,
+                    }],
+                    browser_user_agent: None,
+                }
+            }
+        });
+    }
+
+    let post = core
+        .create_reply(TopicReplyRequest {
+            topic_id: 123,
+            raw: "Reply body".into(),
+            reply_to_post_number: Some(1),
+        })
+        .await
+        .expect("create reply after challenge");
+    let requests = server.shutdown_with_requests().await;
+
+    assert_eq!(post.id, 9010);
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0]
+        .to_ascii_lowercase()
+        .contains("x-csrf-token: stale-csrf"));
+    assert!(requests[1]
+        .to_ascii_lowercase()
+        .contains("x-csrf-token: fresh-csrf"));
+    assert!(
+        !requests[1]
+            .to_ascii_lowercase()
+            .contains("x-csrf-token: stale-csrf"),
+        "retry must not replay stale CSRF header:\n{}",
+        requests[1]
     );
 }
 
