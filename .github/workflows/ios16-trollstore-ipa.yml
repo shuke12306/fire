@@ -1,0 +1,165 @@
+name: iOS 16 TrollStore IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: CFBundleShortVersionString for the IPA.
+        required: false
+        default: 0.1.5-dev
+      build_number:
+        description: CFBundleVersion for the IPA. Defaults to the workflow run number.
+        required: false
+        default: ""
+      bundle_identifier:
+        description: Bundle identifier for the app target.
+        required: false
+        default: com.fire.app.ios
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  RUST_TOOLCHAIN: 1.88.0
+  IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+
+jobs:
+  build:
+    name: Build iOS 16 IPA
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain and iOS targets
+        shell: bash
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal
+          rustup default "${RUST_TOOLCHAIN}"
+          rustup target add aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-ios16-trollstore
+          workspaces: |
+            . -> rust/target
+
+      - name: Install XcodeGen
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          if command -v xcodegen >/dev/null 2>&1; then
+            xcodegen --version
+          else
+            brew install xcodegen
+          fi
+
+      - name: Archive unsigned iOS app
+        shell: bash
+        env:
+          CODE_SIGNING_ALLOWED: "NO"
+          FIRE_MARKETING_VERSION: ${{ inputs.marketing_version }}
+          FIRE_BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+          FIRE_PRODUCT_BUNDLE_IDENTIFIER: ${{ inputs.bundle_identifier }}
+          FIRE_GIT_SHA: ${{ github.sha }}
+          OUT_ROOT: ${{ github.workspace }}/artifacts/ios16-trollstore/archive
+        run: ./scripts/ios/archive_release.sh
+
+      - name: Package TrollStore IPA
+        shell: bash
+        env:
+          OUT_ROOT: ${{ github.workspace }}/artifacts/ios16-trollstore
+          FIRE_MARKETING_VERSION: ${{ inputs.marketing_version }}
+          FIRE_BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+        run: |
+          set -euo pipefail
+
+          archive_path="$OUT_ROOT/archive/Fire.xcarchive"
+          app_source="$archive_path/Products/Applications/Fire.app"
+          payload_dir="$OUT_ROOT/Payload"
+          app_path="$payload_dir/Fire.app"
+          ipa_path="$OUT_ROOT/Fire-ios16-trollstore.ipa"
+          metadata_dir="$OUT_ROOT/metadata"
+
+          test -d "$app_source" || {
+            echo "missing archived app: $app_source" >&2
+            exit 1
+          }
+
+          rm -rf "$payload_dir" "$metadata_dir" "$ipa_path"
+          mkdir -p "$payload_dir" "$metadata_dir"
+          ditto "$app_source" "$app_path"
+
+          set_minimum_os() {
+            local plist="$1"
+            /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 16.0" "$plist" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 16.0" "$plist"
+          }
+
+          set_minimum_os "$app_path/Info.plist"
+          while IFS= read -r plist; do
+            set_minimum_os "$plist"
+          done < <(find "$app_path/PlugIns" -name Info.plist -type f 2>/dev/null || true)
+
+          find "$app_path" -name _CodeSignature -type d -prune -exec rm -rf {} +
+          find "$app_path" -name embedded.mobileprovision -type f -exec rm -f {} +
+
+          sign_one() {
+            local item="$1"
+            shift
+            codesign --force --sign - --timestamp=none --generate-entitlement-der "$@" "$item"
+          }
+
+          if [[ -d "$app_path/Frameworks" ]]; then
+            for framework in "$app_path"/Frameworks/*.framework; do
+              [[ -d "$framework" ]] || continue
+              sign_one "$framework"
+            done
+
+            while IFS= read -r dylib; do
+              sign_one "$dylib"
+            done < <(find "$app_path/Frameworks" -type f \( -name "*.dylib" -o -name "*.so" \) | sort)
+          fi
+
+          if [[ -d "$app_path/PlugIns" ]]; then
+            for appex in "$app_path"/PlugIns/*.appex; do
+              [[ -d "$appex" ]] || continue
+              sign_one "$appex" --entitlements native/ios-app/FireWidget.entitlements
+            done
+          fi
+
+          sign_one "$app_path" --entitlements native/ios-app/Fire.entitlements
+
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$app_path/Info.plist" > "$metadata_dir/MinimumOSVersion.txt"
+          plutil -p "$app_path/Info.plist" > "$metadata_dir/Fire-Info.plist.txt"
+          codesign -dv --entitlements :- "$app_path" > "$metadata_dir/codesign-entitlements.txt" 2>&1 || true
+          xcrun vtool -show-build "$app_path/Fire" > "$metadata_dir/vtool-Fire.txt" 2>&1 || true
+
+          cat > "$metadata_dir/build-summary.txt" <<EOF
+          IPA: Fire-ios16-trollstore.ipa
+          Marketing version: ${FIRE_MARKETING_VERSION}
+          Build number: ${FIRE_BUILD_NUMBER}
+          MinimumOSVersion: $(cat "$metadata_dir/MinimumOSVersion.txt")
+          Git SHA: ${GITHUB_SHA}
+          EOF
+
+          (
+            cd "$OUT_ROOT"
+            ditto -c -k --sequesterRsrc --keepParent Payload "$ipa_path"
+          )
+
+          test -f "$ipa_path"
+          unzip -l "$ipa_path" | tee "$metadata_dir/ipa-file-list.txt"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fire-ios16-trollstore-ipa
+          path: |
+            artifacts/ios16-trollstore/Fire-ios16-trollstore.ipa
+            artifacts/ios16-trollstore/metadata
+          if-no-files-found: error
